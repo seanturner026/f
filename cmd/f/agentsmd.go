@@ -26,6 +26,10 @@ This session works across these git worktrees, all on branch ` + "`{{.Name}}`" +
 - One PR per repo, from branch ` + "`{{.Name}}`" + `.
 `))
 
+// goalPlaceholder is replaced with the first prompt by the pi extension
+// agent/extensions/feature-goal.ts. Keep the two in sync.
+const goalPlaceholder = "_TBD: set from the first prompt._"
+
 type agentsRepo struct{ Dir, Instructions string }
 
 // writeAgentsMD (re)generates <feature>/AGENTS.md. An empty goal keeps the existing one.
@@ -36,7 +40,7 @@ func writeAgentsMD(cfg config, feature, goal string) error {
 		goal = existingGoal(path)
 	}
 	if goal == "" {
-		goal = "_TBD: describe the goal here._"
+		goal = goalPlaceholder
 	}
 	names, err := featureRepos(cfg, feature)
 	if err != nil {
@@ -72,5 +76,8 @@ func existingGoal(path string) string {
 		return ""
 	}
 	goal, _, _ := strings.Cut(after, "\n## ")
-	return strings.TrimSpace(goal)
+	if goal = strings.TrimSpace(goal); goal == goalPlaceholder {
+		return ""
+	}
+	return goal
 }

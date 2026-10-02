@@ -15,18 +15,19 @@ import (
 const help = `f: start a pi session that works across several repos, each on its own worktree.
 
 Usage:
-  f [name]         start a feature, or reopen it if it exists:
-                   pick repos (fzf) → write the prompt ($EDITOR) → Herdr opens with pi
-                   (no name: pi suggests one)
+  f <name>         start a feature: pick repos (fzf) → pi opens, ready for your prompt
+                   reopens the feature (continuing its pi session) if it exists
+  f                pick an existing feature to reopen
   f add [repo...]  add repos to the current feature (fzf if none)
   f prs            PRs for the current feature
 
 Flags:
   -r <repo>        repo, repeatable (skips fzf)
-  -p <prompt>      prompt (skips $EDITOR)
+  -p <prompt>      first prompt for pi
   -f <feature>     feature for add/prs (default: from cwd)
 
-Starting a new feature offers to clean up merged ones (worktrees, branches, Herdr).
+Inside Herdr each feature gets its own workspace (chat · nvim · shell); outside,
+pi starts in this terminal. Starting a feature offers to clean up merged ones.
 Features live in ~/code/features/.features/<name>/<repo> (override with F_BASE).
 `
 
@@ -42,7 +43,7 @@ func main() {
 		EnableShellCompletion:         true,
 		Flags: []cli.Flag{
 			&cli.StringSliceFlag{Name: "repo", Aliases: []string{"r"}, Usage: "repo (skips fzf)", Local: true},
-			&cli.StringFlag{Name: "prompt", Aliases: []string{"p"}, Usage: "prompt (skips $EDITOR)", Local: true},
+			&cli.StringFlag{Name: "prompt", Aliases: []string{"p"}, Usage: "first prompt for pi", Local: true},
 		},
 		Action: func(ctx context.Context, c *cli.Command) error {
 			if c.NArg() > 1 {

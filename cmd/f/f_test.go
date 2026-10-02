@@ -6,26 +6,15 @@ import (
 	"testing"
 )
 
-func TestSlugify(t *testing.T) {
-	cases := map[string]string{
-		"add-ack-brewfile":        "add-ack-brewfile",
-		"  Add Ack To Brewfile\n": "add-ack-to-brewfile",
-		"`bump_tile/cache-ttl`":   "bump-tile-cache-ttl",
-		"--weird--":               "weird",
-		"a-very-long-name-that-goes-on-and-on-forever-and-ever": "a-very-long-name-that-goes-on-and-on-for",
-	}
-	for in, want := range cases {
-		if got := slugify(in); got != want {
-			t.Errorf("slugify(%q) = %q, want %q", in, got, want)
-		}
-	}
-}
-
 func TestExistingGoal(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "AGENTS.md")
 	os.WriteFile(path, []byte("# Feature: x\n\n## Goal\n\nline one\nline two\n\n## Repos\n\n- a\n"), 0o644)
 	if got, want := existingGoal(path), "line one\nline two"; got != want {
 		t.Errorf("existingGoal = %q, want %q", got, want)
+	}
+	os.WriteFile(path, []byte("## Goal\n\n"+goalPlaceholder+"\n\n## Repos\n"), 0o644)
+	if got := existingGoal(path); got != "" {
+		t.Errorf("placeholder should read as empty, got %q", got)
 	}
 	if got := existingGoal(filepath.Join(t.TempDir(), "missing.md")); got != "" {
 		t.Errorf("missing file: got %q", got)

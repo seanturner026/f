@@ -5,10 +5,12 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
 	"sync"
+	"syscall"
 )
 
 var validName = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]*$`)
@@ -38,23 +40,32 @@ func checkRepos(cfg config, repos []string) error {
 	return nil
 }
 
-// start creates a feature (repos → prompt → name), or reopens an existing one.
+// start creates a feature, or reopens it if it exists. With no name, it picks
+// an existing feature to reopen.
 func start(cfg config, name string, repos []string, prompt string) error {
-	if name != "" {
-		if err := checkName(name); err != nil {
+	if name == "" {
+		if len(features(cfg)) == 0 {
+			fmt.Print(help)
+			return nil
+		}
+		picked, err := pickFeature(cfg)
+		if err != nil || picked == "" {
 			return err
 		}
-		if exists(cfg.featureDir(name)) {
-			return openWorkspace(cfg, name, "")
-		}
+		return launch(cfg, picked, "", true)
+	}
+	if err := checkName(name); err != nil {
+		return err
+	}
+	if exists(cfg.featureDir(name)) {
+		return launch(cfg, name, "", true)
 	}
 
 	// Starting something new: offer to clean up finished features first.
-	if len(repos) == 0 && prompt == "" && interactive() {
+	if len(repos) == 0 && interactive() {
 		offerCleanup(cfg)
 	}
 
-	// 1. Which repos?
 	if len(repos) == 0 {
 		picked, err := pickRepos(cfg, nil)
 		if err != nil {
@@ -69,35 +80,6 @@ func start(cfg config, name string, repos []string, prompt string) error {
 		return err
 	}
 
-	// 2. What are we doing?
-	if prompt == "" {
-		p, err := editPrompt()
-		if err != nil {
-			return err
-		}
-		prompt = p
-	}
-	if prompt == "" {
-		return errors.New("empty prompt; aborted")
-	}
-
-	// 3. Name it: pi suggests, you confirm.
-	if name == "" {
-		info("naming…")
-		n, err := askName(suggestName(prompt))
-		if err != nil {
-			return err
-		}
-		if err := checkName(n); err != nil {
-			return err
-		}
-		if exists(cfg.featureDir(n)) {
-			return fmt.Errorf("feature %q already exists; run `f %s` to reopen it", n, n)
-		}
-		name = n
-	}
-
-	// 4. Build it.
 	if err := os.MkdirAll(cfg.featureDir(name), 0o755); err != nil {
 		return err
 	}
@@ -110,7 +92,35 @@ func start(cfg config, name string, repos []string, prompt string) error {
 	if err := writeAgentsMD(cfg, name, prompt); err != nil {
 		return err
 	}
-	return openWorkspace(cfg, name, prompt)
+	return launch(cfg, name, prompt, false)
+}
+
+// launch runs pi for the feature: in its own Herdr workspace when called from
+// inside Herdr, otherwise right here in this terminal.
+func launch(cfg config, name, prompt string, reopen bool) error {
+	args := []string{"--name", name}
+	if reopen {
+		args = append(args, "--continue")
+	}
+	if prompt != "" {
+		args = append(args, prompt)
+	}
+	if insideHerdr(cfg) {
+		return openWorkspace(cfg, name, args)
+	}
+	dir := cfg.featureDir(name)
+	if !interactive() {
+		fmt.Printf("cd %s && pi %s\n", shellQuote(dir), strings.Join(quoteAll(args), " "))
+		return nil
+	}
+	if err := os.Chdir(dir); err != nil {
+		return err
+	}
+	pi, err := exec.LookPath("pi")
+	if err != nil {
+		return err
+	}
+	return syscall.Exec(pi, append([]string{"pi"}, args...), os.Environ())
 }
 
 func add(cfg config, explicit string, repos []string) error {
@@ -238,11 +248,6 @@ func isFinished(cfg config, name string) bool {
 		merged++
 	}
 	return merged > 0
-}
-
-func interactive() bool {
-	fi, err := os.Stdin.Stat()
-	return err == nil && fi.Mode()&os.ModeCharDevice != 0
 }
 
 // mergedAtHead reports whether a merged PR contains the worktree's HEAD, i.e.

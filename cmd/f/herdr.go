@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 	"os/exec"
 	"strings"
 )
@@ -11,6 +12,11 @@ import (
 type herdr struct{ disabled bool }
 
 func newHerdr(cfg config) herdr { return herdr{disabled: cfg.NoHerdr} }
+
+// insideHerdr reports whether f runs in a Herdr pane (and Herdr isn't disabled).
+func insideHerdr(cfg config) bool {
+	return os.Getenv("HERDR_ENV") == "1" && newHerdr(cfg).available()
+}
 
 func (h herdr) available() bool {
 	if h.disabled {
@@ -77,14 +83,18 @@ func agentName(feature string) string {
 
 func shellQuote(s string) string { return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'" }
 
-// openWorkspace focuses the feature's workspace, or creates it:
-// tabs 1 chat (pi, optionally with a first prompt) · 2 nvim · 3 shell.
-func openWorkspace(cfg config, feature, prompt string) error {
-	h := newHerdr(cfg)
-	if !h.available() {
-		info("herdr unavailable (or F_NO_HERDR set); skipping workspace (run `f %s` later)", feature)
-		return nil
+func quoteAll(args []string) []string {
+	q := make([]string, len(args))
+	for i, a := range args {
+		q[i] = shellQuote(a)
 	}
+	return q
+}
+
+// openWorkspace focuses the feature's workspace, or creates it with
+// tabs 1 chat (pi with piArgs) · 2 nvim · 3 shell.
+func openWorkspace(cfg config, feature string, piArgs []string) error {
+	h := newHerdr(cfg)
 	if ws, err := h.findWorkspace(feature); err != nil {
 		return err
 	} else if ws != "" {
@@ -119,18 +129,10 @@ func openWorkspace(cfg config, feature, prompt string) error {
 		return err
 	}
 
-	piArgs := []string{"--name", feature}
-	if prompt != "" {
-		piArgs = append(piArgs, prompt)
-	}
 	start := append([]string{"agent", "start", agentName(feature), "--kind", "pi", "--pane", chatPane, "--"}, piArgs...)
 	if err := h.call(nil, start...); err != nil {
 		// Fall back to typing the command into the pane.
-		quoted := make([]string, len(piArgs))
-		for i, a := range piArgs {
-			quoted[i] = shellQuote(a)
-		}
-		if err2 := h.call(nil, "pane", "run", chatPane, "pi "+strings.Join(quoted, " ")); err2 != nil {
+		if err2 := h.call(nil, "pane", "run", chatPane, "pi "+strings.Join(quoteAll(piArgs), " ")); err2 != nil {
 			return fmt.Errorf("starting pi: %v; fallback: %v", err, err2)
 		}
 	}
