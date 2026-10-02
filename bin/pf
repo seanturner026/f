@@ -1,0 +1,205 @@
+#!/usr/bin/env bash
+# pf: multi-repo feature workspaces (git worktrees + Herdr + pi).
+#
+#   pf new  <feature> <repo>... [-g "goal"]   create worktrees, AGENTS.md, Herdr workspace
+#   pf add  <feature> <repo>...               add repos to an existing feature
+#   pf open <feature>                         focus (or recreate) the Herdr workspace
+#   pf ls                                     list features
+#   pf prs  [feature]                         PRs for the feature's branch in each repo
+#   pf done <feature> [--force]               remove worktrees + close the Herdr workspace
+#
+# Layout per feature: <PF_BASE>/.features/<feature>/<repo>   (branch = <feature>)
+# Herdr tabs: 1 chat (pi) · 2 nvim · 3 shell
+set -euo pipefail
+
+BASE="${PF_BASE:-$HOME/code/features}"
+FEATURES="$BASE/.features"
+
+die()  { printf '\033[31merror:\033[0m %s\n' "$*" >&2; exit 1; }
+info() { printf '\033[2m%s\033[0m\n' "$*"; }
+ok()   { printf '\033[32m%s\033[0m\n' "$*"; }
+
+usage() { sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//'; exit "${1:-0}"; }
+
+valid_name() { [[ "$1" =~ ^[a-z0-9][a-z0-9._-]*$ ]] || die "invalid feature name '$1' (use lowercase, digits, - . _)"; }
+feature_dir() { echo "$FEATURES/$1"; }
+feature_repos() { # repos (worktrees) inside a feature dir
+  local d; for d in "$(feature_dir "$1")"/*/; do [ -e "$d/.git" ] && basename "$d"; done; return 0
+}
+default_branch() { git -C "$BASE/$1" symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null | sed 's#^origin/##' || echo main; }
+
+add_worktree() { # <feature> <repo>
+  local feature=$1 repo=$2 src="$BASE/$2" dst; dst="$(feature_dir "$1")/$2"
+  [ -d "$src/.git" ] || die "no base clone at $src"
+  [ -e "$dst" ] && { info "  $repo: already present"; return; }
+  info "  $repo: fetching"
+  git -C "$src" fetch -q --prune origin
+  local base; base="origin/$(default_branch "$repo")"
+  if git -C "$src" show-ref -q --verify "refs/heads/$feature"; then
+    git -C "$src" worktree add -q "$dst" "$feature"
+    ok "  $repo: worktree on existing branch $feature"
+  else
+    git -C "$src" worktree add -q --no-track -b "$feature" "$dst" "$base"
+    ok "  $repo: worktree on new branch $feature (from $base)"
+  fi
+}
+
+write_agents_md() { # <feature> [goal]; regenerates the repo list, keeps the goal
+  local feature=$1 goal=${2:-} f; f="$(feature_dir "$1")/AGENTS.md"
+  if [ -z "$goal" ] && [ -f "$f" ]; then
+    goal=$(awk '/^## Goal/{g=1;next} /^## /{g=0} g' "$f" | sed '/^$/d')
+  fi
+  {
+    echo "# Feature: $feature"
+    echo
+    echo "## Goal"
+    echo
+    echo "${goal:-_TBD: describe the goal here._}"
+    echo
+    echo "## Repos"
+    echo
+    echo "This session works across these git worktrees, all on branch \`$feature\`:"
+    echo
+    local r
+    for r in $(feature_repos "$feature"); do
+      local ctx=""
+      for c in AGENTS.md CLAUDE.md; do [ -f "$(feature_dir "$feature")/$r/$c" ] && { ctx="$r/$c"; break; }; done
+      echo "- \`$r/\`${ctx:+ (instructions: \`$ctx\`)}"
+    done
+    echo
+    echo "## Rules"
+    echo
+    echo "- Before changing anything in a repo, read its instructions file listed above (if any) and follow it."
+    echo "- Run git commands inside the relevant repo directory; this root is not a git repo."
+    echo "- One PR per repo, from branch \`$feature\`."
+  } > "$f"
+}
+
+# ---- herdr -----------------------------------------------------------------
+
+herdr_ws_id() { # <feature> → workspace id or empty
+  herdr workspace list 2>/dev/null | jq -r --arg l "$1" '.result.workspaces[] | select(.label==$l) | .workspace_id' | head -1
+}
+
+herdr_open() { # <feature>
+  local feature=$1 dir; dir="$(feature_dir "$1")"
+  [ -z "${PF_NO_HERDR:-}" ] && command -v herdr >/dev/null && herdr status >/dev/null 2>&1 || { info "herdr unavailable or PF_NO_HERDR set; skipping workspace (run 'pf open $feature' later)"; return; }
+  local ws; ws=$(herdr_ws_id "$feature")
+  if [ -n "$ws" ]; then herdr workspace focus "$ws" >/dev/null; ok "focused herdr workspace $feature"; return; fi
+
+  local r chat_tab chat_pane
+  r=$(herdr workspace create --cwd "$dir" --label "$feature" --focus)
+  ws=$(jq -r '.result.workspace.workspace_id' <<<"$r")
+  chat_tab=$(jq -r '.result.tab.tab_id' <<<"$r")
+  chat_pane=$(jq -r '.result.root_pane.pane_id' <<<"$r")
+  herdr tab rename "$chat_tab" chat >/dev/null
+
+  r=$(herdr tab create --workspace "$ws" --cwd "$dir" --label nvim)
+  herdr pane run "$(jq -r '.result.root_pane.pane_id' <<<"$r")" "nvim ." >/dev/null
+
+  herdr tab create --workspace "$ws" --cwd "$dir" --label shell >/dev/null
+
+  herdr tab focus "$chat_tab" >/dev/null
+  # agent name: herdr requires [a-z][a-z0-9_-]{0,31}
+  local agent; agent=$(echo "pf-$feature" | tr '.' '-' | cut -c1-32)
+  herdr agent start "$agent" --kind pi --pane "$chat_pane" -- --name "$feature" >/dev/null 2>&1 \
+    || herdr pane run "$chat_pane" "pi --name $feature" >/dev/null
+  ok "opened herdr workspace $feature (chat · nvim · shell)"
+}
+
+# ---- commands ---------------------------------------------------------------
+
+cmd_new() {
+  local feature="" goal="" repos=()
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      -g|--goal) goal=${2:?}; shift 2 ;;
+      -*) die "unknown flag $1" ;;
+      *) if [ -z "$feature" ]; then feature=$1; else repos+=("$1"); fi; shift ;;
+    esac
+  done
+  [ -n "$feature" ] && [ ${#repos[@]} -gt 0 ] || usage 1
+  valid_name "$feature"
+  [ -e "$(feature_dir "$feature")" ] && die "feature '$feature' exists (use 'pf add' or 'pf open')"
+  mkdir -p "$(feature_dir "$feature")"
+  echo "feature $feature"
+  for r in "${repos[@]}"; do add_worktree "$feature" "$r"; done
+  write_agents_md "$feature" "$goal"
+  herdr_open "$feature"
+}
+
+cmd_add() {
+  local feature=${1:?feature}; shift; [ $# -gt 0 ] || usage 1
+  [ -d "$(feature_dir "$feature")" ] || die "no feature '$feature'"
+  for r in "$@"; do add_worktree "$feature" "$r"; done
+  write_agents_md "$feature"
+  info "AGENTS.md updated; run /reload in pi"
+}
+
+cmd_open() {
+  local feature=${1:?feature}
+  [ -d "$(feature_dir "$feature")" ] || die "no feature '$feature'"
+  herdr_open "$feature"
+}
+
+cmd_ls() {
+  [ -d "$FEATURES" ] || { info "no features"; return; }
+  local f
+  for f in "$FEATURES"/*/; do
+    [ -d "$f" ] || continue
+    local name; name=$(basename "$f")
+    printf '\033[1m%s\033[0m\n' "$name"
+    for r in $(feature_repos "$name"); do
+      local n; n=$(git -C "$f/$r" status --porcelain | wc -l | tr -d ' ')
+      local ahead; ahead=$(git -C "$f/$r" rev-list --count "origin/$(default_branch "$r")..HEAD" 2>/dev/null || echo "?")
+      printf '  %-28s %s changed, %s commits\n' "$r" "$n" "$ahead"
+    done
+  done
+}
+
+cmd_prs() {
+  local feature=${1:-}
+  if [ -z "$feature" ]; then # infer from cwd
+    case "$PWD/" in "$FEATURES"/*) feature=${PWD#"$FEATURES"/}; feature=${feature%%/*} ;; *) die "usage: pf prs <feature>" ;; esac
+  fi
+  for r in $(feature_repos "$feature"); do
+    local out; out=$(cd "$(feature_dir "$feature")/$r" && gh pr list --head "$feature" --state all \
+      --json number,state,title,url,isDraft \
+      --template '{{range .}}{{printf "  #%v %-7s %s\n         %s\n" .number .state .title .url}}{{end}}' 2>&1) || out="  (gh error: $out)"
+    printf '\033[1m%s\033[0m\n%s\n' "$r" "${out:-  no PR}"
+  done
+}
+
+cmd_done() {
+  local feature=${1:?feature} force=${2:-}
+  local dir; dir="$(feature_dir "$feature")"
+  [ -d "$dir" ] || die "no feature '$feature'"
+  if [ "$force" != "--force" ]; then
+    local dirty=0
+    for r in $(feature_repos "$feature"); do
+      if [ -n "$(git -C "$dir/$r" status --porcelain)" ]; then echo "  $r: uncommitted changes"; dirty=1; fi
+      if ! git -C "$dir/$r" rev-parse -q --verify "@{u}" >/dev/null 2>&1 \
+         && [ "$(git -C "$dir/$r" rev-list --count "origin/$(default_branch "$r")..HEAD")" != 0 ]; then
+        echo "  $r: commits not pushed"; dirty=1
+      fi
+    done
+    [ $dirty = 0 ] || die "refusing; fix above or use --force"
+  fi
+  for r in $(feature_repos "$feature"); do
+    git -C "$BASE/$r" worktree remove ${force:+--force} "$dir/$r" && ok "  removed $r worktree (branch $feature kept)"
+  done
+  rm -f "$dir/AGENTS.md"; rmdir "$dir" 2>/dev/null || info "  left $dir (not empty)"
+  local ws; ws=$(herdr_ws_id "$feature" 2>/dev/null || true)
+  if [ -n "$ws" ]; then herdr workspace close "$ws" >/dev/null && ok "  closed herdr workspace"; fi
+}
+
+case "${1:-}" in
+  new)  shift; cmd_new "$@" ;;
+  add)  shift; cmd_add "$@" ;;
+  open) shift; cmd_open "$@" ;;
+  ls)   shift; cmd_ls ;;
+  prs)  shift; cmd_prs "$@" ;;
+  done) shift; cmd_done "$@" ;;
+  -h|--help|help|"") usage ;;
+  *) die "unknown command '$1' (see pf --help)" ;;
+esac

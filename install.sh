@@ -1,19 +1,25 @@
 #!/usr/bin/env bash
-# Symlink tracked config from ./agent into ~/.pi/agent (or $PI_CODING_AGENT_DIR).
+# Symlink tracked config into place. Existing non-symlink files are backed up.
 set -euo pipefail
-src="$(cd "$(dirname "$0")/agent" && pwd)"
-dest="${PI_CODING_AGENT_DIR:-$HOME/.pi/agent}"
-mkdir -p "$dest"
-for item in "$src"/* "$src"/.[!.]*; do
+repo="$(cd "$(dirname "$0")" && pwd)"
+
+link() { # <source> <target>
+  local src=$1 target=$2
+  mkdir -p "$(dirname "$target")"
+  if [ -L "$target" ]; then rm "$target"
+  elif [ -e "$target" ]; then mv "$target" "$target.bak.$(date +%s)"; echo "backed up $target"; fi
+  ln -s "$src" "$target"; echo "linked $target -> $src"
+}
+
+# pi: every entry in ./agent → ~/.pi/agent (or $PI_CODING_AGENT_DIR)
+pi_dir="${PI_CODING_AGENT_DIR:-$HOME/.pi/agent}"
+for item in "$repo"/agent/* "$repo"/agent/.[!.]*; do
   [ -e "$item" ] || continue
-  name="$(basename "$item")"
-  target="$dest/$name"
-  if [ -L "$target" ]; then
-    rm "$target"
-  elif [ -e "$target" ]; then
-    mv "$target" "$target.bak.$(date +%s)"
-    echo "backed up existing $target"
-  fi
-  ln -s "$item" "$target"
-  echo "linked $target -> $item"
+  link "$item" "$pi_dir/$(basename "$item")"
 done
+
+# herdr
+link "$repo/herdr/config.toml" "$HOME/.config/herdr/config.toml"
+
+# scripts
+for bin in "$repo"/bin/*; do link "$bin" "$HOME/.local/bin/$(basename "$bin")"; done
