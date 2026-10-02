@@ -1,0 +1,10 @@
+# Never commit pi secrets/state
+auth.json
+mcp-auth.json
+models-store.json
+sessions/
+install/
+.DS_Store
+
+# Managed by `herdr integration install pi` (regenerated on herdr updates)
+agent/extensions/herdr-agent-state.ts
