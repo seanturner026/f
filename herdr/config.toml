@@ -3,9 +3,9 @@
 onboarding = false
 
 [keys]
-# ctrl+1..9 jumps straight to a tab (chat=1, nvim=2, shell=3), no prefix.
+# opt+1..9 jumps straight to a tab (chat=1, nvim=2, shell=3), no prefix.
 [keys.indexed]
-tabs = "ctrl"
+tabs = "alt"
 
 # Floating shell over the current tab (ctrl+b t); closes when the shell exits.
 [[keys.command]]
