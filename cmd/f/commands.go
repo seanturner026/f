@@ -8,12 +8,13 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 )
 
 var validName = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]*$`)
 
 // Subcommand names can't be feature names, or `f <name>` would be ambiguous.
-var reserved = map[string]bool{"add": true, "prs": true, "gc": true, "help": true, "completion": true}
+var reserved = map[string]bool{"add": true, "prs": true, "help": true, "completion": true}
 
 func checkName(name string) error {
 	if !validName.MatchString(name) {
@@ -46,6 +47,11 @@ func start(cfg config, name string, repos []string, prompt string) error {
 		if exists(cfg.featureDir(name)) {
 			return openWorkspace(cfg, name, "")
 		}
+	}
+
+	// Starting something new: offer to clean up finished features first.
+	if len(repos) == 0 && prompt == "" && interactive() {
+		offerCleanup(cfg)
 	}
 
 	// 1. Which repos?
@@ -168,34 +174,38 @@ func prs(cfg config, explicit string) error {
 	return nil
 }
 
-// gc removes features where every repo is clean and either untouched or has a
-// merged PR with nothing unpushed, and at least one PR merged overall.
-func gc(cfg config, yes bool) error {
+// offerCleanup finds finished features and offers to remove them. A feature is
+// finished when every repo is clean and either untouched or merged with nothing
+// unpushed, and at least one PR merged. Checks run in parallel.
+func offerCleanup(cfg config) {
+	names := features(cfg)
+	finished := make([]bool, len(names))
+	var wg sync.WaitGroup
+	for i, name := range names {
+		wg.Add(1)
+		go func() { defer wg.Done(); finished[i] = isFinished(cfg, name) }()
+	}
+	wg.Wait()
 	var done []string
-	for _, name := range features(cfg) {
-		ready, reason := collectible(cfg, name)
-		if ready {
+	for i, name := range names {
+		if finished[i] {
 			done = append(done, name)
-			fmt.Printf("%s %s\n", green("✓"), name)
-		} else {
-			fmt.Printf("%s %s %s\n", dim("·"), name, dim(reason))
 		}
 	}
 	if len(done) == 0 {
-		return nil
+		return
 	}
-	if !yes {
-		fmt.Printf("remove %d feature(s) (worktrees, branches, herdr workspace)? [y/N] ", len(done))
-		line, _ := bufio.NewReader(os.Stdin).ReadString('\n')
-		if a := strings.ToLower(strings.TrimSpace(line)); a != "y" && a != "yes" {
-			return nil
-		}
+	fmt.Printf("merged: %s. clean up? [Y/n] ", strings.Join(done, ", "))
+	line, _ := bufio.NewReader(os.Stdin).ReadString('\n')
+	if a := strings.ToLower(strings.TrimSpace(line)); a != "" && a != "y" && a != "yes" {
+		return
 	}
 	h := newHerdr(cfg)
 	herdrUp := h.available()
 	for _, name := range done {
 		if err := removeFeature(cfg, name); err != nil {
-			return err
+			fmt.Printf("%s %s: %v\n", red("cleanup:"), name, err)
+			continue
 		}
 		if herdrUp {
 			if ws, _ := h.findWorkspace(name); ws != "" {
@@ -204,44 +214,52 @@ func gc(cfg config, yes bool) error {
 		}
 		ok("removed %s", name)
 	}
-	return nil
 }
 
-func collectible(cfg config, name string) (bool, string) {
+func isFinished(cfg config, name string) bool {
 	repos, err := featureRepos(cfg, name)
 	if err != nil {
-		return false, err.Error()
+		return false
 	}
 	merged := 0
 	for _, r := range repos {
 		wt := filepath.Join(cfg.featureDir(name), r)
-		if n, _ := changedFiles(wt); n > 0 {
-			return false, fmt.Sprintf("(%s: uncommitted changes)", r)
+		if n, err := changedFiles(wt); err != nil || n > 0 {
+			return false
 		}
-		if ahead, _ := commitsAhead(wt, "origin/"+defaultBranch(cfg, r)); ahead == 0 {
+		base := "origin/" + defaultBranch(cfg, r)
+		if ahead, err := commitsAhead(wt, base); err == nil && ahead == 0 {
 			continue // untouched repo
 		}
 		list, err := listPRs(wt, name)
-		if err != nil {
-			return false, fmt.Sprintf("(%s: gh: %v)", r, err)
-		}
-		if !anyMerged(list) {
-			return false, fmt.Sprintf("(%s: not merged)", r)
-		}
-		if n, err := unpushedCommits(wt, "origin/"+defaultBranch(cfg, r)); err == nil && n > 0 {
-			return false, fmt.Sprintf("(%s: %d commits not pushed)", r, n)
+		if err != nil || !mergedAtHead(wt, list) {
+			return false // not merged, or local commits beyond what merged
 		}
 		merged++
 	}
-	if merged == 0 {
-		return false, "(no merged PRs yet)"
-	}
-	return true, ""
+	return merged > 0
 }
 
-func anyMerged(list []pr) bool {
+func interactive() bool {
+	fi, err := os.Stdin.Stat()
+	return err == nil && fi.Mode()&os.ModeCharDevice != 0
+}
+
+// mergedAtHead reports whether a merged PR contains the worktree's HEAD, i.e.
+// nothing local is left unmerged. Works even after the remote branch is deleted.
+func mergedAtHead(wt string, list []pr) bool {
+	head, err := git(wt, "rev-parse", "HEAD")
+	if err != nil {
+		return false
+	}
 	for _, p := range list {
-		if p.State == "MERGED" {
+		if p.State != "MERGED" || p.HeadOid == "" {
+			continue
+		}
+		if p.HeadOid == head {
+			return true
+		}
+		if _, err := git(wt, "merge-base", "--is-ancestor", head, p.HeadOid); err == nil {
 			return true
 		}
 	}

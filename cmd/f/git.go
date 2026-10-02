@@ -126,25 +126,18 @@ func commitsAhead(wt, base string) (int, error) {
 	return strconv.Atoi(out)
 }
 
-// unpushedCommits counts commits not on the upstream (or, with no upstream, not on base).
-func unpushedCommits(wt, base string) (int, error) {
-	if _, err := git(wt, "rev-parse", "-q", "--verify", "@{u}"); err == nil {
-		return commitsAhead(wt, "@{u}")
-	}
-	return commitsAhead(wt, base)
-}
-
 type pr struct {
 	Number  int    `json:"number"`
 	State   string `json:"state"`
 	Title   string `json:"title"`
 	URL     string `json:"url"`
 	IsDraft bool   `json:"isDraft"`
+	HeadOid string `json:"headRefOid"`
 }
 
 func listPRs(wt, branch string) ([]pr, error) {
 	out, err := sh(wt, "gh", "pr", "list", "--head", branch, "--state", "all",
-		"--json", "number,state,title,url,isDraft")
+		"--json", "number,state,title,url,isDraft,headRefOid")
 	if err != nil {
 		return nil, err
 	}

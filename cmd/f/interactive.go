@@ -73,12 +73,8 @@ func pickRepos(cfg config, exclude []string) ([]string, error) {
 			fmt.Fprintln(&input, r)
 		}
 	}
-	preview := fmt.Sprintf(
-		`git -C %[1]q/{} log --oneline -8 origin/HEAD 2>/dev/null; echo; for c in AGENTS.md CLAUDE.md; do [ -f %[1]q/{}/$c ] && { head -40 %[1]q/{}/$c; break; }; done`,
-		cfg.Base)
-	cmd := exec.Command("fzf", "--multi", "--height=60%", "--reverse",
-		"--prompt=repos> ", "--header=TAB select · ENTER confirm · ESC cancel",
-		"--preview="+preview)
+	cmd := exec.Command("fzf", "--multi", "--height=40%", "--reverse",
+		"--prompt=repos> ", "--header=TAB select · ENTER confirm · ESC cancel")
 	cmd.Stdin, cmd.Stderr = &input, os.Stderr
 	out, err := cmd.Output()
 	var exitErr *exec.ExitError

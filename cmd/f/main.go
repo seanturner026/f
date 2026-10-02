@@ -12,11 +12,22 @@ import (
 	"github.com/urfave/cli/v3"
 )
 
-const help = `f [name]         start a feature, or reopen it if it exists
-                 (no name: pi suggests one after you write the prompt)
-f add [repo...]  add repos to this feature (fzf if none)
-f prs            PRs for this feature
-f gc             clean up features whose PRs have all merged
+const help = `f: start a pi session that works across several repos, each on its own worktree.
+
+Usage:
+  f [name]         start a feature, or reopen it if it exists:
+                   pick repos (fzf) → write the prompt ($EDITOR) → Herdr opens with pi
+                   (no name: pi suggests one)
+  f add [repo...]  add repos to the current feature (fzf if none)
+  f prs            PRs for the current feature
+
+Flags:
+  -r <repo>        repo, repeatable (skips fzf)
+  -p <prompt>      prompt (skips $EDITOR)
+  -f <feature>     feature for add/prs (default: from cwd)
+
+Starting a new feature offers to clean up merged ones (worktrees, branches, Herdr).
+Features live in ~/code/features/.features/<name>/<repo> (override with F_BASE).
 `
 
 func main() {
@@ -59,14 +70,6 @@ func main() {
 				Flags: []cli.Flag{featureFlag},
 				Action: func(ctx context.Context, c *cli.Command) error {
 					return prs(cfg, c.String("feature"))
-				},
-			},
-			{
-				Name:  "gc",
-				Usage: "clean up features whose PRs have all merged",
-				Flags: []cli.Flag{&cli.BoolFlag{Name: "yes", Aliases: []string{"y"}, Usage: "don't ask"}},
-				Action: func(ctx context.Context, c *cli.Command) error {
-					return gc(cfg, c.Bool("yes"))
 				},
 			},
 		},
