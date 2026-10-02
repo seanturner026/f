@@ -65,7 +65,6 @@ local function add(opts)
       buf = buf,
       mark = mark,
     })
-    vim.notify(("PiComment: %d pending"):format(#comments))
   end
 
   if opts.args ~= "" then
