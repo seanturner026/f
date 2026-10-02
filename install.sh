@@ -21,5 +21,5 @@ done
 # herdr
 link "$repo/herdr/config.toml" "$HOME/.config/herdr/config.toml"
 
-# scripts
-for bin in "$repo"/bin/*; do link "$bin" "$HOME/.local/bin/$(basename "$bin")"; done
+# f (feature workspace CLI) → $(go env GOPATH)/bin/f
+(cd "$repo" && go install ./cmd/f) && echo "installed f -> $(go env GOPATH)/bin/f"
