@@ -1,18 +1,26 @@
 package main
 
 import (
+	"bufio"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
+	"strings"
 )
 
 var validName = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]*$`)
 
+// Subcommand names can't be feature names, or `f <name>` would be ambiguous.
+var reserved = map[string]bool{"add": true, "prs": true, "gc": true, "help": true, "completion": true}
+
 func checkName(name string) error {
 	if !validName.MatchString(name) {
 		return fmt.Errorf("invalid feature name %q (use lowercase, digits, - . _)", name)
+	}
+	if reserved[name] {
+		return fmt.Errorf("%q is a subcommand; pick another name", name)
 	}
 	return nil
 }
@@ -29,60 +37,18 @@ func checkRepos(cfg config, repos []string) error {
 	return nil
 }
 
-func requireFeature(cfg config, name string) error {
-	if !exists(cfg.featureDir(name)) {
-		return fmt.Errorf("no feature %q", name)
-	}
-	return nil
-}
-
-func cmdNew(cfg config, args []string) error {
-	var name, prompt string
-	var repos []string
-	for i := 0; i < len(args); i++ {
-		switch a := args[i]; a {
-		case "-r", "--repo", "-p", "--prompt":
-			if i+1 >= len(args) {
-				return fmt.Errorf("%s needs a value", a)
-			}
-			i++
-			if a == "-r" || a == "--repo" {
-				repos = append(repos, args[i])
-			} else {
-				prompt = args[i]
-			}
-		default:
-			if len(a) > 0 && a[0] == '-' {
-				return fmt.Errorf("unknown flag %s", a)
-			}
-			if name != "" {
-				return fmt.Errorf("unexpected %q (repos go after -r)", a)
-			}
-			name = a
-		}
-	}
+// start creates a feature (repos → prompt → name), or reopens an existing one.
+func start(cfg config, name string, repos []string, prompt string) error {
 	if name != "" {
 		if err := checkName(name); err != nil {
 			return err
 		}
 		if exists(cfg.featureDir(name)) {
-			return fmt.Errorf("feature %q exists (use f add or f open)", name)
+			return openWorkspace(cfg, name, "")
 		}
 	}
 
-	// 1. What are we doing?
-	if prompt == "" {
-		p, err := editPrompt()
-		if err != nil {
-			return err
-		}
-		prompt = p
-	}
-	if prompt == "" {
-		return errors.New("empty prompt; aborted")
-	}
-
-	// 2. Which repos?
+	// 1. Which repos?
 	if len(repos) == 0 {
 		picked, err := pickRepos(cfg, nil)
 		if err != nil {
@@ -97,6 +63,18 @@ func cmdNew(cfg config, args []string) error {
 		return err
 	}
 
+	// 2. What are we doing?
+	if prompt == "" {
+		p, err := editPrompt()
+		if err != nil {
+			return err
+		}
+		prompt = p
+	}
+	if prompt == "" {
+		return errors.New("empty prompt; aborted")
+	}
+
 	// 3. Name it: pi suggests, you confirm.
 	if name == "" {
 		info("naming…")
@@ -108,7 +86,7 @@ func cmdNew(cfg config, args []string) error {
 			return err
 		}
 		if exists(cfg.featureDir(n)) {
-			return fmt.Errorf("feature %q exists (use f add or f open)", n)
+			return fmt.Errorf("feature %q already exists; run `f %s` to reopen it", n, n)
 		}
 		name = n
 	}
@@ -117,7 +95,7 @@ func cmdNew(cfg config, args []string) error {
 	if err := os.MkdirAll(cfg.featureDir(name), 0o755); err != nil {
 		return err
 	}
-	fmt.Println(bold("feature " + name))
+	fmt.Println(bold(name))
 	for _, r := range repos {
 		if err := addWorktree(cfg, name, r); err != nil {
 			return err
@@ -129,12 +107,9 @@ func cmdNew(cfg config, args []string) error {
 	return openWorkspace(cfg, name, prompt)
 }
 
-func cmdAdd(cfg config, args []string) error {
-	if len(args) == 0 {
-		return errUsage
-	}
-	name, repos := args[0], args[1:]
-	if err := requireFeature(cfg, name); err != nil {
+func add(cfg config, explicit string, repos []string) error {
+	name, err := cfg.resolveFeature(explicit)
+	if err != nil {
 		return err
 	}
 	if len(repos) == 0 {
@@ -160,60 +135,13 @@ func cmdAdd(cfg config, args []string) error {
 	if err := writeAgentsMD(cfg, name, ""); err != nil {
 		return err
 	}
-	info("AGENTS.md updated; run /reload in pi")
+	info("AGENTS.md updated; /reload in pi to pick it up")
 	return nil
 }
 
-func cmdOpen(cfg config, args []string) error {
-	if len(args) != 1 {
-		return errUsage
-	}
-	if err := requireFeature(cfg, args[0]); err != nil {
-		return err
-	}
-	return openWorkspace(cfg, args[0], "")
-}
-
-func cmdLs(cfg config) error {
-	entries, err := os.ReadDir(cfg.Features)
-	if errors.Is(err, os.ErrNotExist) || (err == nil && len(entries) == 0) {
-		info("no features")
-		return nil
-	}
+func prs(cfg config, explicit string) error {
+	name, err := cfg.resolveFeature(explicit)
 	if err != nil {
-		return err
-	}
-	for _, e := range entries {
-		if !e.IsDir() {
-			continue
-		}
-		fmt.Println(bold(e.Name()))
-		repos, err := featureRepos(cfg, e.Name())
-		if err != nil {
-			return err
-		}
-		for _, r := range repos {
-			wt := filepath.Join(cfg.featureDir(e.Name()), r)
-			changed, _ := changedFiles(wt)
-			ahead, err := commitsAhead(wt, "origin/"+defaultBranch(cfg, r))
-			aheadS := fmt.Sprint(ahead)
-			if err != nil {
-				aheadS = "?"
-			}
-			fmt.Printf("  %-28s %d changed, %s commits\n", r, changed, aheadS)
-		}
-	}
-	return nil
-}
-
-func cmdPrs(cfg config, args []string) error {
-	name := ""
-	if len(args) > 0 {
-		name = args[0]
-	} else if name = cfg.featureFromCwd(); name == "" {
-		return errors.New("usage: f prs <feature> (or run inside a feature)")
-	}
-	if err := requireFeature(cfg, name); err != nil {
 		return err
 	}
 	repos, err := featureRepos(cfg, name)
@@ -222,14 +150,14 @@ func cmdPrs(cfg config, args []string) error {
 	}
 	for _, r := range repos {
 		fmt.Println(bold(r))
-		prs, err := listPRs(filepath.Join(cfg.featureDir(name), r), name)
+		list, err := listPRs(filepath.Join(cfg.featureDir(name), r), name)
 		switch {
 		case err != nil:
 			fmt.Printf("  %s\n", red("gh: "+err.Error()))
-		case len(prs) == 0:
+		case len(list) == 0:
 			fmt.Println(dim("  no PR"))
 		}
-		for _, p := range prs {
+		for _, p := range list {
 			state := p.State
 			if p.IsDraft {
 				state = "DRAFT"
@@ -240,65 +168,98 @@ func cmdPrs(cfg config, args []string) error {
 	return nil
 }
 
-func cmdDone(cfg config, args []string) error {
-	var name string
-	force := false
-	for _, a := range args {
-		if a == "--force" || a == "-f" {
-			force = true
-		} else if name == "" {
-			name = a
+// gc removes features where every repo is clean and either untouched or has a
+// merged PR with nothing unpushed, and at least one PR merged overall.
+func gc(cfg config, yes bool) error {
+	var done []string
+	for _, name := range features(cfg) {
+		ready, reason := collectible(cfg, name)
+		if ready {
+			done = append(done, name)
+			fmt.Printf("%s %s\n", green("✓"), name)
 		} else {
-			return errUsage
+			fmt.Printf("%s %s %s\n", dim("·"), name, dim(reason))
 		}
 	}
-	if name == "" {
-		return errUsage
+	if len(done) == 0 {
+		return nil
 	}
-	if err := requireFeature(cfg, name); err != nil {
-		return err
+	if !yes {
+		fmt.Printf("remove %d feature(s) (worktrees, branches, herdr workspace)? [y/N] ", len(done))
+		line, _ := bufio.NewReader(os.Stdin).ReadString('\n')
+		if a := strings.ToLower(strings.TrimSpace(line)); a != "y" && a != "yes" {
+			return nil
+		}
 	}
+	h := newHerdr(cfg)
+	herdrUp := h.available()
+	for _, name := range done {
+		if err := removeFeature(cfg, name); err != nil {
+			return err
+		}
+		if herdrUp {
+			if ws, _ := h.findWorkspace(name); ws != "" {
+				_ = h.closeWorkspace(ws)
+			}
+		}
+		ok("removed %s", name)
+	}
+	return nil
+}
+
+func collectible(cfg config, name string) (bool, string) {
+	repos, err := featureRepos(cfg, name)
+	if err != nil {
+		return false, err.Error()
+	}
+	merged := 0
+	for _, r := range repos {
+		wt := filepath.Join(cfg.featureDir(name), r)
+		if n, _ := changedFiles(wt); n > 0 {
+			return false, fmt.Sprintf("(%s: uncommitted changes)", r)
+		}
+		if ahead, _ := commitsAhead(wt, "origin/"+defaultBranch(cfg, r)); ahead == 0 {
+			continue // untouched repo
+		}
+		list, err := listPRs(wt, name)
+		if err != nil {
+			return false, fmt.Sprintf("(%s: gh: %v)", r, err)
+		}
+		if !anyMerged(list) {
+			return false, fmt.Sprintf("(%s: not merged)", r)
+		}
+		if n, err := unpushedCommits(wt, "origin/"+defaultBranch(cfg, r)); err == nil && n > 0 {
+			return false, fmt.Sprintf("(%s: %d commits not pushed)", r, n)
+		}
+		merged++
+	}
+	if merged == 0 {
+		return false, "(no merged PRs yet)"
+	}
+	return true, ""
+}
+
+func anyMerged(list []pr) bool {
+	for _, p := range list {
+		if p.State == "MERGED" {
+			return true
+		}
+	}
+	return false
+}
+
+func removeFeature(cfg config, name string) error {
 	dir := cfg.featureDir(name)
 	repos, err := featureRepos(cfg, name)
 	if err != nil {
 		return err
 	}
-
-	if !force {
-		var problems []string
-		for _, r := range repos {
-			wt := filepath.Join(dir, r)
-			if n, _ := changedFiles(wt); n > 0 {
-				problems = append(problems, fmt.Sprintf("%s: %d uncommitted changes", r, n))
-			}
-			if n, err := unpushedCommits(wt, "origin/"+defaultBranch(cfg, r)); err == nil && n > 0 {
-				problems = append(problems, fmt.Sprintf("%s: %d commits not pushed", r, n))
-			}
-		}
-		if len(problems) > 0 {
-			for _, p := range problems {
-				fmt.Println("  " + p)
-			}
-			return errors.New("refusing; fix the above or use --force")
-		}
-	}
-
 	for _, r := range repos {
-		if err := removeWorktree(cfg, r, filepath.Join(dir, r), force); err != nil {
+		if err := removeWorktree(cfg, r, filepath.Join(dir, r), false); err != nil {
 			return err
 		}
-		ok("  removed %s worktree (branch %s kept)", r, name)
+		_, _ = git(filepath.Join(cfg.Base, r), "branch", "-D", name)
 	}
 	_ = os.Remove(filepath.Join(dir, "AGENTS.md"))
-	if err := os.Remove(dir); err != nil {
-		info("  left %s (not empty)", dir)
-	}
-	if h := newHerdr(cfg); h.available() {
-		if ws, _ := h.findWorkspace(name); ws != "" {
-			if err := h.closeWorkspace(ws); err == nil {
-				ok("  closed herdr workspace")
-			}
-		}
-	}
-	return nil
+	return os.Remove(dir)
 }

@@ -3,71 +3,90 @@
 package main
 
 import (
-	"errors"
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/urfave/cli/v3"
 )
 
-const usage = `f: multi-repo feature workspaces (git worktrees + Herdr + pi)
-
-  f new  [feature] [-r repo]... [-p "prompt"]
-         prompt ($EDITOR) → pick repos (fzf) → pi suggests a name →
-         worktrees, AGENTS.md, Herdr workspace, pi starts with your prompt
-  f add  <feature> [repo...]      add repos (fzf if none given)
-  f open <feature>                focus (or recreate) the Herdr workspace
-  f ls                            list features
-  f prs  [feature]                PRs for the feature branch in each repo
-  f done <feature> [--force]      remove worktrees + close the Herdr workspace
-
-Layout:  $F_BASE/.features/<feature>/<repo>   (branch = <feature>)
-         F_BASE defaults to ~/code/features
-Herdr:   tabs 1 chat (pi) · 2 nvim · 3 shell   (F_NO_HERDR=1 to skip)
+const help = `f [name]         start a feature, or reopen it if it exists
+                 (no name: pi suggests one after you write the prompt)
+f add [repo...]  add repos to this feature (fzf if none)
+f prs            PRs for this feature
+f gc             clean up features whose PRs have all merged
 `
 
-// errUsage signals that the usage text should be printed.
-var errUsage = errors.New("usage")
-
 func main() {
-	if err := run(os.Args[1:]); err != nil {
-		if errors.Is(err, errUsage) {
-			fmt.Fprint(os.Stderr, usage)
-			os.Exit(2)
-		}
-		fmt.Fprintf(os.Stderr, "%s %v\n", red("error:"), err)
-		os.Exit(1)
+	cfg, err := loadConfig()
+	if err != nil {
+		fail(err)
+	}
+	app := &cli.Command{
+		Name:                          "f",
+		CustomRootCommandHelpTemplate: help,
+		HideHelpCommand:               true,
+		EnableShellCompletion:         true,
+		Flags: []cli.Flag{
+			&cli.StringSliceFlag{Name: "repo", Aliases: []string{"r"}, Usage: "repo (skips fzf)", Local: true},
+			&cli.StringFlag{Name: "prompt", Aliases: []string{"p"}, Usage: "prompt (skips $EDITOR)", Local: true},
+		},
+		Action: func(ctx context.Context, c *cli.Command) error {
+			if c.NArg() > 1 {
+				return fmt.Errorf("one feature name at a time")
+			}
+			return start(cfg, c.Args().First(), c.StringSlice("repo"), c.String("prompt"))
+		},
+		ShellComplete: func(ctx context.Context, c *cli.Command) { printLines(features(cfg)) },
+		Commands: []*cli.Command{
+			{
+				Name:  "add",
+				Usage: "add repos to this feature",
+				Flags: []cli.Flag{featureFlag},
+				Action: func(ctx context.Context, c *cli.Command) error {
+					return add(cfg, c.String("feature"), c.Args().Slice())
+				},
+				ShellComplete: func(ctx context.Context, c *cli.Command) {
+					all, _ := baseRepos(cfg)
+					printLines(all)
+				},
+			},
+			{
+				Name:  "prs",
+				Usage: "PRs for this feature",
+				Flags: []cli.Flag{featureFlag},
+				Action: func(ctx context.Context, c *cli.Command) error {
+					return prs(cfg, c.String("feature"))
+				},
+			},
+			{
+				Name:  "gc",
+				Usage: "clean up features whose PRs have all merged",
+				Flags: []cli.Flag{&cli.BoolFlag{Name: "yes", Aliases: []string{"y"}, Usage: "don't ask"}},
+				Action: func(ctx context.Context, c *cli.Command) error {
+					return gc(cfg, c.Bool("yes"))
+				},
+			},
+		},
+	}
+	if err := app.Run(context.Background(), os.Args); err != nil {
+		fail(err)
 	}
 }
 
-func run(args []string) error {
-	if len(args) == 0 {
-		fmt.Print(usage)
-		return nil
-	}
-	cfg, err := loadConfig()
-	if err != nil {
-		return err
-	}
-	cmd, rest := args[0], args[1:]
-	switch cmd {
-	case "new":
-		return cmdNew(cfg, rest)
-	case "add":
-		return cmdAdd(cfg, rest)
-	case "open":
-		return cmdOpen(cfg, rest)
-	case "ls":
-		return cmdLs(cfg)
-	case "prs":
-		return cmdPrs(cfg, rest)
-	case "done":
-		return cmdDone(cfg, rest)
-	case "-h", "--help", "help":
-		fmt.Print(usage)
-		return nil
-	default:
-		return fmt.Errorf("unknown command %q (see f --help)", cmd)
+// featureFlag picks a feature explicitly; otherwise it's inferred from the cwd.
+var featureFlag = &cli.StringFlag{Name: "feature", Aliases: []string{"f"}, Usage: "feature (default: from cwd)"}
+
+func fail(err error) {
+	fmt.Fprintf(os.Stderr, "%s %v\n", red("error:"), err)
+	os.Exit(1)
+}
+
+func printLines(lines []string) {
+	for _, l := range lines {
+		fmt.Println(l)
 	}
 }
 
@@ -95,17 +114,35 @@ func loadConfig() (config, error) {
 
 func (c config) featureDir(name string) string { return filepath.Join(c.Features, name) }
 
-// featureFromCwd returns the feature containing the working directory, if any.
-func (c config) featureFromCwd() string {
-	wd, err := os.Getwd()
-	if err != nil {
-		return ""
+// resolveFeature returns the explicit feature, or the one containing the cwd.
+func (c config) resolveFeature(explicit string) (string, error) {
+	name := explicit
+	if name == "" {
+		if wd, err := os.Getwd(); err == nil {
+			if rel, err := filepath.Rel(c.Features, wd); err == nil && rel != "." && !strings.HasPrefix(rel, "..") {
+				name = strings.Split(rel, string(filepath.Separator))[0]
+			}
+		}
 	}
-	rel, err := filepath.Rel(c.Features, wd)
-	if err != nil || rel == "." || strings.HasPrefix(rel, "..") {
-		return ""
+	if name == "" {
+		return "", fmt.Errorf("not inside a feature (cd into one or pass -f <feature>)")
 	}
-	return strings.Split(rel, string(filepath.Separator))[0]
+	if !exists(c.featureDir(name)) {
+		return "", fmt.Errorf("no feature %q", name)
+	}
+	return name, nil
+}
+
+// features lists existing feature names.
+func features(cfg config) []string {
+	entries, _ := os.ReadDir(cfg.Features)
+	var names []string
+	for _, e := range entries {
+		if e.IsDir() {
+			names = append(names, e.Name())
+		}
+	}
+	return names
 }
 
 // ---- output helpers ----

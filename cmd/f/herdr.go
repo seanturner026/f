@@ -82,7 +82,7 @@ func shellQuote(s string) string { return "'" + strings.ReplaceAll(s, "'", `'\''
 func openWorkspace(cfg config, feature, prompt string) error {
 	h := newHerdr(cfg)
 	if !h.available() {
-		info("herdr unavailable (or F_NO_HERDR set); skipping workspace. Run `f open %s` later", feature)
+		info("herdr unavailable (or F_NO_HERDR set); skipping workspace (run `f %s` later)", feature)
 		return nil
 	}
 	if ws, err := h.findWorkspace(feature); err != nil {
