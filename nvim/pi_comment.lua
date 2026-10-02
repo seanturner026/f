@@ -6,7 +6,7 @@
 --   :PiClear            discard all
 --
 -- Works inside an `f` feature: <base>/.features/<feature>/<repo>/...
--- pi is reached as Herdr agent "f-<feature>" (see agentName in cmd/f/herdr.go).
+-- pi is found via `herdr agent list`: the pi agent whose cwd is the feature root.
 
 local M = {}
 
@@ -32,8 +32,21 @@ local function feature_of(path)
   return root, name
 end
 
-local function agent_name(feature)
-  return ("f-" .. feature:gsub("%.", "-")):sub(1, 32)
+-- Herdr target for the feature's pi: the pane of the pi agent running in the
+-- feature root (names get dropped when pi restarts, so find it by cwd).
+local function pi_target(root)
+  local res = vim.system({ "herdr", "agent", "list" }, { text = true }):wait()
+  if res.code ~= 0 then
+    return nil, vim.trim(res.stderr or "herdr agent list failed")
+  end
+  local ok, data = pcall(vim.json.decode, res.stdout)
+  local agents = ok and data.result and data.result.agents or {}
+  for _, a in ipairs(agents) do
+    if a.agent == "pi" and (a.cwd == root or a.foreground_cwd == root) then
+      return a.pane_id
+    end
+  end
+  return nil, "no pi running in " .. root
 end
 
 local function add(opts)
@@ -101,22 +114,26 @@ local function send()
   if #comments == 0 then
     return vim.notify("PiComment: nothing to send")
   end
-  local _, feature = feature_of(buf_path(0) or nil)
-  if not feature then
-    _, feature = feature_of(nil)
-  end
-  if not feature then
+  local root = feature_of(buf_path(0) or nil) or feature_of(nil)
+  if not root then
     return vim.notify("PiComment: not inside an f feature", vim.log.levels.WARN)
   end
   local msg, n = message(), #comments
-  vim.system({ "herdr", "agent", "prompt", agent_name(feature), msg }, { text = true }, function(res)
+  local function fail(why)
+    vim.fn.setreg("+", msg)
+    vim.notify("PiComment: send failed (copied to clipboard): " .. why, vim.log.levels.ERROR)
+  end
+  local target, err = pi_target(root)
+  if not target then
+    return fail(err)
+  end
+  vim.system({ "herdr", "agent", "prompt", target, msg }, { text = true }, function(res)
     vim.schedule(function()
       if res.code == 0 then
         clear()
         vim.notify(("PiComment: sent %d to pi"):format(n))
       else
-        vim.fn.setreg("+", msg)
-        vim.notify("PiComment: send failed (copied to clipboard): " .. vim.trim(res.stderr or ""), vim.log.levels.ERROR)
+        fail(vim.trim(res.stderr or ""))
       end
     end)
   end)
@@ -144,5 +161,6 @@ function M.setup()
 end
 
 M._message = message -- for tests
+M._pi_target = pi_target
 
 return M
