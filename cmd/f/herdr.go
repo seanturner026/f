@@ -119,7 +119,7 @@ func openWorkspace(cfg config, feature string, piArgs []string) error {
 	if err := h.call(&nvim, "tab", "create", "--workspace", ws, "--cwd", dir, "--label", "nvim"); err != nil {
 		return err
 	}
-	if err := h.call(nil, "pane", "run", nvim.Result.RootPane.ID, "nvim ."); err != nil {
+	if err := h.call(nil, "pane", "run", nvim.Result.RootPane.ID, "nvim"); err != nil {
 		return err
 	}
 	if err := h.call(nil, "tab", "create", "--workspace", ws, "--cwd", dir, "--label", "shell"); err != nil {
