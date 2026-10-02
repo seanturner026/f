@@ -21,5 +21,8 @@ done
 # herdr
 link "$repo/herdr/config.toml" "$HOME/.config/herdr/config.toml"
 
+# nvim: pi_comment (require("pi_comment").setup() in init.lua)
+link "$repo/nvim/pi_comment.lua" "$HOME/.config/nvim/lua/pi_comment.lua"
+
 # f (feature workspace CLI) → $(go env GOPATH)/bin/f
 (cd "$repo" && go install ./cmd/f) && echo "installed f -> $(go env GOPATH)/bin/f"

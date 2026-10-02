@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -155,7 +156,15 @@ func add(cfg config, explicit string, repos []string) error {
 	return nil
 }
 
-func prs(cfg config, explicit string) error {
+type repoPRs struct {
+	Repo  string `json:"repo"`
+	PRs   []pr   `json:"prs"`
+	Error string `json:"error,omitempty"`
+}
+
+// prs lists PRs for the feature branch in each repo, and opens the open ones
+// in the browser unless noOpen. asJSON prints machine-readable output only.
+func prs(cfg config, explicit string, noOpen, asJSON bool) error {
 	name, err := cfg.resolveFeature(explicit)
 	if err != nil {
 		return err
@@ -164,21 +173,47 @@ func prs(cfg config, explicit string) error {
 	if err != nil {
 		return err
 	}
-	for _, r := range repos {
-		fmt.Println(bold(r))
-		list, err := listPRs(filepath.Join(cfg.featureDir(name), r), name)
+	results := make([]repoPRs, len(repos))
+	var wg sync.WaitGroup
+	for i, r := range repos {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			list, err := listPRs(filepath.Join(cfg.featureDir(name), r), name)
+			results[i] = repoPRs{Repo: r, PRs: list}
+			if err != nil {
+				results[i].Error = err.Error()
+			}
+		}()
+	}
+	wg.Wait()
+
+	if asJSON {
+		return json.NewEncoder(os.Stdout).Encode(results)
+	}
+	var toOpen []string
+	for _, res := range results {
+		fmt.Println(bold(res.Repo))
 		switch {
-		case err != nil:
-			fmt.Printf("  %s\n", red("gh: "+err.Error()))
-		case len(list) == 0:
+		case res.Error != "":
+			fmt.Printf("  %s\n", red("gh: "+res.Error))
+		case len(res.PRs) == 0:
 			fmt.Println(dim("  no PR"))
 		}
-		for _, p := range list {
+		for _, p := range res.PRs {
 			state := p.State
 			if p.IsDraft {
 				state = "DRAFT"
 			}
 			fmt.Printf("  #%d %-7s %s\n         %s\n", p.Number, state, p.Title, dim(p.URL))
+			if p.State == "OPEN" {
+				toOpen = append(toOpen, p.URL)
+			}
+		}
+	}
+	if !noOpen && len(toOpen) > 0 {
+		if err := exec.Command("open", toOpen...).Run(); err != nil {
+			return fmt.Errorf("opening browser: %w", err)
 		}
 	}
 	return nil

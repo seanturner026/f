@@ -19,12 +19,13 @@ Usage:
                    reopens the feature (continuing its pi session) if it exists
   f                pick an existing feature to reopen
   f add [repo...]  add repos to the current feature (fzf if none)
-  f prs            PRs for the current feature
+  f prs            PRs for the current feature; opens open ones in the browser
 
 Flags:
   -r <repo>        repo, repeatable (skips fzf)
   -p <prompt>      first prompt for pi
   -f <feature>     feature for add/prs (default: from cwd)
+  -n, --json       prs: don't open the browser / print JSON
 
 Inside Herdr each feature gets its own workspace (chat · nvim · shell); outside,
 pi starts in this terminal. Starting a feature offers to clean up merged ones.
@@ -68,9 +69,13 @@ func main() {
 			{
 				Name:  "prs",
 				Usage: "PRs for this feature",
-				Flags: []cli.Flag{featureFlag},
+				Flags: []cli.Flag{
+					featureFlag,
+					&cli.BoolFlag{Name: "no-open", Aliases: []string{"n"}, Usage: "don't open in browser"},
+					&cli.BoolFlag{Name: "json", Usage: "machine-readable output"},
+				},
 				Action: func(ctx context.Context, c *cli.Command) error {
-					return prs(cfg, c.String("feature"))
+					return prs(cfg, c.String("feature"), c.Bool("no-open") || c.Bool("json"), c.Bool("json"))
 				},
 			},
 		},
