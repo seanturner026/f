@@ -1,9 +1,11 @@
--- pi_comment: collect review comments in nvim, send them to this feature's pi.
+-- pi_comment: nvim helpers for `f` features.
 --
---   :PiComment [note]   comment on the current line / visual selection
---   :PiComments         list pending comments (quickfix)
---   :PiSend             send all to pi (via Herdr) and clear
+--   :PiComment [note]   comment on the current line / visual selection   <leader>pc
+--   :PiComments         list pending comments (quickfix)                 <leader>pl
+--   :PiSend             send all to pi (via Herdr) and clear             <leader>ps
 --   :PiClear            discard all
+--   :PiReview           one CodeDiff tab per repo in the feature (live)
+--   :PiChanged          picker of files this feature changed, with diff  <leader>e
 --
 -- Works inside an `f` feature: <base>/.features/<feature>/<repo>/...
 -- pi is found via `herdr agent list`: the pi agent whose cwd is the feature root.
@@ -153,16 +155,77 @@ local function list()
   vim.cmd(#items > 0 and "copen" or "cclose")
 end
 
+-- Repos (git worktrees) in the feature that contains the cwd.
+local function feature_repos()
+  local root = feature_of(nil)
+  if not root then
+    return nil, nil
+  end
+  local repos = {}
+  for name, kind in vim.fs.dir(root) do
+    if kind == "directory" and vim.uv.fs_stat(root .. "/" .. name .. "/.git") then
+      table.insert(repos, name)
+    end
+  end
+  table.sort(repos)
+  return root, repos
+end
+
+-- One CodeDiff tab per repo (feature changes vs origin's default branch); the
+-- empty starting tab is closed once they're up.
+local function review()
+  local root, repos = feature_repos()
+  if not root then
+    return vim.notify("PiReview: not inside an f feature", vim.log.levels.WARN)
+  end
+  local first = vim.api.nvim_get_current_tabpage()
+  for _, repo in ipairs(repos) do
+    -- origin/HEAD... = everything since the branch left origin's default
+    -- branch (committed + uncommitted), still live-updating.
+    vim.cmd("CodeDiff --repo " .. vim.fn.fnameescape(root .. "/" .. repo) .. " origin/HEAD...")
+  end
+  vim.defer_fn(function()
+    local tabs = vim.api.nvim_list_tabpages()
+    if #tabs > 1 and vim.api.nvim_tabpage_is_valid(first) then
+      local buf = vim.api.nvim_win_get_buf(vim.api.nvim_tabpage_get_win(first))
+      if vim.api.nvim_buf_get_name(buf) == "" and not vim.bo[buf].modified then
+        vim.cmd("tabclose " .. vim.api.nvim_tabpage_get_number(first))
+      end
+    end
+  end, 1500)
+end
+
+-- Files this feature changed (vs the merge-base with origin's default branch,
+-- including uncommitted edits), across all its repos, with a diff preview.
+local function changed()
+  local root, repos = feature_repos()
+  if not root then
+    return vim.notify("PiChanged: not inside an f feature", vim.log.levels.WARN)
+  end
+  local multi = {}
+  for _, repo in ipairs(repos) do
+    local dir = root .. "/" .. repo
+    -- snacks multi-source only honours a per-source cwd via filter.cwd
+    table.insert(multi, { source = "git_diff", cwd = dir, filter = { cwd = dir }, base = "origin/HEAD", group = true })
+  end
+  Snacks.picker({ title = "feature changes", multi = multi, format = "git_status", preview = "diff" })
+end
+
+M._repos = feature_repos -- for tests
+
 function M.setup()
   vim.api.nvim_create_user_command("PiComment", add, { range = true, nargs = "*", desc = "Comment for pi" })
   vim.api.nvim_create_user_command("PiComments", list, { desc = "List pending pi comments" })
   vim.api.nvim_create_user_command("PiSend", send, { desc = "Send pi comments" })
   vim.api.nvim_create_user_command("PiClear", clear, { desc = "Discard pi comments" })
+  vim.api.nvim_create_user_command("PiReview", review, { desc = "CodeDiff tab per feature repo" })
+  vim.api.nvim_create_user_command("PiChanged", changed, { desc = "Files this feature changed" })
 
   vim.keymap.set("n", "<leader>pc", "<cmd>PiComment<cr>", { desc = "[P]i [C]omment" })
   vim.keymap.set("x", "<leader>pc", ":PiComment<cr>", { desc = "[P]i [C]omment" })
   vim.keymap.set("n", "<leader>ps", "<cmd>PiSend<cr>", { desc = "[P]i [S]end comments" })
   vim.keymap.set("n", "<leader>pl", "<cmd>PiComments<cr>", { desc = "[P]i [L]ist comments" })
+  vim.keymap.set("n", "<leader>e", "<cmd>PiChanged<cr>", { desc = "Feature changed files" })
 end
 
 M._message = message -- for tests

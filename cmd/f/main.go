@@ -28,7 +28,7 @@ Flags:
   -r               prs: refresh live from GitHub (pi does this after every turn)
   -n, --json       prs: don't open the browser / print JSON
 
-Inside Herdr each feature gets its own workspace (chat · nvim · shell); outside,
+Inside Herdr each feature gets its own workspace (chat · nvim · review · shell); outside,
 pi starts in this terminal. Starting a feature offers to clean up merged ones.
 Feature state (e.g. PRs) lives in <feature>/.context/, local-only.
 Features live in ~/code/features/.features/<name>/<repo> (override with F_BASE).

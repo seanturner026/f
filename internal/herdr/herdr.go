@@ -108,7 +108,7 @@ const (
 )
 
 // OpenWorkspace focuses the workspace labelled label, or creates it in dir with
-// tabs 1 chat (pi with piArgs) · 2 nvim · 3 shell.
+// tabs 1 chat (pi with piArgs) · 2 nvim · 3 review (CodeDiff per repo) · 4 shell.
 func OpenWorkspace(ctx context.Context, r Runner, label, dir string, piArgs []string) (OpenResult, error) {
 	if id, err := FindWorkspace(ctx, r, label); err != nil {
 		return "", err
@@ -134,6 +134,14 @@ func OpenWorkspace(ctx context.Context, r Runner, label, dir string, piArgs []st
 	}
 	if err := call(ctx, r, nil, "pane", "run", nvim.Result.RootPane.ID, "nvim"); err != nil {
 		return "", fmt.Errorf("start nvim: %w", err)
+	}
+	var review created
+	if err := call(ctx, r, &review, "tab", "create", "--workspace", ws, "--cwd", dir, "--label", "review"); err != nil {
+		return "", fmt.Errorf("create review tab: %w", err)
+	}
+	// :PiReview (nvim/pi_comment.lua): one live CodeDiff tab per repo.
+	if err := call(ctx, r, nil, "pane", "run", review.Result.RootPane.ID, "nvim -c PiReview"); err != nil {
+		return "", fmt.Errorf("start review: %w", err)
 	}
 	if err := call(ctx, r, nil, "tab", "create", "--workspace", ws, "--cwd", dir, "--label", "shell"); err != nil {
 		return "", fmt.Errorf("create shell tab: %w", err)
