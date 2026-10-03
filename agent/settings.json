@@ -5,5 +5,8 @@
   "defaultModel": "claude-opus-5-5",
   "skills": [
     "~/.claude/skills/golang"
-  ]
+  ],
+  "warnings": {
+    "anthropicExtraUsage": false
+  }
 }
