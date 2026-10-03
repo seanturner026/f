@@ -19,16 +19,18 @@ Usage:
                    reopens the feature (continuing its pi session) if it exists
   f                pick an existing feature to reopen
   f add [repo...]  add repos to the current feature (fzf if none)
-  f prs            PRs for the current feature; opens open ones in the browser
+  f prs            PRs for the current feature (saved state, instant); opens open ones
 
 Flags:
   -r <repo>        repo, repeatable (skips fzf)
   -p <prompt>      first prompt for pi
   -f <feature>     feature for add/prs (default: from cwd)
+  -r               prs: refresh live from GitHub (pi does this after every turn)
   -n, --json       prs: don't open the browser / print JSON
 
 Inside Herdr each feature gets its own workspace (chat · nvim · shell); outside,
 pi starts in this terminal. Starting a feature offers to clean up merged ones.
+Feature state (e.g. PRs) lives in <feature>/.context/, local-only.
 Features live in ~/code/features/.features/<name>/<repo> (override with F_BASE).
 `
 
@@ -74,11 +76,18 @@ func main() {
 				Usage: "PRs for this feature",
 				Flags: []cli.Flag{
 					featureFlag,
+					&cli.BoolFlag{Name: "refresh", Aliases: []string{"r"}, Usage: "look up live"},
 					&cli.BoolFlag{Name: "no-open", Aliases: []string{"n"}, Usage: "don't open in browser"},
 					&cli.BoolFlag{Name: "json", Usage: "machine-readable output"},
+					&cli.StringFlag{Name: "add", Usage: "record a PR URL"},
 				},
 				Action: func(ctx context.Context, c *cli.Command) error {
-					return prs(ctx, d, c.String("feature"), c.Bool("no-open") || c.Bool("json"), c.Bool("json"))
+					return prs(ctx, d, c.String("feature"), prsOptions{
+						refresh: c.Bool("refresh"),
+						noOpen:  c.Bool("no-open") || c.Bool("json"),
+						asJSON:  c.Bool("json"),
+						addURL:  c.String("add"),
+					})
 				},
 			},
 		},

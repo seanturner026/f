@@ -29,6 +29,7 @@ This session works across these git worktrees, all on branch ` + "`{{.Name}}`" +
 - Before changing anything in a repo, read its instructions file listed above (if any) and follow it.
 - Run git commands inside the relevant repo directory; this root is not a git repo.
 - One PR per repo, from branch ` + "`{{.Name}}`" + `.
+- ` + "`.context/`" + ` holds feature state managed by ` + "`f`" + ` (e.g. ` + "`.context/state.json`" + ` lists this feature's PRs). Read it when useful; don't edit it.
 `))
 
 type agentsRepo struct{ Dir, Instructions string }

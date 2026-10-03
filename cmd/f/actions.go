@@ -12,6 +12,7 @@ import (
 	"strings"
 	"sync"
 	"syscall"
+	"time"
 
 	"github.com/seanturner026/pi/internal/feature"
 	"github.com/seanturner026/pi/internal/herdr"
@@ -191,36 +192,63 @@ func add(ctx context.Context, d deps, explicit string, repos []string) error {
 	return nil
 }
 
-// prsOutput is the --json shape of `f prs`.
-type prsOutput struct {
-	PRs    []model.PR        `json:"prs"`
-	Errors map[string]string `json:"errors,omitempty"`
+// prsOptions are the flags of `f prs`.
+type prsOptions struct {
+	refresh bool   // look up live (otherwise use .context/state.json)
+	noOpen  bool   // don't open the browser
+	asJSON  bool   // print JSON only
+	addURL  string // record this PR URL and exit
 }
 
-// prs lists PRs for the feature branch in each repo and opens the active ones
-// in the browser unless noOpen. asJSON prints machine-readable output only.
-func prs(ctx context.Context, d deps, explicit string, noOpen, asJSON bool) error {
+// prsOutput is the --json shape of `f prs`.
+type prsOutput struct {
+	PRs         []model.PR        `json:"prs"`
+	RefreshedAt time.Time         `json:"refreshed_at,omitzero"`
+	Errors      map[string]string `json:"errors,omitempty"`
+}
+
+// prs shows the feature's PRs from its saved state (refreshing live if asked
+// or if there's no state yet) and opens the active ones in the browser.
+func prs(ctx context.Context, d deps, explicit string, opts prsOptions) error {
 	name, err := resolve(d, explicit)
 	if err != nil {
 		return err
 	}
-	list, errs, err := feature.PRs(ctx, d.run, d.layout, name)
+	if opts.addURL != "" {
+		pr, err := feature.ParsePRURL(opts.addURL)
+		if err != nil {
+			return err
+		}
+		return feature.RecordPR(d.layout, name, pr)
+	}
+
+	state, err := feature.LoadState(d.layout, name)
 	if err != nil {
 		return err
 	}
-	if asJSON {
-		out := prsOutput{PRs: list, Errors: map[string]string{}}
+	var errs map[string]error
+	if opts.refresh || state.PRsRefreshedAt.IsZero() {
+		if state, errs, err = feature.RefreshPRs(ctx, d.run, d.layout, name); err != nil {
+			return err
+		}
+	}
+
+	if opts.asJSON {
+		out := prsOutput{PRs: state.PRs, RefreshedAt: state.PRsRefreshedAt, Errors: map[string]string{}}
 		for repo, e := range errs {
 			out.Errors[repo] = e.Error()
 		}
 		return json.NewEncoder(os.Stdout).Encode(out)
 	}
-	printPRs(d, name, list, errs)
-	if noOpen {
+	printPRs(d, name, state.PRs, errs)
+	if !opts.refresh && errs == nil {
+		info("as of %s ago (-r to refresh)", time.Since(state.PRsRefreshedAt).Round(time.Second))
+	}
+	if opts.noOpen {
 		return nil
 	}
 	var urls []string
-	for _, p := range list {
+	for _, p := range state.PRs {
 		if p.Status.IsActive() {
 			urls = append(urls, p.URL)
 		}
