@@ -171,28 +171,71 @@ local function feature_repos()
   return root, repos
 end
 
--- One CodeDiff tab per repo (feature changes vs origin's default branch); the
--- empty starting tab is closed once they're up.
+-- Tab label: the repo name for :PiReview tabs, else the focused buffer's name.
+local function tab_label(tab)
+  local ok, repo = pcall(vim.api.nvim_tabpage_get_var, tab, "pi_repo")
+  if ok then
+    return repo
+  end
+  local name = vim.api.nvim_buf_get_name(vim.api.nvim_win_get_buf(vim.api.nvim_tabpage_get_win(tab)))
+  return name == "" and "[No Name]" or vim.fs.basename(name)
+end
+
+function M.tabline()
+  local parts, current = {}, vim.api.nvim_get_current_tabpage()
+  for i, tab in ipairs(vim.api.nvim_list_tabpages()) do
+    local hl = tab == current and "%#TabLineSel#" or "%#TabLine#"
+    table.insert(parts, ("%s%%%dT %s "):format(hl, i, tab_label(tab)))
+  end
+  return table.concat(parts) .. "%#TabLineFill#%T"
+end
+
+-- One CodeDiff tab per repo (feature changes vs origin's default branch),
+-- labelled with the repo name; the empty starting tab is closed once they're up.
 local function review()
   local root, repos = feature_repos()
   if not root then
     return vim.notify("PiReview: not inside an f feature", vim.log.levels.WARN)
   end
+  vim.o.tabline = "%!v:lua.require'pi_comment'.tabline()"
+  vim.o.showtabline = 2
   local first = vim.api.nvim_get_current_tabpage()
-  for _, repo in ipairs(repos) do
+  -- CodeDiff opens its tab asynchronously, and concurrent launches get mixed
+  -- up, so open one repo at a time and wait for its tab before the next.
+  local function open(i)
+    local repo = repos[i]
+    if not repo then
+      local buf = vim.api.nvim_win_get_buf(vim.api.nvim_tabpage_get_win(first))
+      if #vim.api.nvim_list_tabpages() > 1 and vim.api.nvim_buf_get_name(buf) == "" and not vim.bo[buf].modified then
+        vim.cmd("tabclose " .. vim.api.nvim_tabpage_get_number(first))
+      end
+      return
+    end
+    local before = {}
+    for _, t in ipairs(vim.api.nvim_list_tabpages()) do
+      before[t] = true
+    end
     -- origin/HEAD... = everything since the branch left origin's default
     -- branch (committed + uncommitted), still live-updating.
     vim.cmd("CodeDiff --repo " .. vim.fn.fnameescape(root .. "/" .. repo) .. " origin/HEAD...")
-  end
-  vim.defer_fn(function()
-    local tabs = vim.api.nvim_list_tabpages()
-    if #tabs > 1 and vim.api.nvim_tabpage_is_valid(first) then
-      local buf = vim.api.nvim_win_get_buf(vim.api.nvim_tabpage_get_win(first))
-      if vim.api.nvim_buf_get_name(buf) == "" and not vim.bo[buf].modified then
-        vim.cmd("tabclose " .. vim.api.nvim_tabpage_get_number(first))
+    local waited = 0
+    local function poll()
+      for _, t in ipairs(vim.api.nvim_list_tabpages()) do
+        if not before[t] then
+          vim.api.nvim_tabpage_set_var(t, "pi_repo", repo)
+          vim.cmd("redrawtabline")
+          return open(i + 1)
+        end
       end
+      waited = waited + 50
+      if waited >= 10000 then
+        return open(i + 1) -- no changes / no tab for this repo
+      end
+      vim.defer_fn(poll, 50)
     end
-  end, 1500)
+    poll()
+  end
+  open(1)
 end
 
 -- Files this feature changed (vs the merge-base with origin's default branch,
