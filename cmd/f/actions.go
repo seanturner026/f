@@ -137,7 +137,11 @@ func launch(ctx context.Context, d deps, name, prompt string, reopen bool) error
 	}
 	dir := feature.Dir(d.layout, name)
 	if !d.noHerdr && herdr.Inside() && herdr.Available(ctx, d.run) {
-		result, err := herdr.OpenWorkspace(ctx, d.run, name, dir, args)
+		repos, err := feature.Repos(d.layout, name)
+		if err != nil {
+			return err
+		}
+		result, err := herdr.OpenWorkspace(ctx, d.run, name, dir, repos, args)
 		if err != nil {
 			return err
 		}
@@ -189,6 +193,15 @@ func add(ctx context.Context, d deps, explicit string, repos []string) error {
 		return err
 	}
 	info("AGENTS.md updated; /reload in pi to pick it up")
+	if !d.noHerdr && herdr.Available(ctx, d.run) {
+		for _, repo := range repos {
+			if added, err := herdr.AddRepoTab(ctx, d.run, name, feature.Dir(d.layout, name), repo); err != nil {
+				return err
+			} else if added {
+				ok("added herdr tab %s", repo)
+			}
+		}
+	}
 	return nil
 }
 

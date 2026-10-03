@@ -51,3 +51,49 @@ func TestFindWorkspace(t *testing.T) {
 		})
 	}
 }
+
+// recordingRunner records herdr calls and answers creates with fresh IDs.
+type recordingRunner struct{ calls []string }
+
+func (r *recordingRunner) Run(_ context.Context, _, _ string, args ...string) (string, error) {
+	r.calls = append(r.calls, strings.Join(args, " "))
+	switch {
+	case len(args) >= 2 && args[0] == "workspace" && args[1] == "list":
+		return `{"result":{"workspaces":[]}}`, nil
+	case len(args) >= 2 && args[1] == "create":
+		return `{"result":{"workspace":{"workspace_id":"w1"},"tab":{"tab_id":"w1:t1"},"root_pane":{"pane_id":"w1:p1"}}}`, nil
+	}
+	return "{}", nil
+}
+
+func TestOpenWorkspaceTabOrder(t *testing.T) {
+	tests := []struct {
+		name  string
+		repos []string
+		want  []string
+	}{
+		{name: "two repos", repos: []string{"argocd", "infra"}, want: []string{"nvim", "argocd", "infra", "shell"}},
+		{name: "no repos", repos: nil, want: []string{"nvim", "shell"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := &recordingRunner{}
+			res, err := herdr.OpenWorkspace(context.Background(), r, "feat", "/f/feat", tt.repos, []string{"--name", "feat"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if res != herdr.OpenCreated {
+				t.Errorf("result = %q", res)
+			}
+			var tabs []string
+			for _, c := range r.calls {
+				if strings.HasPrefix(c, "tab create") {
+					tabs = append(tabs, c[strings.LastIndex(c, "--label ")+len("--label "):])
+				}
+			}
+			if strings.Join(tabs, ",") != strings.Join(tt.want, ",") {
+				t.Errorf("tabs = %v, want %v", tabs, tt.want)
+			}
+		})
+	}
+}

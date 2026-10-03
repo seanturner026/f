@@ -4,7 +4,7 @@
 --   :PiComments         list pending comments (quickfix)                 <leader>pl
 --   :PiSend             send all to pi (via Herdr) and clear             <leader>ps
 --   :PiClear            discard all
---   :PiReview           one CodeDiff tab per repo in the feature (live)
+--   :PiReview [repo]    live CodeDiff for one repo (or a tab per repo)
 --   :PiChanged          picker of files this feature changed, with diff  <leader>e
 --
 -- Works inside an `f` feature: <base>/.features/<feature>/<repo>/...
@@ -192,13 +192,23 @@ end
 
 -- One CodeDiff tab per repo (feature changes vs origin's default branch),
 -- labelled with the repo name; the empty starting tab is closed once they're up.
-local function review()
+-- :PiReview [repo]: with a repo (as in f's Herdr repo tabs), just that repo;
+-- without, every repo in the feature, one nvim tab each.
+local function review(opts)
   local root, repos = feature_repos()
   if not root then
     return vim.notify("PiReview: not inside an f feature", vim.log.levels.WARN)
   end
-  vim.o.tabline = "%!v:lua.require'pi_comment'.tabline()"
-  vim.o.showtabline = 2
+  local only = opts and opts.args or ""
+  if only ~= "" then
+    if not vim.tbl_contains(repos, only) then
+      return vim.notify("PiReview: no repo " .. only .. " in this feature", vim.log.levels.WARN)
+    end
+    repos = { only }
+  else
+    vim.o.tabline = "%!v:lua.require'pi_comment'.tabline()"
+    vim.o.showtabline = 2
+  end
   local first = vim.api.nvim_get_current_tabpage()
   -- CodeDiff opens its tab asynchronously, and concurrent launches get mixed
   -- up, so open one repo at a time and wait for its tab before the next.
@@ -261,7 +271,13 @@ function M.setup()
   vim.api.nvim_create_user_command("PiComments", list, { desc = "List pending pi comments" })
   vim.api.nvim_create_user_command("PiSend", send, { desc = "Send pi comments" })
   vim.api.nvim_create_user_command("PiClear", clear, { desc = "Discard pi comments" })
-  vim.api.nvim_create_user_command("PiReview", review, { desc = "CodeDiff tab per feature repo" })
+  vim.api.nvim_create_user_command("PiReview", review, {
+    nargs = "?",
+    desc = "Live CodeDiff for a feature repo (or all)",
+    complete = function()
+      return select(2, feature_repos()) or {}
+    end,
+  })
   vim.api.nvim_create_user_command("PiChanged", changed, { desc = "Files this feature changed" })
 
   vim.keymap.set("n", "<leader>pc", "<cmd>PiComment<cr>", { desc = "[P]i [C]omment" })

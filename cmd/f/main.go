@@ -18,7 +18,7 @@ Usage:
   f <name>         start a feature: pick repos (fzf) → pi opens, ready for your prompt
                    reopens the feature (continuing its pi session) if it exists
   f                pick an existing feature to reopen
-  f add [repo...]  add repos to the current feature (fzf if none)
+  f add [repo...]  add repos to the current feature (fzf if none), with Herdr tabs
   f prs            PRs for the current feature (saved state, instant); opens open ones
 
 Flags:
@@ -28,7 +28,8 @@ Flags:
   -r               prs: refresh live from GitHub (pi does this after every turn)
   -n, --json       prs: don't open the browser / print JSON
 
-Inside Herdr each feature gets its own workspace (chat · nvim · review · shell); outside,
+Inside Herdr each feature gets its own workspace (chat · nvim · <repo>… · shell, each
+repo tab a live CodeDiff); outside,
 pi starts in this terminal. Starting a feature offers to clean up merged ones.
 Feature state (e.g. PRs) lives in <feature>/.context/, local-only.
 Features live in ~/code/features/.features/<name>/<repo> (override with F_BASE).

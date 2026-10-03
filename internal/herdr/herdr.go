@@ -107,9 +107,12 @@ const (
 	OpenCreated OpenResult = "created"
 )
 
+// reviewCommand runs nvim on one repo's live CodeDiff (:PiReview in nvim/pi_comment.lua).
+func reviewCommand(repo string) string { return "nvim -c " + shell.Quote("PiReview "+repo) }
+
 // OpenWorkspace focuses the workspace labelled label, or creates it in dir with
-// tabs 1 chat (pi with piArgs) · 2 nvim · 3 review (CodeDiff per repo) · 4 shell.
-func OpenWorkspace(ctx context.Context, r Runner, label, dir string, piArgs []string) (OpenResult, error) {
+// tabs: chat (pi with piArgs) · nvim · one review tab per repo · shell.
+func OpenWorkspace(ctx context.Context, r Runner, label, dir string, repos, piArgs []string) (OpenResult, error) {
 	if id, err := FindWorkspace(ctx, r, label); err != nil {
 		return "", err
 	} else if id != "" {
@@ -127,21 +130,13 @@ func OpenWorkspace(ctx context.Context, r Runner, label, dir string, piArgs []st
 	if err := call(ctx, r, nil, "tab", "rename", chatTab, "chat"); err != nil {
 		return "", fmt.Errorf("rename tab: %w", err)
 	}
-
-	var nvim created
-	if err := call(ctx, r, &nvim, "tab", "create", "--workspace", ws, "--cwd", dir, "--label", "nvim"); err != nil {
-		return "", fmt.Errorf("create nvim tab: %w", err)
+	if err := tabRunning(ctx, r, ws, dir, "nvim", "nvim"); err != nil {
+		return "", err
 	}
-	if err := call(ctx, r, nil, "pane", "run", nvim.Result.RootPane.ID, "nvim"); err != nil {
-		return "", fmt.Errorf("start nvim: %w", err)
-	}
-	var review created
-	if err := call(ctx, r, &review, "tab", "create", "--workspace", ws, "--cwd", dir, "--label", "review"); err != nil {
-		return "", fmt.Errorf("create review tab: %w", err)
-	}
-	// :PiReview (nvim/pi_comment.lua): one live CodeDiff tab per repo.
-	if err := call(ctx, r, nil, "pane", "run", review.Result.RootPane.ID, "nvim -c PiReview"); err != nil {
-		return "", fmt.Errorf("start review: %w", err)
+	for _, repo := range repos {
+		if err := tabRunning(ctx, r, ws, dir, repo, reviewCommand(repo)); err != nil {
+			return "", err
+		}
 	}
 	if err := call(ctx, r, nil, "tab", "create", "--workspace", ws, "--cwd", dir, "--label", "shell"); err != nil {
 		return "", fmt.Errorf("create shell tab: %w", err)
@@ -159,4 +154,26 @@ func OpenWorkspace(ctx context.Context, r Runner, label, dir string, piArgs []st
 		}
 	}
 	return OpenCreated, nil
+}
+
+// AddRepoTab adds a review tab for repo to the workspace labelled label, if it
+// exists. Herdr appends it after the existing tabs.
+func AddRepoTab(ctx context.Context, r Runner, label, dir, repo string) (bool, error) {
+	id, err := FindWorkspace(ctx, r, label)
+	if err != nil || id == "" {
+		return false, err
+	}
+	return true, tabRunning(ctx, r, id, dir, repo, reviewCommand(repo))
+}
+
+// tabRunning creates a tab labelled tabLabel in workspace ws and runs cmd in it.
+func tabRunning(ctx context.Context, r Runner, ws, dir, tabLabel, cmd string) error {
+	var tab created
+	if err := call(ctx, r, &tab, "tab", "create", "--workspace", ws, "--cwd", dir, "--label", tabLabel); err != nil {
+		return fmt.Errorf("create %s tab: %w", tabLabel, err)
+	}
+	if err := call(ctx, r, nil, "pane", "run", tab.Result.RootPane.ID, cmd); err != nil {
+		return fmt.Errorf("start %s tab: %w", tabLabel, err)
+	}
+	return nil
 }
