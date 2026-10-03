@@ -6,7 +6,7 @@ My config for [pi](https://pi.dev) and the feature-workspace setup around it
 ## Install
 
 ```bash
-./install.sh                    # link pi + herdr config, go install ./cmd/f
+./install.sh                    # link pi config + nvim module, go install ./cmd/f
 herdr integration install pi    # herdr agent-state extension (not tracked)
 ```
 
@@ -14,5 +14,4 @@ herdr integration install pi    # herdr agent-state extension (not tracked)
 
 - `agent/`: pi config (settings, AGENTS.md, prompts, extensions, skills, themes)
 - `cmd/f/`: `f`, the multi-repo feature workspace CLI (`f --help`)
-- `herdr/`: Herdr config
 - `mockups/`: HTML layout mockups

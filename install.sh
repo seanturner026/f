@@ -18,9 +18,6 @@ for item in "$repo"/agent/* "$repo"/agent/.[!.]*; do
   link "$item" "$pi_dir/$(basename "$item")"
 done
 
-# herdr
-link "$repo/herdr/config.toml" "$HOME/.config/herdr/config.toml"
-
 # nvim: pi_comment (require("pi_comment").setup() in init.lua)
 link "$repo/nvim/pi_comment.lua" "$HOME/.config/nvim/lua/pi_comment.lua"
 

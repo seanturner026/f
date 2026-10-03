@@ -13,13 +13,18 @@ local M = {}
 local ns = vim.api.nvim_create_namespace("pi_comment")
 local comments = {} -- { file, l1, l2, code, ft, note, buf, mark }
 
--- Real file path for a buffer; nil for diffview's old-side buffers.
+-- Real file path for a buffer; nil for diff tools' old-side / scratch buffers
+-- (diffview://, codediff://, "CodeDiff 1.2", ...).
 local function buf_path(buf)
   local name = vim.api.nvim_buf_get_name(buf)
-  if name == "" or name:match("^%a+://") then
+  if name == "" or name:match("^%a+://") or vim.bo[buf].buftype ~= "" then
     return nil
   end
-  return vim.fn.fnamemodify(name, ":p")
+  local path = vim.fn.fnamemodify(name, ":p")
+  if vim.fn.filereadable(path) == 0 then
+    return nil
+  end
+  return path
 end
 
 -- feature root and name for a path (or the cwd).
