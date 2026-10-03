@@ -6,8 +6,10 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 
-type PR = { number: number; state: string; isDraft: boolean; url: string };
-type RepoPRs = { repo: string; prs: PR[] | null; error?: string };
+// Shape of `f prs --json` (model.PR in internal/model).
+type PRStatus = "draft" | "open" | "merged" | "closed";
+type PR = { repo: string; number: number; url: string; status: PRStatus };
+type PRsOutput = { prs: PR[] | null; errors?: Record<string, string> };
 
 const KEY = "feature-prs";
 
@@ -28,12 +30,10 @@ export default function (pi: ExtensionAPI) {
 		if (res.code !== 0) return;
 		const t = ctx.ui.theme;
 		const parts: string[] = [];
-		for (const r of JSON.parse(res.stdout) as RepoPRs[]) {
-			for (const p of r.prs ?? []) {
-				const state = p.isDraft ? "draft" : p.state.toLowerCase();
-				const color = state === "merged" ? "success" : state === "open" ? "accent" : "dim";
-				parts.push(`${r.repo} #${p.number} ${t.fg(color, state)}`);
-			}
+		const out = JSON.parse(res.stdout) as PRsOutput;
+		for (const p of out.prs ?? []) {
+			const color = p.status === "merged" ? "success" : p.status === "open" ? "accent" : "dim";
+			parts.push(`${p.repo} #${p.number} ${t.fg(color, p.status)}`);
 		}
 		ctx.ui.setStatus(KEY, parts.length ? t.fg("dim", "PRs: ") + parts.join(t.fg("dim", " · ")) : undefined);
 	}

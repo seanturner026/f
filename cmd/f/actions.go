@@ -1,0 +1,293 @@
+package main
+
+import (
+	"bufio"
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"os"
+	"os/exec"
+	"sort"
+	"strings"
+	"sync"
+	"syscall"
+
+	"github.com/seanturner026/pi/internal/feature"
+	"github.com/seanturner026/pi/internal/herdr"
+	"github.com/seanturner026/pi/internal/model"
+	"github.com/seanturner026/pi/internal/shell"
+)
+
+// Subcommand names can't be feature names, or `f <name>` would be ambiguous.
+var reserved = map[string]bool{"add": true, "prs": true, "help": true, "completion": true}
+
+// deps are what the actions need: where features live and how to run commands.
+type deps struct {
+	layout  feature.Layout
+	run     feature.Runner
+	noHerdr bool
+}
+
+func newDeps() (deps, error) {
+	l, err := feature.DefaultLayout()
+	if err != nil {
+		return deps{}, err
+	}
+	return deps{layout: l, run: shell.Exec{}, noHerdr: os.Getenv("F_NO_HERDR") != ""}, nil
+}
+
+func checkName(name string) error {
+	if reserved[name] {
+		return fmt.Errorf("%q is a subcommand; pick another name", name)
+	}
+	return feature.CheckName(name)
+}
+
+func resolve(d deps, explicit string) (string, error) {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return "", err
+	}
+	return feature.Resolve(d.layout, explicit, cwd)
+}
+
+// start creates a feature, or reopens it if it exists. With no name, it picks
+// an existing feature to reopen.
+func start(ctx context.Context, d deps, name string, repos []string, prompt string) error {
+	if name == "" {
+		features := feature.List(d.layout)
+		if len(features) == 0 {
+			fmt.Print(help)
+			return nil
+		}
+		picked, err := pickOne(features, "feature> ", "ENTER open · ESC cancel")
+		if err != nil || picked == "" {
+			return err
+		}
+		return launch(ctx, d, picked, "", true)
+	}
+	if err := checkName(name); err != nil {
+		return err
+	}
+	if feature.Exists(d.layout, name) {
+		return launch(ctx, d, name, "", true)
+	}
+
+	// Starting something new: offer to clean up finished features first.
+	if len(repos) == 0 && interactive() {
+		offerCleanup(ctx, d)
+	}
+
+	if len(repos) == 0 {
+		all, err := feature.BaseRepos(d.layout)
+		if err != nil {
+			return err
+		}
+		if repos, err = pickRepos(all, nil); err != nil {
+			return err
+		}
+	}
+	if len(repos) == 0 {
+		return errors.New("no repos selected; aborted")
+	}
+	if err := feature.CheckRepos(d.layout, repos); err != nil {
+		return err
+	}
+
+	fmt.Println(bold(name))
+	if err := addRepos(ctx, d, name, repos); err != nil {
+		return err
+	}
+	if err := feature.WriteAgentsMD(d.layout, name, prompt); err != nil {
+		return err
+	}
+	return launch(ctx, d, name, prompt, false)
+}
+
+func addRepos(ctx context.Context, d deps, name string, repos []string) error {
+	for _, repo := range repos {
+		info("  %s: fetching", repo)
+		result, base, err := feature.AddRepo(ctx, d.run, d.layout, name, repo)
+		if err != nil {
+			return err
+		}
+		switch result {
+		case feature.AddedNewBranch:
+			ok("  %s: worktree on new branch %s (from %s)", repo, name, base)
+		case feature.AddedExistingBranch:
+			ok("  %s: worktree on existing branch %s", repo, name)
+		case feature.AlreadyPresent:
+			info("  %s: already present", repo)
+		}
+	}
+	return nil
+}
+
+// launch runs pi for the feature: in its own Herdr workspace when called from
+// inside Herdr, otherwise right here in this terminal.
+func launch(ctx context.Context, d deps, name, prompt string, reopen bool) error {
+	args := []string{"--name", name}
+	if reopen {
+		args = append(args, "--continue")
+	}
+	if prompt != "" {
+		args = append(args, prompt)
+	}
+	dir := feature.Dir(d.layout, name)
+	if !d.noHerdr && herdr.Inside() && herdr.Available(ctx, d.run) {
+		result, err := herdr.OpenWorkspace(ctx, d.run, name, dir, args)
+		if err != nil {
+			return err
+		}
+		ok("%s herdr workspace %s", result, name)
+		return nil
+	}
+	if !interactive() {
+		fmt.Printf("cd %s && pi %s\n", shell.Quote(dir), strings.Join(shell.QuoteAll(args), " "))
+		return nil
+	}
+	if err := os.Chdir(dir); err != nil {
+		return err
+	}
+	pi, err := exec.LookPath("pi")
+	if err != nil {
+		return err
+	}
+	return syscall.Exec(pi, append([]string{"pi"}, args...), os.Environ())
+}
+
+func add(ctx context.Context, d deps, explicit string, repos []string) error {
+	name, err := resolve(d, explicit)
+	if err != nil {
+		return err
+	}
+	if len(repos) == 0 {
+		have, err := feature.Repos(d.layout, name)
+		if err != nil {
+			return err
+		}
+		all, err := feature.BaseRepos(d.layout)
+		if err != nil {
+			return err
+		}
+		if repos, err = pickRepos(all, have); err != nil {
+			return err
+		}
+		if len(repos) == 0 {
+			return errors.New("no repos selected")
+		}
+	}
+	if err := feature.CheckRepos(d.layout, repos); err != nil {
+		return err
+	}
+	if err := addRepos(ctx, d, name, repos); err != nil {
+		return err
+	}
+	if err := feature.WriteAgentsMD(d.layout, name, ""); err != nil {
+		return err
+	}
+	info("AGENTS.md updated; /reload in pi to pick it up")
+	return nil
+}
+
+// prsOutput is the --json shape of `f prs`.
+type prsOutput struct {
+	PRs    []model.PR        `json:"prs"`
+	Errors map[string]string `json:"errors,omitempty"`
+}
+
+// prs lists PRs for the feature branch in each repo and opens the active ones
+// in the browser unless noOpen. asJSON prints machine-readable output only.
+func prs(ctx context.Context, d deps, explicit string, noOpen, asJSON bool) error {
+	name, err := resolve(d, explicit)
+	if err != nil {
+		return err
+	}
+	list, errs, err := feature.PRs(ctx, d.run, d.layout, name)
+	if err != nil {
+		return err
+	}
+	if asJSON {
+		out := prsOutput{PRs: list, Errors: map[string]string{}}
+		for repo, e := range errs {
+			out.Errors[repo] = e.Error()
+		}
+		return json.NewEncoder(os.Stdout).Encode(out)
+	}
+	printPRs(d, name, list, errs)
+	if noOpen {
+		return nil
+	}
+	var urls []string
+	for _, p := range list {
+		if p.Status.IsActive() {
+			urls = append(urls, p.URL)
+		}
+	}
+	if len(urls) > 0 {
+		if err := exec.Command("open", urls...).Run(); err != nil {
+			return fmt.Errorf("open browser: %w", err)
+		}
+	}
+	return nil
+}
+
+func printPRs(d deps, name string, list []model.PR, errs map[string]error) {
+	byRepo := map[string][]model.PR{}
+	for _, p := range list {
+		byRepo[p.Repo] = append(byRepo[p.Repo], p)
+	}
+	repos, _ := feature.Repos(d.layout, name)
+	sort.Strings(repos)
+	for _, repo := range repos {
+		fmt.Println(bold(repo))
+		switch {
+		case errs[repo] != nil:
+			fmt.Printf("  %s\n", red("gh: "+errs[repo].Error()))
+		case len(byRepo[repo]) == 0:
+			fmt.Println(dim("  no PR"))
+		}
+		for _, p := range byRepo[repo] {
+			fmt.Printf("  #%d %-7s %s\n         %s\n", p.Number, p.Status, p.Title, dim(p.URL))
+		}
+	}
+}
+
+// offerCleanup finds finished features (checked in parallel) and offers to
+// remove them: worktrees, branches, and Herdr workspace.
+func offerCleanup(ctx context.Context, d deps) {
+	names := feature.List(d.layout)
+	finished := make([]bool, len(names))
+	var wg sync.WaitGroup
+	for i, name := range names {
+		wg.Add(1)
+		go func() { defer wg.Done(); finished[i] = feature.Finished(ctx, d.run, d.layout, name) }()
+	}
+	wg.Wait()
+	var done []string
+	for i, name := range names {
+		if finished[i] {
+			done = append(done, name)
+		}
+	}
+	if len(done) == 0 {
+		return
+	}
+	fmt.Printf("merged: %s. clean up? [Y/n] ", strings.Join(done, ", "))
+	line, _ := bufio.NewReader(os.Stdin).ReadString('\n')
+	if a := strings.ToLower(strings.TrimSpace(line)); a != "" && a != "y" && a != "yes" {
+		return
+	}
+	herdrUp := !d.noHerdr && herdr.Available(ctx, d.run)
+	for _, name := range done {
+		if err := feature.Remove(ctx, d.run, d.layout, name); err != nil {
+			fmt.Printf("%s %v\n", red("cleanup:"), err)
+			continue
+		}
+		if herdrUp {
+			_ = herdr.CloseWorkspace(ctx, d.run, name)
+		}
+		ok("removed %s", name)
+	}
+}

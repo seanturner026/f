@@ -1,15 +1,15 @@
 // Command f creates and manages multi-repo feature workspaces:
-// git worktrees + a generated AGENTS.md + a Herdr workspace running pi.
+// git worktrees + a generated AGENTS.md + pi (in a Herdr workspace when inside Herdr).
 package main
 
 import (
 	"context"
 	"fmt"
 	"os"
-	"path/filepath"
-	"strings"
 
 	"github.com/urfave/cli/v3"
+
+	"github.com/seanturner026/pi/internal/feature"
 )
 
 const help = `f: start a pi session that works across several repos, each on its own worktree.
@@ -32,8 +32,11 @@ pi starts in this terminal. Starting a feature offers to clean up merged ones.
 Features live in ~/code/features/.features/<name>/<repo> (override with F_BASE).
 `
 
+// featureFlag picks a feature explicitly; otherwise it's inferred from the cwd.
+var featureFlag = &cli.StringFlag{Name: "feature", Aliases: []string{"f"}, Usage: "feature (default: from cwd)"}
+
 func main() {
-	cfg, err := loadConfig()
+	d, err := newDeps()
 	if err != nil {
 		fail(err)
 	}
@@ -50,19 +53,19 @@ func main() {
 			if c.NArg() > 1 {
 				return fmt.Errorf("one feature name at a time")
 			}
-			return start(cfg, c.Args().First(), c.StringSlice("repo"), c.String("prompt"))
+			return start(ctx, d, c.Args().First(), c.StringSlice("repo"), c.String("prompt"))
 		},
-		ShellComplete: func(ctx context.Context, c *cli.Command) { printLines(features(cfg)) },
+		ShellComplete: func(ctx context.Context, c *cli.Command) { printLines(feature.List(d.layout)) },
 		Commands: []*cli.Command{
 			{
 				Name:  "add",
 				Usage: "add repos to this feature",
 				Flags: []cli.Flag{featureFlag},
 				Action: func(ctx context.Context, c *cli.Command) error {
-					return add(cfg, c.String("feature"), c.Args().Slice())
+					return add(ctx, d, c.String("feature"), c.Args().Slice())
 				},
 				ShellComplete: func(ctx context.Context, c *cli.Command) {
-					all, _ := baseRepos(cfg)
+					all, _ := feature.BaseRepos(d.layout)
 					printLines(all)
 				},
 			},
@@ -75,7 +78,7 @@ func main() {
 					&cli.BoolFlag{Name: "json", Usage: "machine-readable output"},
 				},
 				Action: func(ctx context.Context, c *cli.Command) error {
-					return prs(cfg, c.String("feature"), c.Bool("no-open") || c.Bool("json"), c.Bool("json"))
+					return prs(ctx, d, c.String("feature"), c.Bool("no-open") || c.Bool("json"), c.Bool("json"))
 				},
 			},
 		},
@@ -84,9 +87,6 @@ func main() {
 		fail(err)
 	}
 }
-
-// featureFlag picks a feature explicitly; otherwise it's inferred from the cwd.
-var featureFlag = &cli.StringFlag{Name: "feature", Aliases: []string{"f"}, Usage: "feature (default: from cwd)"}
 
 func fail(err error) {
 	fmt.Fprintf(os.Stderr, "%s %v\n", red("error:"), err)
@@ -98,69 +98,3 @@ func printLines(lines []string) {
 		fmt.Println(l)
 	}
 }
-
-type config struct {
-	Base     string // directory of base clones
-	Features string // directory of feature workspaces
-	NoHerdr  bool
-}
-
-func loadConfig() (config, error) {
-	base := os.Getenv("F_BASE")
-	if base == "" {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return config{}, err
-		}
-		base = filepath.Join(home, "code", "features")
-	}
-	return config{
-		Base:     base,
-		Features: filepath.Join(base, ".features"),
-		NoHerdr:  os.Getenv("F_NO_HERDR") != "",
-	}, nil
-}
-
-func (c config) featureDir(name string) string { return filepath.Join(c.Features, name) }
-
-// resolveFeature returns the explicit feature, or the one containing the cwd.
-func (c config) resolveFeature(explicit string) (string, error) {
-	name := explicit
-	if name == "" {
-		if wd, err := os.Getwd(); err == nil {
-			if rel, err := filepath.Rel(c.Features, wd); err == nil && rel != "." && !strings.HasPrefix(rel, "..") {
-				name = strings.Split(rel, string(filepath.Separator))[0]
-			}
-		}
-	}
-	if name == "" {
-		return "", fmt.Errorf("not inside a feature (cd into one or pass -f <feature>)")
-	}
-	if !exists(c.featureDir(name)) {
-		return "", fmt.Errorf("no feature %q", name)
-	}
-	return name, nil
-}
-
-// features lists existing feature names.
-func features(cfg config) []string {
-	entries, _ := os.ReadDir(cfg.Features)
-	var names []string
-	for _, e := range entries {
-		if e.IsDir() {
-			names = append(names, e.Name())
-		}
-	}
-	return names
-}
-
-// ---- output helpers ----
-
-func color(code, s string) string { return "\033[" + code + "m" + s + "\033[0m" }
-func red(s string) string         { return color("31", s) }
-func green(s string) string       { return color("32", s) }
-func dim(s string) string         { return color("2", s) }
-func bold(s string) string        { return color("1", s) }
-
-func info(format string, a ...any) { fmt.Println(dim(fmt.Sprintf(format, a...))) }
-func ok(format string, a ...any)   { fmt.Println(green(fmt.Sprintf(format, a...))) }

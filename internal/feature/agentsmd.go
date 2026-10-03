@@ -1,11 +1,16 @@
-package main
+package feature
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"text/template"
 )
+
+// GoalPlaceholder is replaced with the first prompt by the pi extension
+// agent/extensions/feature-goal.ts. Keep the two in sync.
+const GoalPlaceholder = "_TBD: set from the first prompt._"
 
 var agentsTmpl = template.Must(template.New("agents").Parse(`# Feature: {{.Name}}
 
@@ -26,31 +31,30 @@ This session works across these git worktrees, all on branch ` + "`{{.Name}}`" +
 - One PR per repo, from branch ` + "`{{.Name}}`" + `.
 `))
 
-// goalPlaceholder is replaced with the first prompt by the pi extension
-// agent/extensions/feature-goal.ts. Keep the two in sync.
-const goalPlaceholder = "_TBD: set from the first prompt._"
-
 type agentsRepo struct{ Dir, Instructions string }
 
-// writeAgentsMD (re)generates <feature>/AGENTS.md. An empty goal keeps the existing one.
-func writeAgentsMD(cfg config, feature, goal string) error {
-	dir := cfg.featureDir(feature)
-	path := filepath.Join(dir, "AGENTS.md")
+// AgentsMDPath is the feature's generated AGENTS.md.
+func AgentsMDPath(l Layout, name string) string { return filepath.Join(Dir(l, name), "AGENTS.md") }
+
+// WriteAgentsMD (re)generates the feature's AGENTS.md. An empty goal keeps the
+// existing goal, or the placeholder.
+func WriteAgentsMD(l Layout, name, goal string) error {
+	path := AgentsMDPath(l, name)
 	if goal == "" {
-		goal = existingGoal(path)
+		goal = ExistingGoal(path)
 	}
 	if goal == "" {
-		goal = goalPlaceholder
+		goal = GoalPlaceholder
 	}
-	names, err := featureRepos(cfg, feature)
+	names, err := Repos(l, name)
 	if err != nil {
 		return err
 	}
-	var repos []agentsRepo
+	repos := make([]agentsRepo, 0, len(names))
 	for _, r := range names {
 		ar := agentsRepo{Dir: r}
 		for _, c := range []string{"AGENTS.md", "CLAUDE.md"} {
-			if exists(filepath.Join(dir, r, c)) {
+			if _, err := os.Stat(filepath.Join(Dir(l, name), r, c)); err == nil {
 				ar.Instructions = r + "/" + c
 				break
 			}
@@ -59,14 +63,18 @@ func writeAgentsMD(cfg config, feature, goal string) error {
 	}
 	f, err := os.Create(path)
 	if err != nil {
-		return err
+		return fmt.Errorf("write AGENTS.md: %w", err)
 	}
 	defer f.Close()
-	return agentsTmpl.Execute(f, map[string]any{"Name": feature, "Goal": goal, "Repos": repos})
+	if err := agentsTmpl.Execute(f, map[string]any{"Name": name, "Goal": goal, "Repos": repos}); err != nil {
+		return fmt.Errorf("write AGENTS.md: %w", err)
+	}
+	return nil
 }
 
-// existingGoal extracts the "## Goal" section from an existing AGENTS.md.
-func existingGoal(path string) string {
+// ExistingGoal returns the "## Goal" section of an AGENTS.md ("" if missing
+// or still the placeholder).
+func ExistingGoal(path string) string {
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		return ""
@@ -76,7 +84,7 @@ func existingGoal(path string) string {
 		return ""
 	}
 	goal, _, _ := strings.Cut(after, "\n## ")
-	if goal = strings.TrimSpace(goal); goal == goalPlaceholder {
+	if goal = strings.TrimSpace(goal); goal == GoalPlaceholder {
 		return ""
 	}
 	return goal

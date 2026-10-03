@@ -9,6 +9,23 @@ import (
 	"strings"
 )
 
+func color(code, s string) string { return "\033[" + code + "m" + s + "\033[0m" }
+func red(s string) string         { return color("31", s) }
+func green(s string) string       { return color("32", s) }
+func dim(s string) string         { return color("2", s) }
+func bold(s string) string        { return color("1", s) }
+
+func info(format string, a ...any) { fmt.Println(dim(fmt.Sprintf(format, a...))) }
+func ok(format string, a ...any)   { fmt.Println(green(fmt.Sprintf(format, a...))) }
+
+func isTerminal(f *os.File) bool {
+	fi, err := f.Stat()
+	return err == nil && fi.Mode()&os.ModeCharDevice != 0
+}
+
+// interactive reports whether a person is at the terminal.
+func interactive() bool { return isTerminal(os.Stdin) && isTerminal(os.Stdout) }
+
 // fzf runs fzf over items and returns the selection (nil if cancelled).
 func fzf(items []string, args ...string) ([]string, error) {
 	if _, err := exec.LookPath("fzf"); err != nil {
@@ -28,12 +45,8 @@ func fzf(items []string, args ...string) ([]string, error) {
 	return strings.Fields(string(out)), nil
 }
 
-// pickRepos multi-selects base clones, excluding ones already in the feature.
-func pickRepos(cfg config, exclude []string) ([]string, error) {
-	all, err := baseRepos(cfg)
-	if err != nil {
-		return nil, err
-	}
+// pickRepos multi-selects from all, excluding ones in exclude.
+func pickRepos(all, exclude []string) ([]string, error) {
 	skip := map[string]bool{}
 	for _, r := range exclude {
 		skip[r] = true
@@ -47,18 +60,11 @@ func pickRepos(cfg config, exclude []string) ([]string, error) {
 	return fzf(items, "--multi", "--prompt=repos> ", "--header=TAB select · ENTER confirm · ESC cancel")
 }
 
-// pickFeature selects one existing feature ("" if cancelled).
-func pickFeature(cfg config) (string, error) {
-	picked, err := fzf(features(cfg), "--prompt=feature> ", "--header=ENTER open · ESC cancel")
+// pickOne selects a single item ("" if cancelled).
+func pickOne(items []string, prompt, header string) (string, error) {
+	picked, err := fzf(items, "--prompt="+prompt, "--header="+header)
 	if err != nil || len(picked) == 0 {
 		return "", err
 	}
 	return picked[0], nil
 }
-
-func isTerminal(f *os.File) bool {
-	fi, err := f.Stat()
-	return err == nil && fi.Mode()&os.ModeCharDevice != 0
-}
-
-func interactive() bool { return isTerminal(os.Stdin) && isTerminal(os.Stdout) }
