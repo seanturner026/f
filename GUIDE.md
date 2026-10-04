@@ -1,0 +1,160 @@
+# Operator guide
+
+How to run the pi + Herdr + nvim + beads setup day to day. The README covers
+what each part is; this covers how to use it.
+
+## The pieces
+
+| Piece | Job |
+|---|---|
+| `f` | Creates and owns features: worktrees, branches, `AGENTS.md`, `.context/`, Herdr layout, cleanup, beads issue |
+| Herdr | Terminals: one workspace per feature, agent status |
+| pi | The agent. Extensions: `f.ts` (goal, checkpoints, PRs, plan), `guard.ts` (credentials) |
+| nvim | Review: one live CodeDiff tab per repo, comments for pi (`nvim/f.lua`) |
+| beads (`bd`) | The plan: one issue per feature, child issues for steps |
+
+A feature is `~/code/features/.features/<name>/`: one worktree per
+repo (branch `<name>`), `AGENTS.md`, and `.context/` (local state, written only
+by `f`).
+
+## Daily flow
+
+1. **Start**: from any Herdr shell (`ctrl+b t` popup, or a shell tab):
+   `f <name>` → pick repos (TAB selects, filter clears) → Herdr opens the
+   workspace, pi waiting. Type your first prompt; it becomes the goal and the
+   beads issue description. Use `@` to reference files across repos.
+2. **Direction**: pi asks questions, then proposes. Approve or steer.
+3. **Review**: `opt+3…` repo tabs show a live CodeDiff of the whole feature.
+   `<leader>pr` toggles to *just pi's last run*. Comment with `<leader>pc`,
+   send them all with `<leader>ps`. Small fixes: edit the right-hand side
+   directly and tell pi ("I edited X").
+4. **PRs**: pi opens them; they show in pi's footer. `!!f prs -c` copies
+   `url: title` lines (stacks as a tree).
+5. **Switch**: `ctrl+space` → picker, ordered by what needs you.
+6. **Done**: when PRs merge, the next `f <new>` offers cleanup, or `alt-x` in
+   the picker. The beads issue closes with the PR links.
+
+Big multi-step work (e.g. ACK across tf/argocd/prod/ops): start one
+feature with all the repos, ask pi to **plan it in beads** (child issues +
+dependencies), then let it work through `bd ready`. Progress shows in the
+picker (`3/5 done · next: …`).
+
+## Keys
+
+### Herdr
+
+| Key | Does |
+|---|---|
+| `ctrl+space` | Feature picker (press again to close) |
+| `opt+1…9` | Tab: `1` chat · `2` nvim · `3…` repos · last shell |
+| `ctrl+b t` | Popup shell (`exit` / `ctrl+d` closes it) |
+| `ctrl+b w` | Herdr's own workspace list |
+| `ctrl+b b` | Toggle the sidebar (hidden by default) |
+| `ctrl+b shift+d` | Close this workspace (pi's session is kept) |
+| `ctrl+b q` | Detach (everything keeps running; `herdr` reattaches) |
+
+### Picker (`ctrl+space` or bare `f`)
+
+| Key | Does |
+|---|---|
+| `enter` | Jump to the feature (recreates its workspace if closed) |
+| `ctrl-x` | Remove the feature: worktrees, branches, workspace. Asks if work would be lost |
+| `alt-x` | Clean up every merged feature |
+| `esc` / `ctrl-space` | Close |
+
+Status: **needs you** (pi asked something) → **done** (finished, unseen) →
+**working** → **idle** → **closed** (no pi running).
+
+### pi
+
+| Key / command | Does |
+|---|---|
+| `/tree` then `ctrl+u` | List just your prompts; pick one to jump/branch |
+| `ctrl+alt+up/down` | Jump between prompts in the transcript |
+| `!!f prs -c` | Copy PR links (`!!` = run without sending output to the model) |
+| `/prs` | Refresh PRs, open the open ones in the browser |
+| `/remember [what]` | Save a preference as a rule in `agent/AGENTS.md` |
+| `/reload` | Pick up changed extensions, rules, keybindings |
+| `ctrl+d` (empty editor) / `/quit` | Quit pi (session is saved; `f <name>` continues it) |
+
+### nvim (review tabs and anywhere in a feature)
+
+| Key | Does |
+|---|---|
+| `]f` / `[f` | Next / previous file (CodeDiff) |
+| `]c` / `[c` | Next / previous change |
+| `<leader>b` | Toggle the file list; `<leader>e` focuses it |
+| `gc` | Compact: only changes + context |
+| `t` | Side-by-side ↔ inline |
+| `gf` | Open the file in a normal tab |
+| `g?` | All CodeDiff keys |
+| `<leader>pr` | Whole feature ↔ since pi's last run |
+| `<leader>pc` | Comment on line/selection (normal or visual) |
+| `<leader>pl` | List pending comments (quickfix) |
+| `<leader>ps` | Send comments to pi |
+| `:PiClear` | Discard pending comments |
+| `:PiReview [repo]` | Reopen a repo's CodeDiff (no repo: all, as nvim tabs) |
+
+Comment on the **right** side of a diff (the real file). Comments are saved in
+`.context/comments.json`, so they survive closing nvim.
+
+## f commands
+
+| Command | Does |
+|---|---|
+| `f <name>` | Start a feature, or reopen it (continues pi's session) |
+| `f` | Picker |
+| `f add [repo…]` | Add repos to this feature (+ Herdr tabs, before shell) |
+| `f prs [-r] [-c] [-n]` | PRs: from saved state; `-r` refresh live, `-c` copy, `-n` don't open browser |
+| `f goal [text]` | Show / set the goal |
+| `f comment list\|send\|clear` | Review comments (nvim uses these) |
+
+`f -h` for the summary. Feature names can't be subcommand names.
+
+## Beads
+
+- One db for everything: `~/code/features/.beads`.
+- Each feature's issue id is in `.context/feature.json`; its `AGENTS.md` tells
+  pi how to plan steps under it.
+- Useful: `bd ready` (what's unblocked), `bd list --status closed` (what you
+  finished), `bd show <id>`, `bd children <id>`.
+- Removing a feature with open steps or unmerged work leaves its issue open
+  with a note, so nothing silently disappears.
+
+## Guard
+
+pi can't use admin AWS profiles or production kube contexts. At start it gets
+filtered copies of `~/.aws/config`, `~/.aws/credentials`, and the kubeconfig
+(in `~/.cache/f/guard/`), default profile from `~/.config/f/guard.json`.
+Commands naming a denied profile/context/prod EKS cluster, or pointing back at
+the real files, are blocked with a reason.
+
+- Allowed now: profiles without `admin`/`prod` (plus `team-eks-admin`),
+  contexts without `prod` (dev, staging, minikube).
+- Change rules: edit `~/.config/f/guard.json`, then `/reload` pi.
+- SSO expired? Run `aws sso login` yourself (pi's filtered config shares the
+  login).
+
+## Setup on a new machine
+
+1. Clone this repo and run `./install.sh` (links pi config + nvim module,
+   installs `f`).
+2. `herdr integration install pi`.
+3. nvim `init.lua`: `require("f").setup()`.
+4. Herdr config (in dotfiles): `ctrl+space` popup running `f`, sidebar hidden.
+5. Base clones in `~/code/features/` (one dir per repo).
+6. `cd ~/code/features && bd metrics off && bd init --prefix f --skip-agents --skip-hooks`.
+7. `~/.config/f/guard.json` with machine-specific allow/default profile.
+
+## Troubleshooting
+
+| Symptom | Fix |
+|---|---|
+| Workspace has an old tab layout | `ctrl+b shift+d` to close it, then `f <name>` |
+| pi bash says "guard not set up" | `f creds` in a shell shows the error; fix, `/reload` |
+| A command is blocked by guard | Read the reason; it's intended. Run it yourself if you really mean it |
+| `<leader>ps` failed | No pi in that feature; comments are kept and the message is on your clipboard |
+| `<leader>pr` says no last run | pi hasn't changed code in that repo since the guard/checkpoints started |
+| Repo tab shows "No changes" | CodeDiff has nothing vs `origin/HEAD...` yet |
+| Picker status looks stale | It's live from Herdr; PRs/plan refresh after each pi run (`f prs -r` forces) |
+| Extension changes not active | `/reload` in pi |

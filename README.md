@@ -1,7 +1,7 @@
 # pi
 
 My config for [pi](https://pi.dev) and the feature-workspace setup around it
-(Herdr + nvim + beads). See [PLAN.md](PLAN.md).
+(Herdr + nvim + beads). **Day-to-day use: [GUIDE.md](GUIDE.md).** Design history: [PLAN.md](PLAN.md).
 
 ## Install
 
