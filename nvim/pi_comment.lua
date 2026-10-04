@@ -5,7 +5,6 @@
 --   :PiSend             send all to pi (via Herdr) and clear             <leader>ps
 --   :PiClear            discard all
 --   :PiReview [repo]    live CodeDiff for one repo (or a tab per repo)
---   :PiChanged          picker of files this feature changed, with diff  <leader>e
 --
 -- Works inside an `f` feature: <base>/.features/<feature>/<repo>/...
 -- pi is found via `herdr agent list`: the pi agent whose cwd is the feature root.
@@ -248,22 +247,6 @@ local function review(opts)
   open(1)
 end
 
--- Files this feature changed (vs the merge-base with origin's default branch,
--- including uncommitted edits), across all its repos, with a diff preview.
-local function changed()
-  local root, repos = feature_repos()
-  if not root then
-    return vim.notify("PiChanged: not inside an f feature", vim.log.levels.WARN)
-  end
-  local multi = {}
-  for _, repo in ipairs(repos) do
-    local dir = root .. "/" .. repo
-    -- snacks multi-source only honours a per-source cwd via filter.cwd
-    table.insert(multi, { source = "git_diff", cwd = dir, filter = { cwd = dir }, base = "origin/HEAD", group = true })
-  end
-  Snacks.picker({ title = "feature changes", multi = multi, format = "git_status", preview = "diff" })
-end
-
 M._repos = feature_repos -- for tests
 
 function M.setup()
@@ -278,13 +261,11 @@ function M.setup()
       return select(2, feature_repos()) or {}
     end,
   })
-  vim.api.nvim_create_user_command("PiChanged", changed, { desc = "Files this feature changed" })
 
   vim.keymap.set("n", "<leader>pc", "<cmd>PiComment<cr>", { desc = "[P]i [C]omment" })
   vim.keymap.set("x", "<leader>pc", ":PiComment<cr>", { desc = "[P]i [C]omment" })
   vim.keymap.set("n", "<leader>ps", "<cmd>PiSend<cr>", { desc = "[P]i [S]end comments" })
   vim.keymap.set("n", "<leader>pl", "<cmd>PiComments<cr>", { desc = "[P]i [L]ist comments" })
-  vim.keymap.set("n", "<leader>e", "<cmd>PiChanged<cr>", { desc = "Feature changed files" })
 end
 
 M._message = message -- for tests

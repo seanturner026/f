@@ -69,5 +69,7 @@ func pickRepos(all, exclude []string) ([]string, error) {
 			items = append(items, r)
 		}
 	}
-	return fzf(items, "--multi", "--prompt=repos> ", "--header=TAB select · ENTER confirm · ESC cancel")
+	// TAB selects and clears the filter, ready to type the next repo.
+	return fzf(items, "--multi", "--bind=tab:toggle+clear-query", "--prompt=repos> ",
+		"--header=TAB select · ENTER confirm · ESC cancel")
 }

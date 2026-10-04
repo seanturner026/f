@@ -158,25 +158,53 @@ func OpenWorkspace(ctx context.Context, r Runner, label, dir string, repos, piAr
 }
 
 // AddRepoTab adds a review tab for repo to the workspace labelled label, if it
-// exists. Herdr appends it after the existing tabs.
-func AddRepoTab(ctx context.Context, r Runner, label, dir, repo string) (bool, error) {
-	id, err := FindWorkspace(ctx, r, label)
-	if err != nil || id == "" {
+// exists, placed just before the shell tab (or last if there's none).
+func AddRepoTab(ctx context.Context, r Runner, c Caller, label, dir, repo string) (bool, error) {
+	ws, err := FindWorkspace(ctx, r, label)
+	if err != nil || ws == "" {
 		return false, err
 	}
-	return true, tabRunning(ctx, r, id, dir, repo, reviewCommand(repo))
+	tabID, err := tabRunningID(ctx, r, ws, dir, repo, reviewCommand(repo))
+	if err != nil {
+		return true, err
+	}
+	var list struct {
+		Result struct {
+			Tabs []struct {
+				ID    string `json:"tab_id"`
+				Label string `json:"label"`
+			} `json:"tabs"`
+		} `json:"result"`
+	}
+	if err := call(ctx, r, &list, "tab", "list", "--workspace", ws); err != nil {
+		return true, fmt.Errorf("list tabs: %w", err)
+	}
+	for i, t := range list.Result.Tabs {
+		if t.Label == "shell" {
+			if err := c.Call(ctx, "tab.move", map[string]any{"tab_id": tabID, "insert_index": i}, nil); err != nil {
+				return true, fmt.Errorf("move %s tab: %w", repo, err)
+			}
+			break
+		}
+	}
+	return true, nil
 }
 
 // tabRunning creates a tab labelled tabLabel in workspace ws and runs cmd in it.
 func tabRunning(ctx context.Context, r Runner, ws, dir, tabLabel, cmd string) error {
+	_, err := tabRunningID(ctx, r, ws, dir, tabLabel, cmd)
+	return err
+}
+
+func tabRunningID(ctx context.Context, r Runner, ws, dir, tabLabel, cmd string) (string, error) {
 	var tab created
 	if err := call(ctx, r, &tab, "tab", "create", "--workspace", ws, "--cwd", dir, "--label", tabLabel); err != nil {
-		return fmt.Errorf("create %s tab: %w", tabLabel, err)
+		return "", fmt.Errorf("create %s tab: %w", tabLabel, err)
 	}
 	if err := call(ctx, r, nil, "pane", "run", tab.Result.RootPane.ID, cmd); err != nil {
-		return fmt.Errorf("start %s tab: %w", tabLabel, err)
+		return "", fmt.Errorf("start %s tab: %w", tabLabel, err)
 	}
-	return nil
+	return tab.Result.Tab.ID, nil
 }
 
 // AgentStatus is a Herdr agent's lifecycle state.

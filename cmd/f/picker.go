@@ -1,8 +1,10 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"fmt"
+	"os"
 	"sort"
 	"strings"
 
@@ -72,9 +74,51 @@ func pickerRows(ctx context.Context, d deps) []pickerRow {
 	return rows
 }
 
-// pickFeature shows features with status and PRs; returns the chosen name.
+// pickFeature is the control center: features ordered by what needs you.
+// ENTER returns the chosen feature; ctrl-x removes one, alt-x cleans up all
+// merged ones, then the picker reopens with a status line.
 func pickFeature(ctx context.Context, d deps) (string, error) {
-	rows := pickerRows(ctx, d)
+	msg := ""
+	for {
+		rows := pickerRows(ctx, d)
+		if len(rows) == 0 {
+			if msg != "" {
+				fmt.Println(msg)
+			}
+			return "", nil
+		}
+		header := "ENTER open · ctrl-x remove · alt-x clean merged · ESC close"
+		if msg != "" {
+			header = msg + "\n" + header
+		}
+		// Full-screen (fast in Herdr's popup); ctrl-space closes it, like it opened.
+		out, err := runFzf(pickerLines(rows), "--ansi", "--delimiter=\t", "--with-nth=2..",
+			"--expect=ctrl-x,alt-x", "--bind=ctrl-space:abort", "--prompt=feature> ", "--header="+header)
+		if err != nil || len(out) == 0 {
+			return "", err
+		}
+		key, name := out[0], ""
+		if len(out) > 1 {
+			name, _, _ = strings.Cut(out[1], "\t")
+		}
+		switch key {
+		case "":
+			return name, nil
+		case "ctrl-x":
+			if name != "" {
+				msg = removeFeature(ctx, d, name)
+			}
+		case "alt-x":
+			removed := cleanMerged(ctx, d, false)
+			msg = "nothing merged to clean up"
+			if len(removed) > 0 {
+				msg = "removed " + strings.Join(removed, ", ")
+			}
+		}
+	}
+}
+
+func pickerLines(rows []pickerRow) []string {
 	width := 0
 	for _, r := range rows {
 		width = max(width, len(r.name))
@@ -89,12 +133,34 @@ func pickFeature(ctx context.Context, d deps) (string, error) {
 		// name is the first tab-separated field; that's what we return.
 		lines[i] = fmt.Sprintf("%s\t%-*s  %s  %s", r.name, width, r.name, status, prs)
 	}
-	// Full-screen (fast in Herdr's popup); ctrl-space closes it, like it opened.
-	picked, err := runFzf(lines, "--ansi", "--delimiter=\t", "--with-nth=2..",
-		"--bind=ctrl-space:abort", "--prompt=feature> ", "--header=ENTER open · ESC/ctrl-space close")
-	if err != nil || len(picked) == 0 {
-		return "", err
+	return lines
+}
+
+// removeFeature removes a feature and its Herdr workspace. If it has unmerged
+// work, it lists it and asks first. Returns a status line for the picker.
+func removeFeature(ctx context.Context, d deps, name string) string {
+	problems, err := feature.Unmerged(ctx, d.run, d.layout, name)
+	if err != nil {
+		return red(fmt.Sprintf("%s: %v", name, err))
 	}
-	name, _, _ := strings.Cut(picked[0], "\t")
-	return name, nil
+	force := false
+	if len(problems) > 0 {
+		fmt.Printf("%s has unmerged work:\n", bold(name))
+		for _, p := range problems {
+			fmt.Println("  " + p)
+		}
+		fmt.Print(red("remove anyway? this work is lost [y/N] "))
+		line, _ := bufio.NewReader(os.Stdin).ReadString('\n')
+		if a := strings.ToLower(strings.TrimSpace(line)); a != "y" && a != "yes" {
+			return "kept " + name
+		}
+		force = true
+	}
+	if err := feature.Remove(ctx, d.run, d.layout, name, force); err != nil {
+		return red(err.Error())
+	}
+	if !d.noHerdr {
+		_ = herdr.CloseWorkspace(ctx, d.run, name)
+	}
+	return green("removed " + name)
 }

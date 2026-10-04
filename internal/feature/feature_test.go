@@ -208,3 +208,46 @@ func TestPRs(t *testing.T) {
 		t.Errorf("prs = %+v", prs)
 	}
 }
+
+func TestUnmerged(t *testing.T) {
+	const merged = `[{"number":1,"state":"MERGED","url":"u","headRefOid":"abc"}]`
+	tests := []struct {
+		name   string
+		runner fakeRunner
+		want   []string
+	}{
+		{
+			name:   "clean and untouched",
+			runner: fakeRunner{"git status": "", "git rev-list": "0"},
+			want:   nil,
+		},
+		{
+			name:   "merged at head",
+			runner: fakeRunner{"git status": "", "git rev-list": "2", "gh pr list": merged, "git rev-parse HEAD": "abc"},
+			want:   nil,
+		},
+		{
+			name:   "uncommitted",
+			runner: fakeRunner{"git status": " M a\n?? b", "git rev-list": "0"},
+			want:   []string{"argocd: 2 uncommitted change(s)"},
+		},
+		{
+			name:   "commits without merged PR",
+			runner: fakeRunner{"git status": "", "git rev-list": "3", "gh pr list": "[]", "git rev-parse HEAD": "abc"},
+			want:   []string{"argocd: 3 commit(s) not in a merged PR"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			l := newLayout(t, "feat", "argocd")
+			tt.runner["git symbolic-ref"] = "origin/main"
+			got, err := feature.Unmerged(context.Background(), tt.runner, l, "feat")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if strings.Join(got, "|") != strings.Join(tt.want, "|") {
+				t.Errorf("got %q, want %q", got, tt.want)
+			}
+		})
+	}
+}

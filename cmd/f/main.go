@@ -17,7 +17,8 @@ const help = `f: start a pi session that works across several repos, each on its
 Usage:
   f <name>         start a feature: pick repos (fzf) → pi opens, ready for your prompt
                    reopens the feature (continuing its pi session) if it exists
-  f                picker: features by what needs you (pi status + PRs) → jump there
+  f                picker: features by what needs you (pi status + PRs) → jump there;
+                   ctrl-x removes one, alt-x cleans up merged ones
   f add [repo...]  add repos to the current feature (fzf if none), with Herdr tabs
   f prs            PRs for the current feature (saved state, instant); opens open ones
 

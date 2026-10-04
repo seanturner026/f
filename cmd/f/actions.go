@@ -28,6 +28,7 @@ var reserved = map[string]bool{"add": true, "prs": true, "help": true, "completi
 type deps struct {
 	layout  feature.Layout
 	run     feature.Runner
+	socket  herdr.Caller
 	noHerdr bool
 }
 
@@ -36,7 +37,7 @@ func newDeps() (deps, error) {
 	if err != nil {
 		return deps{}, err
 	}
-	return deps{layout: l, run: shell.Exec{}, noHerdr: os.Getenv("F_NO_HERDR") != ""}, nil
+	return deps{layout: l, run: shell.Exec{}, socket: herdr.DefaultSocket(), noHerdr: os.Getenv("F_NO_HERDR") != ""}, nil
 }
 
 func checkName(name string) error {
@@ -196,7 +197,7 @@ func add(ctx context.Context, d deps, explicit string, repos []string) error {
 	info("AGENTS.md updated; /reload in pi to pick it up")
 	if !d.noHerdr && herdr.Available(ctx, d.run) {
 		for _, repo := range repos {
-			if added, err := herdr.AddRepoTab(ctx, d.run, name, feature.Dir(d.layout, name), repo); err != nil {
+			if added, err := herdr.AddRepoTab(ctx, d.run, d.socket, name, feature.Dir(d.layout, name), repo); err != nil {
 				return err
 			} else if added {
 				ok("added herdr tab %s", repo)
@@ -327,9 +328,12 @@ func printPRs(d deps, name string, list []model.PR, errs map[string]error) {
 	}
 }
 
-// offerCleanup finds finished features (checked in parallel) and offers to
-// remove them: worktrees, branches, and Herdr workspace.
-func offerCleanup(ctx context.Context, d deps) {
+// offerCleanup offers to remove finished features before starting a new one.
+func offerCleanup(ctx context.Context, d deps) { cleanMerged(ctx, d, true) }
+
+// cleanMerged finds finished features (checked in parallel) and removes them:
+// worktrees, branches, and Herdr workspace. With ask, it confirms first.
+func cleanMerged(ctx context.Context, d deps, ask bool) []string {
 	names := feature.List(d.layout)
 	finished := make([]bool, len(names))
 	var wg sync.WaitGroup
@@ -345,22 +349,28 @@ func offerCleanup(ctx context.Context, d deps) {
 		}
 	}
 	if len(done) == 0 {
-		return
+		return nil
 	}
-	fmt.Printf("merged: %s. clean up? [Y/n] ", strings.Join(done, ", "))
-	line, _ := bufio.NewReader(os.Stdin).ReadString('\n')
-	if a := strings.ToLower(strings.TrimSpace(line)); a != "" && a != "y" && a != "yes" {
-		return
+	if ask {
+		fmt.Printf("merged: %s. clean up? [Y/n] ", strings.Join(done, ", "))
+		line, _ := bufio.NewReader(os.Stdin).ReadString('\n')
+		if a := strings.ToLower(strings.TrimSpace(line)); a != "" && a != "y" && a != "yes" {
+			return nil
+		}
 	}
-	herdrUp := !d.noHerdr && herdr.Available(ctx, d.run)
+	var removed []string
 	for _, name := range done {
-		if err := feature.Remove(ctx, d.run, d.layout, name); err != nil {
+		if err := feature.Remove(ctx, d.run, d.layout, name, false); err != nil {
 			fmt.Printf("%s %v\n", red("cleanup:"), err)
 			continue
 		}
-		if herdrUp {
+		if !d.noHerdr {
 			_ = herdr.CloseWorkspace(ctx, d.run, name)
 		}
-		ok("removed %s", name)
+		removed = append(removed, name)
+		if ask {
+			ok("removed %s", name)
+		}
 	}
+	return removed
 }

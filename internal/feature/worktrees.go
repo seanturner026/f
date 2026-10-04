@@ -123,15 +123,46 @@ func mergedAtHead(ctx context.Context, r Runner, wt string, prs []model.PR) bool
 	return false
 }
 
-// Remove deletes a feature's worktrees, branches, and directory.
-func Remove(ctx context.Context, r Runner, l Layout, name string) error {
+// Unmerged describes work in the feature that removing it would lose:
+// uncommitted changes, and commits not contained in a merged PR. Empty means
+// it's safe to remove.
+func Unmerged(ctx context.Context, r Runner, l Layout, name string) ([]string, error) {
+	repos, err := Repos(l, name)
+	if err != nil {
+		return nil, err
+	}
+	var problems []string
+	for _, repo := range repos {
+		wt := filepath.Join(Dir(l, name), repo)
+		if n, err := git.ChangedFiles(ctx, r, wt); err != nil {
+			problems = append(problems, fmt.Sprintf("%s: %v", repo, err))
+			continue
+		} else if n > 0 {
+			problems = append(problems, fmt.Sprintf("%s: %d uncommitted change(s)", repo, n))
+		}
+		base := "origin/" + git.DefaultBranch(ctx, r, filepath.Join(l.Base, repo))
+		ahead, err := git.CommitsAhead(ctx, r, wt, base)
+		if err != nil || ahead == 0 {
+			continue
+		}
+		prs, err := github.RepoPRs(ctx, r, wt, repo, name)
+		if err != nil || !mergedAtHead(ctx, r, wt, prs) {
+			problems = append(problems, fmt.Sprintf("%s: %d commit(s) not in a merged PR", repo, ahead))
+		}
+	}
+	return problems, nil
+}
+
+// Remove deletes a feature's worktrees, branches, and directory. force
+// discards uncommitted changes (and the branches' unmerged commits).
+func Remove(ctx context.Context, r Runner, l Layout, name string, force bool) error {
 	repos, err := Repos(l, name)
 	if err != nil {
 		return err
 	}
 	for _, repo := range repos {
 		src := filepath.Join(l.Base, repo)
-		if err := git.RemoveWorktree(ctx, r, src, filepath.Join(Dir(l, name), repo)); err != nil {
+		if err := git.RemoveWorktree(ctx, r, src, filepath.Join(Dir(l, name), repo), force); err != nil {
 			return fmt.Errorf("remove %s: %w", name, err)
 		}
 		_ = git.DeleteBranch(ctx, r, src, name)
