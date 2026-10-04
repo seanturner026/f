@@ -2,6 +2,7 @@ package herdr_test
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 
@@ -119,6 +120,42 @@ func TestAgentStatuses(t *testing.T) {
 		t.Run(tt.cwd, func(t *testing.T) {
 			if got[tt.cwd] != tt.want {
 				t.Errorf("got %q, want %q", got[tt.cwd], tt.want)
+			}
+		})
+	}
+}
+
+type promptRunner struct {
+	list   string
+	prompt []string
+}
+
+func (p *promptRunner) Run(_ context.Context, _, _ string, args ...string) (string, error) {
+	if args[0] == "agent" && args[1] == "prompt" {
+		p.prompt = args[2:]
+		return "{}", nil
+	}
+	return p.list, nil
+}
+
+func TestPromptPi(t *testing.T) {
+	list := `{"result":{"agents":[{"agent":"pi","cwd":"/f/a","pane_id":"w1:p1"},{"agent":"pi","cwd":"/f/b","pane_id":"w2:p1"}]}}`
+	tests := []struct {
+		name, dir, wantPane string
+		wantErr             error
+	}{
+		{name: "finds pi by cwd", dir: "/f/b", wantPane: "w2:p1"},
+		{name: "no pi there", dir: "/f/c", wantErr: herdr.ErrNoPi},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := &promptRunner{list: list}
+			err := herdr.PromptPi(context.Background(), r, tt.dir, "hello")
+			if !errors.Is(err, tt.wantErr) {
+				t.Fatalf("err = %v, want %v", err, tt.wantErr)
+			}
+			if tt.wantPane != "" && (len(r.prompt) != 2 || r.prompt[0] != tt.wantPane || r.prompt[1] != "hello") {
+				t.Errorf("prompt args = %v", r.prompt)
 			}
 		})
 	}

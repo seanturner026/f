@@ -218,25 +218,67 @@ const (
 	AgentUnknown AgentStatus = "unknown"
 )
 
-// AgentStatuses returns the status of each running pi agent, keyed by its cwd.
-func AgentStatuses(ctx context.Context, r Runner) (map[string]AgentStatus, error) {
+// Agent is a running pi in a Herdr pane.
+type Agent struct {
+	Pane   string
+	Status AgentStatus
+	Cwd    string
+}
+
+// PiAgents lists running pi agents.
+func PiAgents(ctx context.Context, r Runner) ([]Agent, error) {
 	var resp struct {
 		Result struct {
 			Agents []struct {
 				Agent  string      `json:"agent"`
 				Status AgentStatus `json:"agent_status"`
 				Cwd    string      `json:"cwd"`
+				Pane   string      `json:"pane_id"`
 			} `json:"agents"`
 		} `json:"result"`
 	}
 	if err := call(ctx, r, &resp, "agent", "list"); err != nil {
 		return nil, fmt.Errorf("agent list: %w", err)
 	}
-	out := map[string]AgentStatus{}
+	var out []Agent
 	for _, a := range resp.Result.Agents {
 		if a.Agent == "pi" {
-			out[a.Cwd] = a.Status
+			out = append(out, Agent{Pane: a.Pane, Status: a.Status, Cwd: a.Cwd})
 		}
 	}
 	return out, nil
+}
+
+// AgentStatuses returns the status of each running pi agent, keyed by its cwd.
+func AgentStatuses(ctx context.Context, r Runner) (map[string]AgentStatus, error) {
+	agents, err := PiAgents(ctx, r)
+	if err != nil {
+		return nil, err
+	}
+	out := map[string]AgentStatus{}
+	for _, a := range agents {
+		out[a.Cwd] = a.Status
+	}
+	return out, nil
+}
+
+// ErrNoPi means no pi is running in the given directory.
+var ErrNoPi = errors.New("no pi running there")
+
+// PromptPi submits text to the pi running in dir (found by cwd, since Herdr
+// agent names are dropped when pi restarts).
+func PromptPi(ctx context.Context, r Runner, dir, text string) error {
+	agents, err := PiAgents(ctx, r)
+	if err != nil {
+		return err
+	}
+	for _, a := range agents {
+		if a.Cwd == dir {
+			if err := call(ctx, r, nil, "agent", "prompt", a.Pane, text); err != nil {
+				return fmt.Errorf("prompt pi: %w", err)
+			}
+			return nil
+		}
+	}
+	return fmt.Errorf("%s: %w", dir, ErrNoPi)
 }

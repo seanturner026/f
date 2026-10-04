@@ -22,6 +22,7 @@ Usage:
                    ctrl-x removes one, alt-x cleans up merged ones
   f add [repo...]  add repos to the current feature (fzf if none), with Herdr tabs
   f goal [text]    show or set the feature's goal (pi sets it from your first prompt)
+  f comment ...    review comments for pi: add|list|send|clear (nvim uses these)
   f prs            PRs for the current feature (saved state, instant); opens open ones
 
 Flags:
@@ -96,6 +97,29 @@ func main() {
 				ShellComplete: func(ctx context.Context, c *cli.Command) {
 					all, _ := feature.BaseRepos(d.layout)
 					printLines(all)
+				},
+			},
+			{
+				Name:  "comment",
+				Usage: "review comments for pi (nvim: <leader>pc / <leader>ps)",
+				Flags: []cli.Flag{featureFlag},
+				Commands: []*cli.Command{
+					{Name: "add", Usage: "add a comment (JSON on stdin)", Flags: []cli.Flag{featureFlag},
+						Action: func(ctx context.Context, c *cli.Command) error {
+							return commentAdd(d, c.String("feature"), os.Stdin)
+						}},
+					{Name: "list", Usage: "pending comments", Flags: []cli.Flag{featureFlag, &cli.BoolFlag{Name: "json"}},
+						Action: func(ctx context.Context, c *cli.Command) error {
+							return commentList(d, c.String("feature"), c.Bool("json"))
+						}},
+					{Name: "send", Usage: "send them to pi and clear", Flags: []cli.Flag{featureFlag},
+						Action: func(ctx context.Context, c *cli.Command) error {
+							return commentSend(ctx, d, c.String("feature"))
+						}},
+					{Name: "clear", Usage: "discard them", Flags: []cli.Flag{featureFlag},
+						Action: func(ctx context.Context, c *cli.Command) error {
+							return commentClear(d, c.String("feature"))
+						}},
 				},
 			},
 			{

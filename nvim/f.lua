@@ -14,7 +14,6 @@
 local M = {}
 
 local ns = vim.api.nvim_create_namespace("f_comment")
-local comments = {} -- { file, l1, l2, code, ft, note, buf, mark }
 
 -- Real file path for a buffer; nil for diff tools' old-side / scratch buffers
 -- (diffview://, codediff://, "CodeDiff 1.2", ...).
@@ -53,28 +52,59 @@ local function feature_of(path)
   return info and info.root
 end
 
--- Herdr target for the feature's pi: the pane of the pi agent running in the
--- feature root (names get dropped when pi restarts, so find it by cwd).
-local function pi_target(root)
-  local res = vim.system({ "herdr", "agent", "list" }, { text = true }):wait()
-  if res.code ~= 0 then
-    return nil, vim.trim(res.stderr or "herdr agent list failed")
+-- f_cli runs `f args...` in the feature root (stdin optional).
+local function f_cli(root, args, stdin)
+  local res = vim.system(vim.list_extend({ "f" }, args), { cwd = root, stdin = stdin, text = true }):wait()
+  return res.code == 0, res.stdout or "", vim.trim(res.stderr or "")
+end
+
+-- Pending comments, read straight from the file f writes (fast; f stays the
+-- only writer).
+local function load_comments(root)
+  local fd = io.open(root .. "/.context/comments.json")
+  if not fd then
+    return {}
   end
-  local ok, data = pcall(vim.json.decode, res.stdout)
-  local agents = ok and data.result and data.result.agents or {}
-  for _, a in ipairs(agents) do
-    if a.agent == "pi" and (a.cwd == root or a.foreground_cwd == root) then
-      return a.pane_id
+  local ok, cs = pcall(vim.json.decode, fd:read("*a"))
+  fd:close()
+  return ok and type(cs) == "table" and cs or {}
+end
+
+-- Draw 💬 under each pending comment in buf.
+local function render(buf)
+  if not vim.api.nvim_buf_is_valid(buf) then
+    return
+  end
+  local path = buf_path(buf)
+  local info = path and feature_info(path)
+  if not info then
+    return
+  end
+  vim.api.nvim_buf_clear_namespace(buf, ns, 0, -1)
+  local rel = path:sub(#info.root + 2)
+  local count = vim.api.nvim_buf_line_count(buf)
+  for _, c in ipairs(load_comments(info.root)) do
+    if c.file == rel then
+      pcall(vim.api.nvim_buf_set_extmark, buf, ns, math.min(c.line2, count) - 1, 0, {
+        virt_lines = { { { "  💬 " .. c.note, "DiagnosticHint" } } },
+      })
     end
   end
-  return nil, "no pi running in " .. root
+end
+
+local function render_all()
+  for _, buf in ipairs(vim.api.nvim_list_bufs()) do
+    if vim.api.nvim_buf_is_loaded(buf) then
+      render(buf)
+    end
+  end
 end
 
 local function add(opts)
   local buf = vim.api.nvim_get_current_buf()
   local path = buf_path(buf)
   if not path then
-    return vim.notify("PiComment: comment on the real file (right side of diffview)", vim.log.levels.WARN)
+    return vim.notify("PiComment: comment on the real file (right side of the diff)", vim.log.levels.WARN)
   end
   local root = feature_of(path)
   if not root then
@@ -86,19 +116,19 @@ local function add(opts)
     if not note or vim.trim(note) == "" then
       return
     end
-    local mark = vim.api.nvim_buf_set_extmark(buf, ns, l2 - 1, 0, {
-      virt_lines = { { { "  💬 " .. note, "DiagnosticHint" } } },
-    })
-    table.insert(comments, {
+    local comment = vim.json.encode({
       file = path:sub(#root + 2),
-      l1 = l1,
-      l2 = l2,
+      line1 = l1,
+      line2 = l2,
       code = table.concat(vim.api.nvim_buf_get_lines(buf, l1 - 1, l2, false), "\n"),
-      ft = vim.bo[buf].filetype,
+      lang = vim.bo[buf].filetype,
       note = vim.trim(note),
-      buf = buf,
-      mark = mark,
     })
+    local ok, _, err = f_cli(root, { "comment", "add" }, comment)
+    if not ok then
+      return vim.notify("PiComment: " .. err, vim.log.levels.ERROR)
+    end
+    render(buf)
   end
 
   if opts.args ~= "" then
@@ -108,62 +138,42 @@ local function add(opts)
   end
 end
 
+local function current_root()
+  return feature_of(buf_path(0) or nil) or feature_of(nil)
+end
+
 local function clear()
-  for _, c in ipairs(comments) do
-    pcall(vim.api.nvim_buf_del_extmark, c.buf, ns, c.mark)
+  local root = current_root()
+  if root then
+    f_cli(root, { "comment", "clear" })
+    render_all()
   end
-  comments = {}
 end
 
-local function message()
-  local out = { "Review comments:", "" }
-  for i, c in ipairs(comments) do
-    local range = c.l1 == c.l2 and tostring(c.l1) or (c.l1 .. "-" .. c.l2)
-    vim.list_extend(out, {
-      ("%d. %s:%s"):format(i, c.file, range),
-      "```" .. c.ft,
-      c.code,
-      "```",
-      "→ " .. c.note,
-      "",
-    })
-  end
-  return table.concat(out, "\n")
-end
-
+-- Send pending comments to this feature's pi (f finds it via Herdr).
 local function send()
-  if #comments == 0 then
-    return vim.notify("PiComment: nothing to send")
-  end
-  local root = feature_of(buf_path(0) or nil) or feature_of(nil)
+  local root = current_root()
   if not root then
     return vim.notify("PiComment: not inside an f feature", vim.log.levels.WARN)
   end
-  local msg, n = message(), #comments
-  local function fail(why)
-    vim.fn.setreg("+", msg)
-    vim.notify("PiComment: send failed (copied to clipboard): " .. why, vim.log.levels.ERROR)
-  end
-  local target, err = pi_target(root)
-  if not target then
-    return fail(err)
-  end
-  vim.system({ "herdr", "agent", "prompt", target, msg }, { text = true }, function(res)
+  vim.system({ "f", "comment", "send" }, { cwd = root, text = true }, function(res)
     vim.schedule(function()
-      if res.code == 0 then
-        clear()
-        vim.notify(("PiComment: sent %d to pi"):format(n))
-      else
-        fail(vim.trim(res.stderr or ""))
-      end
+      local out = ((res.stdout or "") .. (res.stderr or "")):gsub("\27%[[%d;]*m", "")
+      out = vim.trim(out)
+      vim.notify("PiComment: " .. out, res.code == 0 and vim.log.levels.INFO or vim.log.levels.ERROR)
+      render_all()
     end)
   end)
 end
 
 local function list()
+  local root = current_root()
+  if not root then
+    return
+  end
   local items = {}
-  for _, c in ipairs(comments) do
-    table.insert(items, { bufnr = c.buf, lnum = c.l1, end_lnum = c.l2, text = c.note })
+  for _, c in ipairs(load_comments(root)) do
+    table.insert(items, { filename = root .. "/" .. c.file, lnum = c.line1, end_lnum = c.line2, text = c.note })
   end
   vim.fn.setqflist({}, " ", { title = "pi comments", items = items })
   vim.cmd(#items > 0 and "copen" or "cclose")
@@ -315,6 +325,14 @@ function M.setup()
   })
   vim.api.nvim_create_user_command("PiReviewToggle", review_toggle, { desc = "Review: whole feature ↔ last run" })
 
+  -- Pending comments survive restarts (.context/comments.json): draw them on open.
+  vim.api.nvim_create_autocmd("BufWinEnter", {
+    group = vim.api.nvim_create_augroup("f_comments", { clear = true }),
+    callback = function(ev)
+      render(ev.buf)
+    end,
+  })
+
   vim.keymap.set("n", "<leader>pc", "<cmd>PiComment<cr>", { desc = "[P]i [C]omment" })
   vim.keymap.set("x", "<leader>pc", ":PiComment<cr>", { desc = "[P]i [C]omment" })
   vim.keymap.set("n", "<leader>ps", "<cmd>PiSend<cr>", { desc = "[P]i [S]end comments" })
@@ -322,7 +340,5 @@ function M.setup()
   vim.keymap.set("n", "<leader>pr", "<cmd>PiReviewToggle<cr>", { desc = "[P]i [R]eview: feature ↔ last run" })
 end
 
-M._message = message -- for tests
-M._pi_target = pi_target
 
 return M

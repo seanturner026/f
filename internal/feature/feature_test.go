@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/seanturner026/pi/internal/feature"
+	"github.com/seanturner026/pi/internal/model"
 )
 
 // fakeRunner answers commands by their joined text ("git status --porcelain").
@@ -279,5 +280,47 @@ func TestUnmerged(t *testing.T) {
 				t.Errorf("got %q, want %q", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestComments(t *testing.T) {
+	l := newLayout(t, "feat", "argocd")
+	tests := []struct {
+		name    string
+		add     model.Comment
+		wantID  int
+		wantErr bool
+	}{
+		{name: "first gets id 1", add: model.Comment{File: "argocd/a.yaml", Line1: 3, Note: "n"}, wantID: 1},
+		{name: "second gets id 2", add: model.Comment{File: "argocd/b.yaml", Line1: 1, Line2: 4, Note: "n"}, wantID: 2},
+		{name: "missing note", add: model.Comment{File: "argocd/a.yaml", Line1: 1}, wantErr: true},
+		{name: "missing file", add: model.Comment{Line1: 1, Note: "n"}, wantErr: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := feature.AddComment(l, "feat", tt.add)
+			if tt.wantErr {
+				if !errors.Is(err, feature.ErrBadComment) {
+					t.Fatalf("err = %v, want ErrBadComment", err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got.ID != tt.wantID || got.Line2 < got.Line1 {
+				t.Errorf("got %+v", got)
+			}
+		})
+	}
+	cs, _ := feature.LoadComments(l, "feat")
+	if len(cs) != 2 {
+		t.Fatalf("want 2 saved, got %d", len(cs))
+	}
+	if err := feature.ClearComments(l, "feat"); err != nil {
+		t.Fatal(err)
+	}
+	if cs, _ := feature.LoadComments(l, "feat"); len(cs) != 0 {
+		t.Errorf("after clear: %v", cs)
 	}
 }

@@ -103,3 +103,28 @@ func PRClipboard(prs []PR) string {
 	}
 	return b.String()
 }
+
+// Comment is a review comment on a line range, waiting to be sent to pi.
+type Comment struct {
+	ID    int    `json:"id"`
+	File  string `json:"file"` // relative to the feature root, e.g. "argocd/apps/x.yaml"
+	Line1 int    `json:"line1"`
+	Line2 int    `json:"line2"`
+	Code  string `json:"code"` // the commented lines when the comment was made
+	Lang  string `json:"lang,omitempty"`
+	Note  string `json:"note"`
+}
+
+// CommentsMessage formats comments as one prompt for pi.
+func CommentsMessage(comments []Comment) string {
+	var b strings.Builder
+	b.WriteString("Review comments:\n")
+	for i, c := range comments {
+		lines := fmt.Sprint(c.Line1)
+		if c.Line2 != c.Line1 {
+			lines = fmt.Sprintf("%d-%d", c.Line1, c.Line2)
+		}
+		fmt.Fprintf(&b, "\n%d. %s:%s\n```%s\n%s\n```\n→ %s\n", i+1, c.File, lines, c.Lang, c.Code, c.Note)
+	}
+	return b.String()
+}

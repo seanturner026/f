@@ -103,3 +103,32 @@ func TestPRClipboard(t *testing.T) {
 		})
 	}
 }
+
+func TestCommentsMessage(t *testing.T) {
+	tests := []struct {
+		name     string
+		comments []model.Comment
+		want     string
+	}{
+		{
+			name:     "single line",
+			comments: []model.Comment{{File: "a/x.go", Line1: 3, Line2: 3, Code: "x := 1", Lang: "go", Note: "rename x"}},
+			want:     "Review comments:\n\n1. a/x.go:3\n```go\nx := 1\n```\n→ rename x\n",
+		},
+		{
+			name: "range and numbering",
+			comments: []model.Comment{
+				{File: "a/x.go", Line1: 1, Line2: 1, Code: "a", Note: "n1"},
+				{File: "b/y.tf", Line1: 2, Line2: 4, Code: "b\nc\nd", Lang: "terraform", Note: "n2"},
+			},
+			want: "Review comments:\n\n1. a/x.go:1\n```\na\n```\n→ n1\n\n2. b/y.tf:2-4\n```terraform\nb\nc\nd\n```\n→ n2\n",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := model.CommentsMessage(tt.comments); got != tt.want {
+				t.Errorf("got\n%s\nwant\n%s", got, tt.want)
+			}
+		})
+	}
+}
