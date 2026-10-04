@@ -1,10 +1,8 @@
 package main
 
 import (
-	"bufio"
 	"context"
 	"fmt"
-	"os"
 	"sort"
 	"strings"
 
@@ -149,13 +147,13 @@ func removeFeature(ctx context.Context, d deps, name string) string {
 	}
 	force := false
 	if len(problems) > 0 {
-		fmt.Printf("%s has unmerged work:\n", bold(name))
-		for _, p := range problems {
-			fmt.Println("  " + p)
-		}
-		fmt.Print(red("remove anyway? this work is lost [y/N] "))
-		line, _ := bufio.NewReader(os.Stdin).ReadString('\n')
-		if a := strings.ToLower(strings.TrimSpace(line)); a != "y" && a != "yes" {
+		// Confirm inside fzf: reading the terminal directly after fzf exits is
+		// unreliable in Herdr's popup.
+		const keep, remove = "keep it", "remove anyway (this work is lost)"
+		header := name + " has unmerged work:\n  " + strings.Join(problems, "\n  ")
+		choice, err := runFzf([]string{keep, remove}, "--prompt=remove? ", "--header="+header,
+			"--header-first", "--no-sort", "--bind=ctrl-space:abort")
+		if err != nil || len(choice) == 0 || choice[0] != remove {
 			return "kept " + name
 		}
 		force = true
