@@ -27,7 +27,7 @@ Flags:
   -f <feature>     feature for add/prs (default: from cwd)
   -r               prs: refresh live from GitHub (pi does this after every turn)
   -n, --json       prs: don't open the browser / print JSON
-  -c               prs: copy "url: title" lines to the clipboard
+  -c               prs: copy "url: title" lines to the clipboard (gh stacks as a tree)
 
 Inside Herdr each feature gets its own workspace (chat · nvim · <repo>… · shell, each
 repo tab a live CodeDiff); outside,

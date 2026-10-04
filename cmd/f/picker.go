@@ -88,8 +88,9 @@ func pickFeature(ctx context.Context, d deps) (string, error) {
 		// name is the first tab-separated field; that's what we return.
 		lines[i] = fmt.Sprintf("%s\t%-*s  %s  %s", r.name, width, r.name, status, prs)
 	}
-	picked, err := fzf(lines, "--ansi", "--delimiter=\t", "--with-nth=2..",
-		"--prompt=feature> ", "--header=ENTER open · ESC cancel")
+	// Full-screen (fast in Herdr's popup); ctrl-space closes it, like it opened.
+	picked, err := runFzf(lines, "--ansi", "--delimiter=\t", "--with-nth=2..",
+		"--bind=ctrl-space:abort", "--prompt=feature> ", "--header=ENTER open · ESC/ctrl-space close")
 	if err != nil || len(picked) == 0 {
 		return "", err
 	}

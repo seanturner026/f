@@ -56,3 +56,68 @@ func TestListPRs(t *testing.T) {
 		})
 	}
 }
+
+// cmdRunner answers by the gh subcommand ("stack", "pr list", "pr view <url>").
+type cmdRunner map[string]string
+
+func (f cmdRunner) Run(_ context.Context, _, _ string, args ...string) (string, error) {
+	key := args[0]
+	switch {
+	case args[0] == "pr" && args[1] == "view":
+		key = "pr view " + args[2]
+	case args[0] == "pr":
+		key = "pr " + args[1]
+	}
+	out, ok := f[key]
+	if !ok || out == "ERR" {
+		return "", errors.New("fail: " + key)
+	}
+	return out, nil
+}
+
+func TestRepoPRs(t *testing.T) {
+	stack := `{"trunk":"main","branches":[
+		{"name":"auth","pr":{"number":41,"url":"u41","state":"MERGED"}},
+		{"name":"api","pr":{"number":42,"url":"u42","state":"OPEN"}},
+		{"name":"wip"}]}`
+	tests := []struct {
+		name    string
+		runner  cmdRunner
+		want    []model.PR
+		wantErr bool
+	}{
+		{
+			name: "stack: PRs bottom first with positions and titles",
+			runner: cmdRunner{
+				"stack":       stack,
+				"pr view u41": `{"number":41,"state":"MERGED","title":"auth","url":"u41","headRefName":"auth","baseRefName":"main"}`,
+				"pr view u42": `{"number":42,"state":"OPEN","title":"api","url":"u42","isDraft":true,"headRefName":"api","baseRefName":"auth"}`,
+			},
+			want: []model.PR{
+				{Repo: "r", Number: 41, Title: "auth", URL: "u41", Status: model.PRStatusMerged, Head: "auth", Base: "main", Stack: 1},
+				{Repo: "r", Number: 42, Title: "api", URL: "u42", Status: model.PRStatusDraft, Head: "api", Base: "auth", Stack: 2},
+			},
+		},
+		{
+			name:   "no stack: falls back to the feature branch",
+			runner: cmdRunner{"stack": "ERR", "pr list": `[{"number":7,"state":"OPEN","title":"t","url":"u7","headRefName":"feat","baseRefName":"main"}]`},
+			want:   []model.PR{{Repo: "r", Number: 7, Title: "t", URL: "u7", Status: model.PRStatusOpen, Head: "feat", Base: "main"}},
+		},
+		{
+			name:    "stack PR lookup fails",
+			runner:  cmdRunner{"stack": stack, "pr view u41": "ERR", "pr view u42": "ERR"},
+			wantErr: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := github.RepoPRs(context.Background(), tt.runner, "/wt", "r", "feat")
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("err = %v, wantErr %v", err, tt.wantErr)
+			}
+			if !tt.wantErr && !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("got  %+v\nwant %+v", got, tt.want)
+			}
+		})
+	}
+}

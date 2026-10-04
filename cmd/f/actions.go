@@ -319,7 +319,11 @@ func printPRs(d deps, name string, list []model.PR, errs map[string]error) {
 			fmt.Println(dim("  no PR"))
 		}
 		for _, p := range byRepo[repo] {
-			fmt.Printf("  #%d %-7s %s\n         %s\n", p.Number, p.Status, p.Title, dim(p.URL))
+			indent := ""
+			if p.Stack > 1 {
+				indent = strings.Repeat("   ", p.Stack-2) + "└─ "
+			}
+			fmt.Printf("  %s#%d %-7s %s\n  %s       %s\n", indent, p.Number, p.Status, p.Title, strings.Repeat(" ", len(indent)), dim(p.URL))
 		}
 	}
 }

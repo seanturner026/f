@@ -79,6 +79,21 @@ func TestPRClipboard(t *testing.T) {
 			prs:  []model.PR{{URL: "https://gh/a/pull/1", Title: "Add ACK"}, {URL: "https://gh/b/pull/2", Title: "Add IRSA"}},
 			want: "https://gh/a/pull/1: Add ACK\nhttps://gh/b/pull/2: Add IRSA\n",
 		},
+		{
+			name: "stack drawn as tree, other repo flat",
+			prs: []model.PR{
+				{Repo: "a", URL: "u1", Title: "bottom", Stack: 1},
+				{Repo: "a", URL: "u2", Title: "middle", Stack: 2},
+				{Repo: "a", URL: "u3", Title: "top", Stack: 3},
+				{Repo: "b", URL: "u4", Title: "flat"},
+			},
+			want: "u1: bottom\n└─ u2: middle\n   └─ u3: top\nu4: flat\n",
+		},
+		{
+			name: "merged bottom filtered out: tree starts at lowest present",
+			prs:  []model.PR{{Repo: "a", URL: "u2", Title: "middle", Stack: 2}, {Repo: "a", URL: "u3", Title: "top", Stack: 3}},
+			want: "u2: middle\n└─ u3: top\n",
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

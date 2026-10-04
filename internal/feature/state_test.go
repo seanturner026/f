@@ -96,7 +96,10 @@ func TestRecordPR(t *testing.T) {
 // perRepoRunner answers gh per worktree dir suffix; "ERR" fails.
 type perRepoRunner map[string]string
 
-func (f perRepoRunner) Run(_ context.Context, dir, _ string, _ ...string) (string, error) {
+func (f perRepoRunner) Run(_ context.Context, dir, _ string, args ...string) (string, error) {
+	if len(args) > 0 && args[0] == "stack" {
+		return "", errors.New("exit status 2: not in a stack")
+	}
 	for suffix, out := range f {
 		if len(dir) >= len(suffix) && dir[len(dir)-len(suffix):] == suffix {
 			if out == "ERR" {

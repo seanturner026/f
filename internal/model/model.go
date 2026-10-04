@@ -42,6 +42,9 @@ type PR struct {
 	URL     string   `json:"url"`
 	Status  PRStatus `json:"status"`
 	HeadOID string   `json:"head_oid,omitempty"`
+	Head    string   `json:"head,omitempty"`      // head branch
+	Base    string   `json:"base,omitempty"`      // base branch
+	Stack   int      `json:"stack_pos,omitempty"` // 1 = bottom of a gh stack; 0 = not stacked
 }
 
 // prStatusOrder is the display order for PR summaries.
@@ -62,10 +65,24 @@ func PRSummary(prs []PR) string {
 	return strings.Join(parts, " · ")
 }
 
-// PRClipboard formats PRs one per line as "url: title".
+// PRClipboard formats PRs one per line as "url: title". Stacked PRs are drawn
+// as a tree under the lowest one in their repo:
+//
+//	url: bottom
+//	└─ url: middle
+//	   └─ url: top
 func PRClipboard(prs []PR) string {
+	lowest := map[string]int{} // repo -> lowest stack position present
+	for _, p := range prs {
+		if p.Stack > 0 && (lowest[p.Repo] == 0 || p.Stack < lowest[p.Repo]) {
+			lowest[p.Repo] = p.Stack
+		}
+	}
 	var b strings.Builder
 	for _, p := range prs {
+		if depth := p.Stack - lowest[p.Repo]; p.Stack > 0 && depth > 0 {
+			b.WriteString(strings.Repeat("   ", depth-1) + "└─ ")
+		}
 		fmt.Fprintf(&b, "%s: %s\n", p.URL, p.Title)
 	}
 	return b.String()

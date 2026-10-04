@@ -20,8 +20,9 @@ type Runner interface {
 // ErrUnavailable means Herdr isn't installed or its server isn't running.
 var ErrUnavailable = errors.New("herdr unavailable")
 
-// Inside reports whether the current process runs in a Herdr pane.
-func Inside() bool { return os.Getenv("HERDR_ENV") == "1" }
+// Inside reports whether the current process runs in Herdr: a pane sets
+// HERDR_ENV; popups and custom commands only get HERDR_SOCKET_PATH.
+func Inside() bool { return os.Getenv("HERDR_ENV") == "1" || os.Getenv("HERDR_SOCKET_PATH") != "" }
 
 // Available reports whether the Herdr server answers.
 func Available(ctx context.Context, r Runner) bool {

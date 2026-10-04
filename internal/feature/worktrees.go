@@ -51,7 +51,8 @@ func AddRepo(ctx context.Context, r Runner, l Layout, name, repo string) (result
 	return AddedNewBranch, base, nil
 }
 
-// PRs looks up PRs for the feature branch in every repo, concurrently.
+// PRs looks up PRs in every repo, concurrently: the repo's gh stack if it's on
+// one, otherwise PRs for the feature branch.
 // Per-repo lookup failures are returned in errs, keyed by repo.
 func PRs(ctx context.Context, r Runner, l Layout, name string) (prs []model.PR, errs map[string]error, err error) {
 	repos, err := Repos(l, name)
@@ -65,7 +66,7 @@ func PRs(ctx context.Context, r Runner, l Layout, name string) (prs []model.PR, 
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			results[i], failures[i] = github.ListPRs(ctx, r, filepath.Join(Dir(l, name), repo), repo, name)
+			results[i], failures[i] = github.RepoPRs(ctx, r, filepath.Join(Dir(l, name), repo), repo, name)
 		}()
 	}
 	wg.Wait()
@@ -97,7 +98,7 @@ func Finished(ctx context.Context, r Runner, l Layout, name string) bool {
 		if ahead, err := git.CommitsAhead(ctx, r, wt, base); err == nil && ahead == 0 {
 			continue // untouched repo
 		}
-		prs, err := github.ListPRs(ctx, r, wt, repo, name)
+		prs, err := github.RepoPRs(ctx, r, wt, repo, name)
 		if err != nil || !mergedAtHead(ctx, r, wt, prs) {
 			return false
 		}

@@ -26,12 +26,18 @@ func isTerminal(f *os.File) bool {
 // interactive reports whether a person is at the terminal.
 func interactive() bool { return isTerminal(os.Stdin) && isTerminal(os.Stdout) }
 
-// fzf runs fzf over items and returns the selection (nil if cancelled).
+// fzf runs fzf inline (40% height) over items and returns the selection (nil if cancelled).
 func fzf(items []string, args ...string) ([]string, error) {
+	return runFzf(items, append([]string{"--height=40%"}, args...)...)
+}
+
+// runFzf runs fzf with exactly args (plus --reverse). Without --height fzf is
+// full-screen and skips the cursor-position query, which is faster in popups.
+func runFzf(items []string, args ...string) ([]string, error) {
 	if _, err := exec.LookPath("fzf"); err != nil {
 		return nil, errors.New("fzf not installed")
 	}
-	cmd := exec.Command("fzf", append([]string{"--height=40%", "--reverse"}, args...)...)
+	cmd := exec.Command("fzf", append([]string{"--reverse"}, args...)...)
 	cmd.Stdin = bytes.NewBufferString(strings.Join(items, "\n") + "\n")
 	cmd.Stderr = os.Stderr
 	out, err := cmd.Output()
