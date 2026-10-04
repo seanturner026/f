@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/urfave/cli/v3"
 
@@ -20,12 +21,13 @@ Usage:
   f                picker: features by what needs you (pi status + PRs) → jump there;
                    ctrl-x removes one, alt-x cleans up merged ones
   f add [repo...]  add repos to the current feature (fzf if none), with Herdr tabs
+  f goal [text]    show or set the feature's goal (pi sets it from your first prompt)
   f prs            PRs for the current feature (saved state, instant); opens open ones
 
 Flags:
   -r <repo>        repo, repeatable (skips fzf)
   -p <prompt>      first prompt for pi
-  -f <feature>     feature for add/prs (default: from cwd)
+  -f <feature>     feature for add/goal/prs (default: from cwd)
   -r               prs: refresh live from GitHub (pi does this after every turn)
   -n, --json       prs: don't open the browser / print JSON
   -c               prs: copy "url: title" lines to the clipboard (gh stacks as a tree)
@@ -94,6 +96,15 @@ func main() {
 				ShellComplete: func(ctx context.Context, c *cli.Command) {
 					all, _ := feature.BaseRepos(d.layout)
 					printLines(all)
+				},
+			},
+			{
+				Name:      "goal",
+				Usage:     "show or set this feature's goal",
+				ArgsUsage: "[text]",
+				Flags:     []cli.Flag{featureFlag},
+				Action: func(ctx context.Context, c *cli.Command) error {
+					return goal(d, c.String("feature"), strings.Join(c.Args().Slice(), " "))
 				},
 			},
 			{

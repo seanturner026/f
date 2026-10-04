@@ -62,6 +62,11 @@ func CheckpointEnd(ctx context.Context, r Runner, l Layout, name string) ([]stri
 			if err := git.UpdateRef(ctx, r, wt, LastRunRef, commit); err != nil {
 				return changed, fmt.Errorf("checkpoint %s: %w", repo, err)
 			}
+			// New files show up as untracked in diff tools whatever the base
+			// revision; intent-to-add makes "since last run" diffs exact.
+			if err := git.IntentToAdd(ctx, r, wt); err != nil {
+				return changed, fmt.Errorf("checkpoint %s: %w", repo, err)
+			}
 			changed = append(changed, repo)
 		}
 		git.DeleteRef(ctx, r, wt, pendingRef)

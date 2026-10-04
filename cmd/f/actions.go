@@ -22,7 +22,7 @@ import (
 )
 
 // Subcommand names can't be feature names, or `f <name>` would be ambiguous.
-var reserved = map[string]bool{"add": true, "prs": true, "checkpoint": true, "help": true, "completion": true}
+var reserved = map[string]bool{"add": true, "prs": true, "goal": true, "checkpoint": true, "help": true, "completion": true}
 
 // deps are what the actions need: where features live and how to run commands.
 type deps struct {
@@ -52,7 +52,41 @@ func resolve(d deps, explicit string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return feature.Resolve(d.layout, explicit, cwd)
+	name, err := feature.Resolve(d.layout, explicit, cwd)
+	if err != nil {
+		return "", err
+	}
+	return name, ensureInfo(d, name)
+}
+
+// ensureInfo writes .context/feature.json for features created before it existed.
+func ensureInfo(d deps, name string) error {
+	if _, err := os.Stat(feature.InfoPath(d.layout, name)); err == nil {
+		return nil
+	}
+	_, err := feature.Sync(d.layout, name, "")
+	return err
+}
+
+// goal prints the feature's goal, or sets it (regenerating AGENTS.md).
+func goal(d deps, explicit, text string) error {
+	name, err := resolve(d, explicit)
+	if err != nil {
+		return err
+	}
+	if text == "" {
+		info, err := feature.LoadInfo(d.layout, name)
+		if err != nil {
+			return err
+		}
+		if info.Goal == "" {
+			info.Goal = dim("(not set)")
+		}
+		fmt.Println(info.Goal)
+		return nil
+	}
+	_, err = feature.Sync(d.layout, name, text)
+	return err
 }
 
 // start creates a feature, or reopens it if it exists. With no name, it picks
@@ -67,12 +101,18 @@ func start(ctx context.Context, d deps, name string, repos []string, prompt stri
 		if err != nil || picked == "" {
 			return err
 		}
+		if err := ensureInfo(d, picked); err != nil {
+			return err
+		}
 		return launch(ctx, d, picked, "", true)
 	}
 	if err := checkName(name); err != nil {
 		return err
 	}
 	if feature.Exists(d.layout, name) {
+		if err := ensureInfo(d, name); err != nil {
+			return err
+		}
 		return launch(ctx, d, name, "", true)
 	}
 
@@ -101,7 +141,7 @@ func start(ctx context.Context, d deps, name string, repos []string, prompt stri
 	if err := addRepos(ctx, d, name, repos); err != nil {
 		return err
 	}
-	if err := feature.WriteAgentsMD(d.layout, name, prompt); err != nil {
+	if _, err := feature.Sync(d.layout, name, prompt); err != nil {
 		return err
 	}
 	return launch(ctx, d, name, prompt, false)
@@ -191,7 +231,7 @@ func add(ctx context.Context, d deps, explicit string, repos []string) error {
 	if err := addRepos(ctx, d, name, repos); err != nil {
 		return err
 	}
-	if err := feature.WriteAgentsMD(d.layout, name, ""); err != nil {
+	if _, err := feature.Sync(d.layout, name, ""); err != nil {
 		return err
 	}
 	info("AGENTS.md updated; /reload in pi to pick it up")

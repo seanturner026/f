@@ -18,8 +18,8 @@ for item in "$repo"/agent/* "$repo"/agent/.[!.]*; do
   link "$item" "$pi_dir/$(basename "$item")"
 done
 
-# nvim: pi_comment (require("pi_comment").setup() in init.lua)
-link "$repo/nvim/pi_comment.lua" "$HOME/.config/nvim/lua/pi_comment.lua"
+# nvim: f (require("f").setup() in init.lua)
+link "$repo/nvim/f.lua" "$HOME/.config/nvim/lua/f.lua"
 
 # f (feature workspace CLI) → $(go env GOPATH)/bin/f
 (cd "$repo" && go install ./cmd/f) && echo "installed f -> $(go env GOPATH)/bin/f"

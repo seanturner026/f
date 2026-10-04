@@ -1,4 +1,5 @@
--- pi_comment: nvim helpers for `f` features.
+-- f: nvim side of `f` feature workspaces (review tabs, comments for pi).
+-- Reads <feature>/.context/feature.json, which the f CLI owns.
 --
 --   :PiComment [note]   comment on the current line / visual selection   <leader>pc
 --   :PiComments         list pending comments (quickfix)                 <leader>pl
@@ -12,7 +13,7 @@
 
 local M = {}
 
-local ns = vim.api.nvim_create_namespace("pi_comment")
+local ns = vim.api.nvim_create_namespace("f_comment")
 local comments = {} -- { file, l1, l2, code, ft, note, buf, mark }
 
 -- Real file path for a buffer; nil for diff tools' old-side / scratch buffers
@@ -29,14 +30,27 @@ local function buf_path(buf)
   return path
 end
 
--- feature root and name for a path (or the cwd).
-local function feature_of(path)
-  local p = path or (vim.fn.getcwd() .. "/")
-  local root, name = p:match("^(.-/%.features/([^/]+))/")
-  if not root then
-    root, name = p:match("^(.-/%.features/([^/]+))$")
+-- feature_info finds the feature containing path (or the cwd) by walking up
+-- to its .context/feature.json, which f writes: { name, root, repos, goal }.
+local function feature_info(path)
+  local start = path and vim.fs.dirname(path) or vim.fn.getcwd()
+  local ctx = vim.fs.find(".context", { upward = true, type = "directory", path = start })[1]
+  if not ctx then
+    return nil
   end
-  return root, name
+  local fd = io.open(ctx .. "/feature.json")
+  if not fd then
+    return nil
+  end
+  local ok, info = pcall(vim.json.decode, fd:read("*a"))
+  fd:close()
+  return ok and info or nil
+end
+
+-- feature root for a path (or the cwd).
+local function feature_of(path)
+  local info = feature_info(path)
+  return info and info.root
 end
 
 -- Herdr target for the feature's pi: the pane of the pi agent running in the
@@ -155,20 +169,13 @@ local function list()
   vim.cmd(#items > 0 and "copen" or "cclose")
 end
 
--- Repos (git worktrees) in the feature that contains the cwd.
+-- Root and repos of the feature that contains the cwd.
 local function feature_repos()
-  local root = feature_of(nil)
-  if not root then
+  local info = feature_info(nil)
+  if not info then
     return nil, nil
   end
-  local repos = {}
-  for name, kind in vim.fs.dir(root) do
-    if kind == "directory" and vim.uv.fs_stat(root .. "/" .. name .. "/.git") then
-      table.insert(repos, name)
-    end
-  end
-  table.sort(repos)
-  return root, repos
+  return info.root, info.repos or {}
 end
 
 -- Tab label: the repo name for :PiReview tabs, else the focused buffer's name.
@@ -258,7 +265,7 @@ local function review(opts)
     end
     repos = { only }
   else
-    vim.o.tabline = "%!v:lua.require'pi_comment'.tabline()"
+    vim.o.tabline = "%!v:lua.require'f'.tabline()"
     vim.o.showtabline = 2
   end
   local first = vim.api.nvim_get_current_tabpage()

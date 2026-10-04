@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/seanturner026/pi/internal/feature"
@@ -91,5 +92,49 @@ func TestCheckpoint(t *testing.T) {
 
 	if lastRun(t, wtA) == "" {
 		t.Fatal("no marker in a")
+	}
+}
+
+func TestCheckpointDiffShowsOnlyLastRun(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not installed")
+	}
+	for _, k := range []string{"GIT_AUTHOR_NAME", "GIT_AUTHOR_EMAIL", "GIT_COMMITTER_NAME", "GIT_COMMITTER_EMAIL"} {
+		t.Setenv(k, "t")
+	}
+	ctx, r := context.Background(), shell.Exec{}
+	l := feature.NewLayout(t.TempDir())
+	wt := filepath.Join(feature.Dir(l, "feat"), "a")
+	mustMkdir(t, wt)
+	gitRepo(t, wt)
+	run := func(file string) {
+		t.Helper()
+		if err := feature.CheckpointBegin(ctx, r, l, "feat"); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(wt, file), []byte(file), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := feature.CheckpointEnd(ctx, r, l, "feat"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	tests := []struct {
+		name, create, want string
+	}{
+		{name: "first run", create: "x.txt", want: "x.txt"},
+		{name: "second run shows only its own new file", create: "y.txt", want: "y.txt"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			run(tt.create)
+			out, err := exec.Command("git", "-C", wt, "diff", "--name-only", feature.LastRunRef).Output()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := strings.TrimSpace(string(out)); got != tt.want {
+				t.Errorf("diff since last run = %q, want %q", got, tt.want)
+			}
+		})
 	}
 }

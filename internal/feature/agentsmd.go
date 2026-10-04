@@ -8,9 +8,12 @@ import (
 	"text/template"
 )
 
-// GoalPlaceholder is replaced with the first prompt by the pi extension
-// agent/extensions/feature-goal.ts. Keep the two in sync.
-const GoalPlaceholder = "_TBD: set from the first prompt._"
+// GoalPlaceholder is shown until a goal is set (`f goal`; pi's f extension
+// sets it from the first prompt).
+const GoalPlaceholder = "_Not set yet: the first prompt to pi becomes the goal._"
+
+// legacyPlaceholder is what older AGENTS.md files used.
+const legacyPlaceholder = "_TBD: set from the first prompt._"
 
 var agentsTmpl = template.Must(template.New("agents").Parse(`# Feature: {{.Name}}
 
@@ -37,44 +40,36 @@ type agentsRepo struct{ Dir, Instructions string }
 // AgentsMDPath is the feature's generated AGENTS.md.
 func AgentsMDPath(l Layout, name string) string { return filepath.Join(Dir(l, name), "AGENTS.md") }
 
-// WriteAgentsMD (re)generates the feature's AGENTS.md. An empty goal keeps the
-// existing goal, or the placeholder.
-func WriteAgentsMD(l Layout, name, goal string) error {
-	path := AgentsMDPath(l, name)
-	if goal == "" {
-		goal = ExistingGoal(path)
-	}
+// writeAgentsMD renders the feature's AGENTS.md from its info.
+func writeAgentsMD(l Layout, info Info) error {
+	goal := info.Goal
 	if goal == "" {
 		goal = GoalPlaceholder
 	}
-	names, err := Repos(l, name)
-	if err != nil {
-		return err
-	}
-	repos := make([]agentsRepo, 0, len(names))
-	for _, r := range names {
+	repos := make([]agentsRepo, 0, len(info.Repos))
+	for _, r := range info.Repos {
 		ar := agentsRepo{Dir: r}
 		for _, c := range []string{"AGENTS.md", "CLAUDE.md"} {
-			if _, err := os.Stat(filepath.Join(Dir(l, name), r, c)); err == nil {
+			if _, err := os.Stat(filepath.Join(Dir(l, info.Name), r, c)); err == nil {
 				ar.Instructions = r + "/" + c
 				break
 			}
 		}
 		repos = append(repos, ar)
 	}
-	f, err := os.Create(path)
+	f, err := os.Create(AgentsMDPath(l, info.Name))
 	if err != nil {
 		return fmt.Errorf("write AGENTS.md: %w", err)
 	}
 	defer f.Close()
-	if err := agentsTmpl.Execute(f, map[string]any{"Name": name, "Goal": goal, "Repos": repos}); err != nil {
+	if err := agentsTmpl.Execute(f, map[string]any{"Name": info.Name, "Goal": goal, "Repos": repos}); err != nil {
 		return fmt.Errorf("write AGENTS.md: %w", err)
 	}
 	return nil
 }
 
 // ExistingGoal returns the "## Goal" section of an AGENTS.md ("" if missing
-// or still the placeholder).
+// or still a placeholder). Used to migrate features from before feature.json.
 func ExistingGoal(path string) string {
 	raw, err := os.ReadFile(path)
 	if err != nil {
@@ -85,7 +80,7 @@ func ExistingGoal(path string) string {
 		return ""
 	}
 	goal, _, _ := strings.Cut(after, "\n## ")
-	if goal = strings.TrimSpace(goal); goal == GoalPlaceholder {
+	if goal = strings.TrimSpace(goal); goal == GoalPlaceholder || goal == legacyPlaceholder {
 		return ""
 	}
 	return goal

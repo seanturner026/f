@@ -108,7 +108,7 @@ const (
 	OpenCreated OpenResult = "created"
 )
 
-// reviewCommand runs nvim on one repo's live CodeDiff (:PiReview in nvim/pi_comment.lua).
+// reviewCommand runs nvim on one repo's live CodeDiff (:PiReview in nvim/f.lua).
 func reviewCommand(repo string) string { return "nvim -c " + shell.Quote("PiReview "+repo) }
 
 // OpenWorkspace focuses the workspace labelled label, or creates it in dir with

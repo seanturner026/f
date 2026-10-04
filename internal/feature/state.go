@@ -51,30 +51,34 @@ func LoadState(l Layout, name string) (State, error) {
 
 // SaveState writes the feature's state atomically.
 func SaveState(l Layout, name string, s State) error {
-	path := StatePath(l, name)
+	if err := writeJSON(StatePath(l, name), s); err != nil {
+		return fmt.Errorf("save state: %w", err)
+	}
+	return nil
+}
+
+// writeJSON writes v as indented JSON to path atomically (temp file + rename).
+func writeJSON(path string, v any) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return fmt.Errorf("save state: %w", err)
+		return err
 	}
-	raw, err := json.MarshalIndent(s, "", "  ")
+	raw, err := json.MarshalIndent(v, "", "  ")
 	if err != nil {
-		return fmt.Errorf("save state: %w", err)
+		return err
 	}
-	tmp, err := os.CreateTemp(filepath.Dir(path), "state-*.json")
+	tmp, err := os.CreateTemp(filepath.Dir(path), filepath.Base(path)+"-*")
 	if err != nil {
-		return fmt.Errorf("save state: %w", err)
+		return err
 	}
 	defer os.Remove(tmp.Name())
 	if _, err := tmp.Write(append(raw, '\n')); err != nil {
 		tmp.Close()
-		return fmt.Errorf("save state: %w", err)
+		return err
 	}
 	if err := tmp.Close(); err != nil {
-		return fmt.Errorf("save state: %w", err)
+		return err
 	}
-	if err := os.Rename(tmp.Name(), path); err != nil {
-		return fmt.Errorf("save state: %w", err)
-	}
-	return nil
+	return os.Rename(tmp.Name(), path)
 }
 
 // RefreshPRs looks up PRs live and saves them. For repos whose lookup failed,

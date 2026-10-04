@@ -168,3 +168,13 @@ func UpdateRef(ctx context.Context, r Runner, wt, ref, commit string) error {
 func DeleteRef(ctx context.Context, r Runner, wt, ref string) {
 	_, _ = r.Run(ctx, wt, "git", "update-ref", "-d", ref)
 }
+
+// IntentToAdd marks untracked, non-ignored files as intent-to-add (git add -N),
+// so diffs against a revision treat them like any other change. Tracked files
+// and the staged content are unaffected.
+func IntentToAdd(ctx context.Context, r Runner, wt string) error {
+	if _, err := r.Run(ctx, wt, "git", "add", "--intent-to-add", "--", "."); err != nil {
+		return fmt.Errorf("intent-to-add: %w", err)
+	}
+	return nil
+}

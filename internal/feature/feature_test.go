@@ -100,13 +100,11 @@ func TestResolve(t *testing.T) {
 	}
 }
 
-func TestWriteAgentsMD(t *testing.T) {
+func TestSync(t *testing.T) {
 	l := newLayout(t, "feat", "argocd", "ops")
 	if err := os.WriteFile(filepath.Join(feature.Dir(l, "feat"), "argocd", "CLAUDE.md"), nil, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	path := feature.AgentsMDPath(l, "feat")
-
 	tests := []struct {
 		name, goal, wantGoal string
 	}{
@@ -117,17 +115,49 @@ func TestWriteAgentsMD(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if err := feature.WriteAgentsMD(l, "feat", tt.goal); err != nil {
+			info, err := feature.Sync(l, "feat", tt.goal)
+			if err != nil {
 				t.Fatal(err)
 			}
-			if got := feature.ExistingGoal(path); got != tt.wantGoal {
-				t.Errorf("goal = %q, want %q", got, tt.wantGoal)
+			saved, _ := feature.LoadInfo(l, "feat")
+			if info.Goal != tt.wantGoal || saved.Goal != tt.wantGoal {
+				t.Errorf("goal = %q (saved %q), want %q", info.Goal, saved.Goal, tt.wantGoal)
 			}
-			raw, _ := os.ReadFile(path)
+			if strings.Join(saved.Repos, ",") != "argocd,ops" || saved.Root != feature.Dir(l, "feat") {
+				t.Errorf("info = %+v", saved)
+			}
+			raw, _ := os.ReadFile(feature.AgentsMDPath(l, "feat"))
 			for _, want := range []string{"# Feature: feat", "`argocd/` (instructions: `argocd/CLAUDE.md`)", "- `ops/`\n"} {
 				if !strings.Contains(string(raw), want) {
 					t.Errorf("AGENTS.md missing %q", want)
 				}
+			}
+			if tt.wantGoal != "" && !strings.Contains(string(raw), tt.wantGoal) {
+				t.Errorf("AGENTS.md missing goal %q", tt.wantGoal)
+			}
+		})
+	}
+}
+
+func TestSyncMigratesLegacyGoal(t *testing.T) {
+	tests := []struct {
+		name, agents, wantGoal string
+	}{
+		{name: "real goal kept", agents: "# Feature: feat\n\n## Goal\n\nship it\n\n## Repos\n", wantGoal: "ship it"},
+		{name: "legacy placeholder is not a goal", agents: "# Feature: feat\n\n## Goal\n\n_TBD: set from the first prompt._\n\n## Repos\n", wantGoal: ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			l := newLayout(t, "feat", "argocd")
+			if err := os.WriteFile(feature.AgentsMDPath(l, "feat"), []byte(tt.agents), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			info, err := feature.Sync(l, "feat", "")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if info.Goal != tt.wantGoal {
+				t.Errorf("goal = %q, want %q", info.Goal, tt.wantGoal)
 			}
 		})
 	}
