@@ -116,3 +116,55 @@ func IsAncestor(ctx context.Context, r Runner, wt, a, b string) bool {
 	_, err := r.Run(ctx, wt, "git", "merge-base", "--is-ancestor", a, b)
 	return err == nil
 }
+
+// SnapshotCommit records the full working tree (tracked changes and untracked,
+// non-ignored files) as a commit on top of HEAD, without touching the index or
+// any branch. It uses a throwaway index file.
+func SnapshotCommit(ctx context.Context, r Runner, wt string) (string, error) {
+	tmp, err := os.CreateTemp("", "f-index-*")
+	if err != nil {
+		return "", fmt.Errorf("snapshot: %w", err)
+	}
+	index := tmp.Name()
+	tmp.Close()
+	os.Remove(index) // git wants to create it
+	defer os.Remove(index)
+	env := "GIT_INDEX_FILE=" + index
+	if _, err := r.Run(ctx, wt, "env", env, "git", "read-tree", "HEAD"); err != nil {
+		return "", fmt.Errorf("snapshot: read-tree: %w", err)
+	}
+	if _, err := r.Run(ctx, wt, "env", env, "git", "add", "-A"); err != nil {
+		return "", fmt.Errorf("snapshot: add: %w", err)
+	}
+	tree, err := r.Run(ctx, wt, "env", env, "git", "write-tree")
+	if err != nil {
+		return "", fmt.Errorf("snapshot: write-tree: %w", err)
+	}
+	commit, err := r.Run(ctx, wt, "git", "commit-tree", tree, "-p", "HEAD", "-m", "f snapshot")
+	if err != nil {
+		return "", fmt.Errorf("snapshot: commit-tree: %w", err)
+	}
+	return commit, nil
+}
+
+// TreeOf returns the tree object of rev ("" if rev doesn't exist).
+func TreeOf(ctx context.Context, r Runner, wt, rev string) string {
+	tree, err := r.Run(ctx, wt, "git", "rev-parse", "-q", "--verify", rev+"^{tree}")
+	if err != nil {
+		return ""
+	}
+	return tree
+}
+
+// UpdateRef points ref at commit.
+func UpdateRef(ctx context.Context, r Runner, wt, ref, commit string) error {
+	if _, err := r.Run(ctx, wt, "git", "update-ref", ref, commit); err != nil {
+		return fmt.Errorf("update-ref %s: %w", ref, err)
+	}
+	return nil
+}
+
+// DeleteRef removes ref (no error if it doesn't exist).
+func DeleteRef(ctx context.Context, r Runner, wt, ref string) {
+	_, _ = r.Run(ctx, wt, "git", "update-ref", "-d", ref)
+}

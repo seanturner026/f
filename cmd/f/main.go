@@ -63,6 +63,28 @@ func main() {
 		ShellComplete: func(ctx context.Context, c *cli.Command) { printLines(feature.List(d.layout)) },
 		Commands: []*cli.Command{
 			{
+				// Called by agent/extensions/feature-checkpoint.ts around each pi run.
+				Name:   "checkpoint",
+				Hidden: true,
+				Commands: []*cli.Command{
+					{Name: "begin", Action: func(ctx context.Context, c *cli.Command) error {
+						name, err := resolve(d, "")
+						if err != nil {
+							return err
+						}
+						return feature.CheckpointBegin(ctx, d.run, d.layout, name)
+					}},
+					{Name: "end", Action: func(ctx context.Context, c *cli.Command) error {
+						name, err := resolve(d, "")
+						if err != nil {
+							return err
+						}
+						_, err = feature.CheckpointEnd(ctx, d.run, d.layout, name)
+						return err
+					}},
+				},
+			},
+			{
 				Name:  "add",
 				Usage: "add repos to this feature",
 				Flags: []cli.Flag{featureFlag},

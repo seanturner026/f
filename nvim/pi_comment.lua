@@ -5,6 +5,7 @@
 --   :PiSend             send all to pi (via Herdr) and clear             <leader>ps
 --   :PiClear            discard all
 --   :PiReview [repo]    live CodeDiff for one repo (or a tab per repo)
+--   :PiReviewToggle     in a review tab: whole feature ↔ since pi's last run <leader>pr
 --
 -- Works inside an `f` feature: <base>/.features/<feature>/<repo>/...
 -- pi is found via `herdr agent list`: the pi agent whose cwd is the feature root.
@@ -193,6 +194,58 @@ end
 -- labelled with the repo name; the empty starting tab is closed once they're up.
 -- :PiReview [repo]: with a repo (as in f's Herdr repo tabs), just that repo;
 -- without, every repo in the feature, one nvim tab each.
+-- What a review tab compares against.
+local FEATURE = "origin/HEAD..." -- everything since the branch left origin's default branch
+local LAST_RUN = "refs/worktree/pi-last" -- the code before pi's last run (feature-checkpoint.ts)
+
+-- open_codediff opens CodeDiff for each repo against rev, one at a time
+-- (CodeDiff opens its tab asynchronously, and concurrent launches get mixed
+-- up), tagging each new tab with its repo and rev; then calls done().
+local function open_codediff(root, repos, rev, done)
+  local function open(i)
+    local repo = repos[i]
+    if not repo then
+      return done and done()
+    end
+    local before = {}
+    for _, t in ipairs(vim.api.nvim_list_tabpages()) do
+      before[t] = true
+    end
+    vim.cmd("CodeDiff --repo " .. vim.fn.fnameescape(root .. "/" .. repo) .. " " .. rev)
+    local waited = 0
+    local function poll()
+      for _, t in ipairs(vim.api.nvim_list_tabpages()) do
+        if not before[t] then
+          vim.api.nvim_tabpage_set_var(t, "pi_repo", repo)
+          vim.api.nvim_tabpage_set_var(t, "pi_rev", rev)
+          vim.cmd("redrawtabline")
+          return open(i + 1)
+        end
+      end
+      waited = waited + 50
+      if waited >= 10000 then
+        return open(i + 1) -- no changes / no tab for this repo
+      end
+      vim.defer_fn(poll, 50)
+    end
+    poll()
+  end
+  open(1)
+end
+
+-- Close tab if it's an untouched empty one (nvim's starting tab).
+local function close_if_empty(tab)
+  if not vim.api.nvim_tabpage_is_valid(tab) or #vim.api.nvim_list_tabpages() < 2 then
+    return
+  end
+  local buf = vim.api.nvim_win_get_buf(vim.api.nvim_tabpage_get_win(tab))
+  if vim.api.nvim_buf_get_name(buf) == "" and not vim.bo[buf].modified then
+    vim.cmd("tabclose " .. vim.api.nvim_tabpage_get_number(tab))
+  end
+end
+
+-- :PiReview [repo]: with a repo (as in f's Herdr repo tabs), just that repo;
+-- without, every repo in the feature, one nvim tab each.
 local function review(opts)
   local root, repos = feature_repos()
   if not root then
@@ -209,42 +262,34 @@ local function review(opts)
     vim.o.showtabline = 2
   end
   local first = vim.api.nvim_get_current_tabpage()
-  -- CodeDiff opens its tab asynchronously, and concurrent launches get mixed
-  -- up, so open one repo at a time and wait for its tab before the next.
-  local function open(i)
-    local repo = repos[i]
-    if not repo then
-      local buf = vim.api.nvim_win_get_buf(vim.api.nvim_tabpage_get_win(first))
-      if #vim.api.nvim_list_tabpages() > 1 and vim.api.nvim_buf_get_name(buf) == "" and not vim.bo[buf].modified then
-        vim.cmd("tabclose " .. vim.api.nvim_tabpage_get_number(first))
-      end
-      return
-    end
-    local before = {}
-    for _, t in ipairs(vim.api.nvim_list_tabpages()) do
-      before[t] = true
-    end
-    -- origin/HEAD... = everything since the branch left origin's default
-    -- branch (committed + uncommitted), still live-updating.
-    vim.cmd("CodeDiff --repo " .. vim.fn.fnameescape(root .. "/" .. repo) .. " origin/HEAD...")
-    local waited = 0
-    local function poll()
-      for _, t in ipairs(vim.api.nvim_list_tabpages()) do
-        if not before[t] then
-          vim.api.nvim_tabpage_set_var(t, "pi_repo", repo)
-          vim.cmd("redrawtabline")
-          return open(i + 1)
-        end
-      end
-      waited = waited + 50
-      if waited >= 10000 then
-        return open(i + 1) -- no changes / no tab for this repo
-      end
-      vim.defer_fn(poll, 50)
-    end
-    poll()
+  open_codediff(root, repos, FEATURE, function()
+    close_if_empty(first)
+  end)
+end
+
+-- :PiReviewToggle (<leader>pr) in a review tab: switch between the whole
+-- feature and what pi's last run changed.
+local function review_toggle()
+  local tab = vim.api.nvim_get_current_tabpage()
+  local ok_repo, repo = pcall(vim.api.nvim_tabpage_get_var, tab, "pi_repo")
+  if not ok_repo then
+    return vim.notify("PiReview: not a review tab", vim.log.levels.WARN)
   end
-  open(1)
+  local root = feature_of(nil)
+  local ok_rev, rev = pcall(vim.api.nvim_tabpage_get_var, tab, "pi_rev")
+  local next_rev = (ok_rev and rev == LAST_RUN) and FEATURE or LAST_RUN
+  if next_rev == LAST_RUN then
+    local res = vim.system({ "git", "-C", root .. "/" .. repo, "rev-parse", "-q", "--verify", LAST_RUN }):wait()
+    if res.code ~= 0 then
+      return vim.notify("PiReview: pi hasn't changed code in " .. repo .. " yet", vim.log.levels.WARN)
+    end
+  end
+  open_codediff(root, { repo }, next_rev, function()
+    if vim.api.nvim_tabpage_is_valid(tab) then
+      vim.cmd("tabclose " .. vim.api.nvim_tabpage_get_number(tab))
+    end
+    vim.notify(repo .. ": " .. (next_rev == LAST_RUN and "since pi's last run" or "whole feature"))
+  end)
 end
 
 M._repos = feature_repos -- for tests
@@ -261,11 +306,13 @@ function M.setup()
       return select(2, feature_repos()) or {}
     end,
   })
+  vim.api.nvim_create_user_command("PiReviewToggle", review_toggle, { desc = "Review: whole feature ↔ last run" })
 
   vim.keymap.set("n", "<leader>pc", "<cmd>PiComment<cr>", { desc = "[P]i [C]omment" })
   vim.keymap.set("x", "<leader>pc", ":PiComment<cr>", { desc = "[P]i [C]omment" })
   vim.keymap.set("n", "<leader>ps", "<cmd>PiSend<cr>", { desc = "[P]i [S]end comments" })
   vim.keymap.set("n", "<leader>pl", "<cmd>PiComments<cr>", { desc = "[P]i [L]ist comments" })
+  vim.keymap.set("n", "<leader>pr", "<cmd>PiReviewToggle<cr>", { desc = "[P]i [R]eview: feature ↔ last run" })
 end
 
 M._message = message -- for tests

@@ -22,7 +22,7 @@ import (
 )
 
 // Subcommand names can't be feature names, or `f <name>` would be ambiguous.
-var reserved = map[string]bool{"add": true, "prs": true, "help": true, "completion": true}
+var reserved = map[string]bool{"add": true, "prs": true, "checkpoint": true, "help": true, "completion": true}
 
 // deps are what the actions need: where features live and how to run commands.
 type deps struct {
