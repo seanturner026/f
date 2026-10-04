@@ -49,7 +49,24 @@ func main() {
 		ShellComplete: func(ctx context.Context, c *cli.Command) { printLines(feature.List(d.layout)) },
 		Commands: []*cli.Command{
 			{
-				// Called by agent/extensions/feature-checkpoint.ts around each pi run.
+				// Called by agent/extensions/guard.ts when pi starts.
+				Name:   "creds",
+				Hidden: true,
+				Action: func(ctx context.Context, c *cli.Command) error { return creds(ctx) },
+			},
+			{
+				// Called by agent/extensions/guard.ts before every bash command.
+				Name:   "guard",
+				Hidden: true,
+				Commands: []*cli.Command{{
+					Name: "check",
+					Action: func(ctx context.Context, c *cli.Command) error {
+						return guardCheck(strings.Join(c.Args().Slice(), " "))
+					},
+				}},
+			},
+			{
+				// Called by agent/extensions/f.ts around each pi run.
 				Name:   "checkpoint",
 				Hidden: true,
 				Commands: []*cli.Command{

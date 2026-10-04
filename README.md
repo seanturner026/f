@@ -31,3 +31,18 @@ worktree (`f -h` for commands).
 - Plumbing used by pi (`agent/extensions/f.ts`) and nvim (`nvim/f.lua`):
   `f goal`, `f comment`, `f checkpoint`, `f prs --json/--add`.
 
+## Guard
+
+pi never uses admin AWS profiles or production kube contexts
+(`agent/extensions/guard.ts`, logic in `internal/guard`):
+
+- At start, `f creds` writes filtered copies of `~/.aws/config`,
+  `~/.aws/credentials`, and the kubeconfig to `~/.cache/f/guard/` and points
+  pi's environment at them. Every command and script pi runs (aws, kubectl,
+  terraform, boto3, ...) only sees allowed profiles/contexts.
+- Before each bash command, `f guard check` blocks naming a denied
+  profile/context/EKS cluster, or pointing back at the real files.
+- Rules: generic defaults (deny profiles `*admin*`, `*prod*`; contexts
+  `*prod*`) plus machine-specific `~/.config/f/guard.json`, e.g.
+  `{"allow_profiles": ["team-eks-admin"], "default_profile": "team-read-only"}`.
+
