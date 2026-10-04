@@ -47,3 +47,44 @@ func TestPRStatusIsActive(t *testing.T) {
 		})
 	}
 }
+
+func TestPRSummary(t *testing.T) {
+	tests := []struct {
+		name string
+		prs  []model.PR
+		want string
+	}{
+		{name: "none", want: ""},
+		{name: "ordered by status", prs: []model.PR{{Status: model.PRStatusMerged}, {Status: model.PRStatusOpen}, {Status: model.PRStatusMerged}}, want: "1 open · 2 merged"},
+		{name: "draft and closed", prs: []model.PR{{Status: model.PRStatusClosed}, {Status: model.PRStatusDraft}}, want: "1 draft · 1 closed"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := model.PRSummary(tt.prs); got != tt.want {
+				t.Errorf("got %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestPRClipboard(t *testing.T) {
+	tests := []struct {
+		name string
+		prs  []model.PR
+		want string
+	}{
+		{name: "none", want: ""},
+		{
+			name: "one per line",
+			prs:  []model.PR{{URL: "https://gh/a/pull/1", Title: "Add ACK"}, {URL: "https://gh/b/pull/2", Title: "Add IRSA"}},
+			want: "https://gh/a/pull/1: Add ACK\nhttps://gh/b/pull/2: Add IRSA\n",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := model.PRClipboard(tt.prs); got != tt.want {
+				t.Errorf("got %q, want %q", got, tt.want)
+			}
+		})
+	}
+}

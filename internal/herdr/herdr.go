@@ -177,3 +177,37 @@ func tabRunning(ctx context.Context, r Runner, ws, dir, tabLabel, cmd string) er
 	}
 	return nil
 }
+
+// AgentStatus is a Herdr agent's lifecycle state.
+type AgentStatus string
+
+const (
+	AgentWorking AgentStatus = "working" // running a turn
+	AgentBlocked AgentStatus = "blocked" // waiting at an approval or question
+	AgentDone    AgentStatus = "done"    // finished a turn you haven't looked at
+	AgentIdle    AgentStatus = "idle"    // ready for input, already seen
+	AgentUnknown AgentStatus = "unknown"
+)
+
+// AgentStatuses returns the status of each running pi agent, keyed by its cwd.
+func AgentStatuses(ctx context.Context, r Runner) (map[string]AgentStatus, error) {
+	var resp struct {
+		Result struct {
+			Agents []struct {
+				Agent  string      `json:"agent"`
+				Status AgentStatus `json:"agent_status"`
+				Cwd    string      `json:"cwd"`
+			} `json:"agents"`
+		} `json:"result"`
+	}
+	if err := call(ctx, r, &resp, "agent", "list"); err != nil {
+		return nil, fmt.Errorf("agent list: %w", err)
+	}
+	out := map[string]AgentStatus{}
+	for _, a := range resp.Result.Agents {
+		if a.Agent == "pi" {
+			out[a.Cwd] = a.Status
+		}
+	}
+	return out, nil
+}

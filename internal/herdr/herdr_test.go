@@ -97,3 +97,29 @@ func TestOpenWorkspaceTabOrder(t *testing.T) {
 		})
 	}
 }
+
+func TestAgentStatuses(t *testing.T) {
+	list := `{"result":{"agents":[
+		{"agent":"pi","agent_status":"blocked","cwd":"/f/a"},
+		{"agent":"pi","agent_status":"working","cwd":"/f/b"},
+		{"agent":"claude","agent_status":"idle","cwd":"/f/c"}]}}`
+	got, err := herdr.AgentStatuses(context.Background(), fakeRunner{out: list})
+	if err != nil {
+		t.Fatal(err)
+	}
+	tests := []struct {
+		cwd  string
+		want herdr.AgentStatus
+	}{
+		{cwd: "/f/a", want: herdr.AgentBlocked},
+		{cwd: "/f/b", want: herdr.AgentWorking},
+		{cwd: "/f/c", want: ""}, // not pi
+	}
+	for _, tt := range tests {
+		t.Run(tt.cwd, func(t *testing.T) {
+			if got[tt.cwd] != tt.want {
+				t.Errorf("got %q, want %q", got[tt.cwd], tt.want)
+			}
+		})
+	}
+}

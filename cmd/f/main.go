@@ -17,7 +17,7 @@ const help = `f: start a pi session that works across several repos, each on its
 Usage:
   f <name>         start a feature: pick repos (fzf) → pi opens, ready for your prompt
                    reopens the feature (continuing its pi session) if it exists
-  f                pick an existing feature to reopen
+  f                picker: features by what needs you (pi status + PRs) → jump there
   f add [repo...]  add repos to the current feature (fzf if none), with Herdr tabs
   f prs            PRs for the current feature (saved state, instant); opens open ones
 
@@ -27,6 +27,7 @@ Flags:
   -f <feature>     feature for add/prs (default: from cwd)
   -r               prs: refresh live from GitHub (pi does this after every turn)
   -n, --json       prs: don't open the browser / print JSON
+  -c               prs: copy "url: title" lines to the clipboard
 
 Inside Herdr each feature gets its own workspace (chat · nvim · <repo>… · shell, each
 repo tab a live CodeDiff); outside,
@@ -81,6 +82,7 @@ func main() {
 					&cli.BoolFlag{Name: "no-open", Aliases: []string{"n"}, Usage: "don't open in browser"},
 					&cli.BoolFlag{Name: "json", Usage: "machine-readable output"},
 					&cli.StringFlag{Name: "add", Usage: "record a PR URL"},
+					&cli.BoolFlag{Name: "copy", Aliases: []string{"c"}, Usage: "copy url: title lines"},
 				},
 				Action: func(ctx context.Context, c *cli.Command) error {
 					return prs(ctx, d, c.String("feature"), prsOptions{
@@ -88,6 +90,7 @@ func main() {
 						noOpen:  c.Bool("no-open") || c.Bool("json"),
 						asJSON:  c.Bool("json"),
 						addURL:  c.String("add"),
+						copy:    c.Bool("copy"),
 					})
 				},
 			},

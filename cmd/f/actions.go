@@ -57,12 +57,11 @@ func resolve(d deps, explicit string) (string, error) {
 // an existing feature to reopen.
 func start(ctx context.Context, d deps, name string, repos []string, prompt string) error {
 	if name == "" {
-		features := feature.List(d.layout)
-		if len(features) == 0 {
+		if len(feature.List(d.layout)) == 0 {
 			fmt.Print(help)
 			return nil
 		}
-		picked, err := pickOne(features, "feature> ", "ENTER open · ESC cancel")
+		picked, err := pickFeature(ctx, d)
 		if err != nil || picked == "" {
 			return err
 		}
@@ -211,6 +210,7 @@ type prsOptions struct {
 	noOpen  bool   // don't open the browser
 	asJSON  bool   // print JSON only
 	addURL  string // record this PR URL and exit
+	copy    bool   // copy "url: title" lines to the clipboard
 }
 
 // prsOutput is the --json shape of `f prs`.
@@ -253,6 +253,9 @@ func prs(ctx context.Context, d deps, explicit string, opts prsOptions) error {
 		}
 		return json.NewEncoder(os.Stdout).Encode(out)
 	}
+	if opts.copy {
+		return copyPRs(state.PRs)
+	}
 	printPRs(d, name, state.PRs, errs)
 	if !opts.refresh && errs == nil {
 		info("as of %s ago (-r to refresh)", time.Since(state.PRsRefreshedAt).Round(time.Second))
@@ -271,6 +274,32 @@ func prs(ctx context.Context, d deps, explicit string, opts prsOptions) error {
 			return fmt.Errorf("open browser: %w", err)
 		}
 	}
+	return nil
+}
+
+// copyPRs puts the active PRs (or all, if none are active) on the clipboard.
+func copyPRs(prs []model.PR) error {
+	var active []model.PR
+	for _, p := range prs {
+		if p.Status.IsActive() {
+			active = append(active, p)
+		}
+	}
+	if len(active) == 0 {
+		active = prs
+	}
+	if len(active) == 0 {
+		info("no PRs")
+		return nil
+	}
+	text := model.PRClipboard(active)
+	cmd := exec.Command("pbcopy")
+	cmd.Stdin = strings.NewReader(text)
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("copy to clipboard: %w", err)
+	}
+	fmt.Print(text)
+	ok("copied %d PR(s)", len(active))
 	return nil
 }
 

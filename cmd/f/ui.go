@@ -42,7 +42,13 @@ func fzf(items []string, args ...string) ([]string, error) {
 	if err != nil {
 		return nil, fmt.Errorf("fzf: %w", err)
 	}
-	return strings.Fields(string(out)), nil
+	var picked []string
+	for _, l := range strings.Split(strings.TrimRight(string(out), "\n"), "\n") {
+		if l != "" {
+			picked = append(picked, l)
+		}
+	}
+	return picked, nil
 }
 
 // pickRepos multi-selects from all, excluding ones in exclude.
@@ -58,13 +64,4 @@ func pickRepos(all, exclude []string) ([]string, error) {
 		}
 	}
 	return fzf(items, "--multi", "--prompt=repos> ", "--header=TAB select · ENTER confirm · ESC cancel")
-}
-
-// pickOne selects a single item ("" if cancelled).
-func pickOne(items []string, prompt, header string) (string, error) {
-	picked, err := fzf(items, "--prompt="+prompt, "--header="+header)
-	if err != nil || len(picked) == 0 {
-		return "", err
-	}
-	return picked[0], nil
 }
