@@ -16,6 +16,7 @@ type Info struct {
 	Root  string   `json:"root"`
 	Repos []string `json:"repos"`
 	Goal  string   `json:"goal,omitempty"`
+	Issue string   `json:"issue,omitempty"` // beads issue for this feature
 }
 
 // InfoPath is the feature's info file.
@@ -37,6 +38,19 @@ func LoadInfo(l Layout, name string) (Info, error) {
 		return Info{}, fmt.Errorf("load feature info: %w", err)
 	}
 	return info, nil
+}
+
+// SetIssue records the feature's beads issue and regenerates AGENTS.md.
+func SetIssue(l Layout, name, issue string) (Info, error) {
+	info, err := LoadInfo(l, name)
+	if err != nil {
+		return Info{}, err
+	}
+	info.Issue = issue
+	if err := writeJSON(InfoPath(l, name), info); err != nil {
+		return Info{}, fmt.Errorf("save feature info: %w", err)
+	}
+	return Sync(l, name, "")
 }
 
 // Sync refreshes the feature's info (repos from disk; goal if non-empty,

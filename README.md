@@ -46,3 +46,16 @@ pi never uses admin AWS profiles or production kube contexts
   `*prod*`) plus machine-specific `~/.config/f/guard.json`, e.g.
   `{"allow_profiles": ["team-eks-admin"], "default_profile": "team-read-only"}`.
 
+## Beads
+
+One beads db for all features: `~/code/features/.beads` (local, metrics off).
+
+- Every feature gets a beads issue (`f <name>`; older features on next reopen),
+  id in `.context/feature.json`. The goal (first prompt) is its description.
+- Multi-step work: pi plans steps as child issues with dependencies and works
+  them in `bd ready` order (instructions in the feature's AGENTS.md).
+- The picker shows progress (`3/5 done · next: …`), synced after each pi run.
+- Cleanup closes the issue (with merged PR links). If plan steps are still
+  open, or the feature was removed with unmerged work, it stays open with a note.
+- History: `bd list --status closed`.
+

@@ -128,3 +128,23 @@ func CommentsMessage(comments []Comment) string {
 	}
 	return b.String()
 }
+
+// Plan is the progress of a feature's beads issue: its child issues.
+type Plan struct {
+	Issue string `json:"issue"`
+	Total int    `json:"total"`
+	Done  int    `json:"done"`
+	Next  string `json:"next,omitempty"` // first ready child
+}
+
+// PlanSummary is e.g. "3/5 done · next: upgrade webapp" ("" without children).
+func PlanSummary(p Plan) string {
+	if p.Total == 0 {
+		return ""
+	}
+	s := fmt.Sprintf("%d/%d done", p.Done, p.Total)
+	if p.Next != "" {
+		s += " · next: " + p.Next
+	}
+	return s
+}

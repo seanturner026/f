@@ -26,6 +26,17 @@ var ErrBadPRURL = errors.New("not a GitHub pull request URL")
 type State struct {
 	PRs            []model.PR `json:"prs"`
 	PRsRefreshedAt time.Time  `json:"prs_refreshed_at,omitzero"`
+	Plan           model.Plan `json:"plan,omitzero"` // beads progress, synced after each pi run
+}
+
+// SavePlan records the feature's beads progress.
+func SavePlan(l Layout, name string, p model.Plan) error {
+	s, err := LoadState(l, name)
+	if err != nil {
+		return err
+	}
+	s.Plan = p
+	return SaveState(l, name, s)
 }
 
 // StatePath is the feature's state file.

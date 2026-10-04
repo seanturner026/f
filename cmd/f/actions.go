@@ -15,6 +15,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/seanturner026/pi/internal/beads"
 	"github.com/seanturner026/pi/internal/feature"
 	"github.com/seanturner026/pi/internal/herdr"
 	"github.com/seanturner026/pi/internal/model"
@@ -22,7 +23,7 @@ import (
 )
 
 // Subcommand names can't be feature names, or `f <name>` would be ambiguous.
-var reserved = map[string]bool{"creds": true, "guard": true, "add": true, "prs": true, "goal": true, "comment": true, "checkpoint": true, "help": true, "completion": true}
+var reserved = map[string]bool{"plan": true, "creds": true, "guard": true, "add": true, "prs": true, "goal": true, "comment": true, "checkpoint": true, "help": true, "completion": true}
 
 // deps are what the actions need: where features live and how to run commands.
 type deps struct {
@@ -69,7 +70,7 @@ func ensureInfo(d deps, name string) error {
 }
 
 // goal prints the feature's goal, or sets it (regenerating AGENTS.md).
-func goal(d deps, explicit, text string) error {
+func goal(ctx context.Context, d deps, explicit, text string) error {
 	name, err := resolve(d, explicit)
 	if err != nil {
 		return err
@@ -85,8 +86,14 @@ func goal(d deps, explicit, text string) error {
 		fmt.Println(info.Goal)
 		return nil
 	}
-	_, err = feature.Sync(d.layout, name, text)
-	return err
+	info, err := feature.Sync(d.layout, name, text)
+	if err != nil {
+		return err
+	}
+	if info.Issue != "" {
+		return beads.SetDescription(ctx, d.run, d.layout.Base, info.Issue, text)
+	}
+	return nil
 }
 
 // start creates a feature, or reopens it if it exists. With no name, it picks
@@ -104,6 +111,7 @@ func start(ctx context.Context, d deps, name string, repos []string, prompt stri
 		if err := ensureInfo(d, picked); err != nil {
 			return err
 		}
+		ensureIssue(ctx, d, picked)
 		return launch(ctx, d, picked, "", true)
 	}
 	if err := checkName(name); err != nil {
@@ -113,6 +121,7 @@ func start(ctx context.Context, d deps, name string, repos []string, prompt stri
 		if err := ensureInfo(d, name); err != nil {
 			return err
 		}
+		ensureIssue(ctx, d, name)
 		return launch(ctx, d, name, "", true)
 	}
 
@@ -144,6 +153,7 @@ func start(ctx context.Context, d deps, name string, repos []string, prompt stri
 	if _, err := feature.Sync(d.layout, name, prompt); err != nil {
 		return err
 	}
+	ensureIssue(ctx, d, name)
 	return launch(ctx, d, name, prompt, false)
 }
 
@@ -400,6 +410,9 @@ func cleanMerged(ctx context.Context, d deps, ask bool) []string {
 	}
 	var removed []string
 	for _, name := range done {
+		if note := closeIssue(ctx, d, name); note != "" {
+			fmt.Println(dim(name + ": " + note))
+		}
 		if err := feature.Remove(ctx, d.run, d.layout, name, false); err != nil {
 			fmt.Printf("%s %v\n", red("cleanup:"), err)
 			continue

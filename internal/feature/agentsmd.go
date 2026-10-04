@@ -33,7 +33,16 @@ This session works across these git worktrees, all on branch ` + "`{{.Name}}`" +
 - Run git commands inside the relevant repo directory; this root is not a git repo.
 - One PR per repo, from branch ` + "`{{.Name}}`" + `.
 - ` + "`.context/`" + ` holds feature state managed by ` + "`f`" + ` (e.g. ` + "`.context/state.json`" + ` lists this feature's PRs). Read it when useful; don't edit it.
-`))
+{{if .Issue}}
+## Plan (beads)
+
+This feature is beads issue ` + "`{{.Issue}}`" + `. For multi-step work, plan the steps as child issues and work through them:
+
+- Create steps: ` + "`bd create \"<step>\" --parent {{.Issue}} --description \"<repos, what, how to verify>\"`" + `
+- Order them: ` + "`bd dep add <later-id> <earlier-id>`" + ` (later depends on earlier)
+- Next step: ` + "`bd ready --parent {{.Issue}}`" + `; close each as its PR lands: ` + "`bd close <id> --reason \"<PR url>\"`" + `
+- One-off changes don't need child issues. Run ` + "`bd prime`" + ` for the full bd workflow.
+{{end}}`))
 
 type agentsRepo struct{ Dir, Instructions string }
 
@@ -62,7 +71,7 @@ func writeAgentsMD(l Layout, info Info) error {
 		return fmt.Errorf("write AGENTS.md: %w", err)
 	}
 	defer f.Close()
-	if err := agentsTmpl.Execute(f, map[string]any{"Name": info.Name, "Goal": goal, "Repos": repos}); err != nil {
+	if err := agentsTmpl.Execute(f, map[string]any{"Name": info.Name, "Goal": goal, "Repos": repos, "Issue": info.Issue}); err != nil {
 		return fmt.Errorf("write AGENTS.md: %w", err)
 	}
 	return nil

@@ -132,3 +132,22 @@ func TestCommentsMessage(t *testing.T) {
 		})
 	}
 }
+
+func TestPlanSummary(t *testing.T) {
+	tests := []struct {
+		name string
+		plan model.Plan
+		want string
+	}{
+		{name: "no children", plan: model.Plan{Issue: "f-1"}, want: ""},
+		{name: "with next", plan: model.Plan{Total: 5, Done: 3, Next: "upgrade webapp"}, want: "3/5 done · next: upgrade webapp"},
+		{name: "all done", plan: model.Plan{Total: 2, Done: 2}, want: "2/2 done"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := model.PlanSummary(tt.plan); got != tt.want {
+				t.Errorf("got %q, want %q", got, tt.want)
+			}
+		})
+	}
+}

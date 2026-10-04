@@ -54,6 +54,7 @@ type pickerRow struct {
 	name   string
 	status featureStatus
 	prs    []model.PR
+	plan   model.Plan
 }
 
 // pickerRows gathers each feature's pi status (from Herdr, if available) and
@@ -68,7 +69,7 @@ func pickerRows(ctx context.Context, d deps) []pickerRow {
 	for _, name := range feature.List(d.layout) {
 		s, running := agents[feature.Dir(d.layout, name)]
 		state, _ := feature.LoadState(d.layout, name)
-		rows = append(rows, pickerRow{name: name, status: toFeatureStatus(s, running), prs: state.PRs})
+		rows = append(rows, pickerRow{name: name, status: toFeatureStatus(s, running), prs: state.PRs, plan: state.Plan})
 	}
 	sort.SliceStable(rows, func(i, j int) bool { return statusRank[rows[i].status] < statusRank[rows[j].status] })
 	return rows
@@ -126,12 +127,15 @@ func pickerLines(rows []pickerRow) []string {
 	lines := make([]string, len(rows))
 	for i, r := range rows {
 		status := statusStyle[r.status](fmt.Sprintf("%-9s", r.status))
-		prs := ""
+		var extra []string
 		if s := model.PRSummary(r.prs); s != "" {
-			prs = dim("PRs: " + s)
+			extra = append(extra, "PRs: "+s)
+		}
+		if s := model.PlanSummary(r.plan); s != "" {
+			extra = append(extra, s)
 		}
 		// name is the first tab-separated field; that's what we return.
-		lines[i] = fmt.Sprintf("%s\t%-*s  %s  %s", r.name, width, r.name, status, prs)
+		lines[i] = fmt.Sprintf("%s\t%-*s  %s  %s", r.name, width, r.name, status, dim(strings.Join(extra, " · ")))
 	}
 	return lines
 }
@@ -156,11 +160,20 @@ func removeFeature(ctx context.Context, d deps, name string) string {
 		}
 		force = true
 	}
+	issueNote := ""
+	if force {
+		keepIssueOpen(ctx, d, name, problems)
+	} else {
+		issueNote = closeIssue(ctx, d, name)
+	}
 	if err := feature.Remove(ctx, d.run, d.layout, name, force); err != nil {
 		return red(err.Error())
 	}
 	if !d.noHerdr {
 		_ = herdr.CloseWorkspace(ctx, d.run, name)
+	}
+	if issueNote != "" {
+		return green("removed "+name) + dim(" · "+issueNote)
 	}
 	return green("removed " + name)
 }

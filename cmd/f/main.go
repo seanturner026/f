@@ -49,6 +49,15 @@ func main() {
 		ShellComplete: func(ctx context.Context, c *cli.Command) { printLines(feature.List(d.layout)) },
 		Commands: []*cli.Command{
 			{
+				// Called by agent/extensions/f.ts after each pi run: beads progress for the picker.
+				Name:   "plan",
+				Hidden: true,
+				Commands: []*cli.Command{{
+					Name:   "sync",
+					Action: func(ctx context.Context, c *cli.Command) error { return planSync(ctx, d) },
+				}},
+			},
+			{
 				// Called by agent/extensions/guard.ts when pi starts.
 				Name:   "creds",
 				Hidden: true,
@@ -130,7 +139,7 @@ func main() {
 				ArgsUsage: "[text]",
 				Flags:     []cli.Flag{featureFlag},
 				Action: func(ctx context.Context, c *cli.Command) error {
-					return goal(d, c.String("feature"), strings.Join(c.Args().Slice(), " "))
+					return goal(ctx, d, c.String("feature"), strings.Join(c.Args().Slice(), " "))
 				},
 			},
 			{

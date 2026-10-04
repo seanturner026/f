@@ -8,13 +8,15 @@
  *   before pi's last code change (nvim: <leader>pr in a repo tab).
  * - PRs: footer from `f prs --json` (instant), refreshed after each run;
  *   `gh pr create` output is recorded at once (`f prs --add`); /prs opens them.
+ * - Plan: after each run, `f plan sync` saves the beads issue's progress for
+ *   the picker (bd is too slow to query when the picker opens).
  */
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { isBashToolResult, type ExtensionAPI, type ExtensionContext } from "@earendil-works/pi-coding-agent";
 
 // .context/feature.json (feature.Info in internal/feature/info.go).
-type FeatureInfo = { name: string; root: string; repos: string[]; goal?: string };
+type FeatureInfo = { name: string; root: string; repos: string[]; goal?: string; issue?: string };
 // `f prs --json` (model.PR in internal/model).
 type PRStatus = "draft" | "open" | "merged" | "closed";
 type PR = { repo: string; number: number; url: string; status: PRStatus };
@@ -53,6 +55,7 @@ export default function (pi: ExtensionAPI) {
 
 	pi.on("session_start", async (_e, ctx) => {
 		background(renderPRs(ctx, false).then(() => renderPRs(ctx, true)));
+		if (featureInfo(ctx.cwd)?.issue) background(f(ctx, "plan", "sync"));
 	});
 
 	pi.on("tool_result", async (event, ctx) => {
@@ -88,7 +91,8 @@ export default function (pi: ExtensionAPI) {
 		running = true;
 		const prompt = event.prompt.trim();
 		try {
-			if (!info.goal && prompt) await f(ctx, "goal", prompt);
+			// Background: also sets the beads description (bd is ~0.5s).
+			if (!info.goal && prompt) background(f(ctx, "goal", prompt));
 			// Awaited: the snapshot must exist before pi starts editing.
 			const res = await f(ctx, "checkpoint", "begin");
 			if (res.code !== 0 && ctx.mode === "tui") ctx.ui.notify(`f checkpoint: ${res.stderr.trim()}`, "warning");
@@ -102,5 +106,6 @@ export default function (pi: ExtensionAPI) {
 		running = false;
 		await f(ctx, "checkpoint", "end").catch(() => {});
 		background(renderPRs(ctx, true));
+		if (featureInfo(ctx.cwd)?.issue) background(f(ctx, "plan", "sync"));
 	});
 }
