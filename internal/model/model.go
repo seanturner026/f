@@ -65,12 +65,12 @@ func PRSummary(prs []PR) string {
 	return strings.Join(parts, " · ")
 }
 
-// PRClipboard formats PRs one per line as "url: title". Stacked PRs are drawn
-// as a tree under the lowest one in their repo:
+// PRClipboard formats PRs one per line as "url: title". Stacked PRs above the
+// lowest one in their repo get one level of tree indentation:
 //
 //	url: bottom
 //	└─ url: middle
-//	   └─ url: top
+//	└─ url: top
 func PRClipboard(prs []PR) string {
 	lowest := map[string]int{} // repo -> lowest stack position present
 	for _, p := range prs {
@@ -80,8 +80,8 @@ func PRClipboard(prs []PR) string {
 	}
 	var b strings.Builder
 	for _, p := range prs {
-		if depth := p.Stack - lowest[p.Repo]; p.Stack > 0 && depth > 0 {
-			b.WriteString(strings.Repeat("   ", depth-1) + "└─ ")
+		if p.Stack > lowest[p.Repo] && lowest[p.Repo] > 0 {
+			b.WriteString("└─ ")
 		}
 		fmt.Fprintf(&b, "%s: %s\n", p.URL, p.Title)
 	}

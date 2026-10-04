@@ -135,7 +135,8 @@ func launch(ctx context.Context, d deps, name, prompt string, reopen bool) error
 		args = append(args, prompt)
 	}
 	dir := feature.Dir(d.layout, name)
-	if !d.noHerdr && herdr.Inside() && herdr.Available(ctx, d.run) {
+	// Inside Herdr, its server is up by definition: skip the status round trip.
+	if !d.noHerdr && herdr.Inside() {
 		repos, err := feature.Repos(d.layout, name)
 		if err != nil {
 			return err
@@ -321,7 +322,7 @@ func printPRs(d deps, name string, list []model.PR, errs map[string]error) {
 		for _, p := range byRepo[repo] {
 			indent := ""
 			if p.Stack > 1 {
-				indent = strings.Repeat("   ", p.Stack-2) + "└─ "
+				indent = "└─ "
 			}
 			fmt.Printf("  %s#%d %-7s %s\n  %s       %s\n", indent, p.Number, p.Status, p.Title, strings.Repeat(" ", len(indent)), dim(p.URL))
 		}

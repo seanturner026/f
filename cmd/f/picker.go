@@ -57,8 +57,9 @@ type pickerRow struct {
 // pickerRows gathers each feature's pi status (from Herdr, if available) and
 // saved PRs, ordered by what needs attention.
 func pickerRows(ctx context.Context, d deps) []pickerRow {
+	// One herdr call; if Herdr isn't up it fails and every feature reads "closed".
 	var agents map[string]herdr.AgentStatus
-	if !d.noHerdr && herdr.Available(ctx, d.run) {
+	if !d.noHerdr {
 		agents, _ = herdr.AgentStatuses(ctx, d.run)
 	}
 	var rows []pickerRow

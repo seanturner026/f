@@ -87,7 +87,7 @@ func TestPRClipboard(t *testing.T) {
 				{Repo: "a", URL: "u3", Title: "top", Stack: 3},
 				{Repo: "b", URL: "u4", Title: "flat"},
 			},
-			want: "u1: bottom\n└─ u2: middle\n   └─ u3: top\nu4: flat\n",
+			want: "u1: bottom\n└─ u2: middle\n└─ u3: top\nu4: flat\n",
 		},
 		{
 			name: "merged bottom filtered out: tree starts at lowest present",
