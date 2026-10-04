@@ -13,6 +13,7 @@ import (
 	"sync"
 	"syscall"
 	"time"
+	"unicode/utf8"
 
 	"github.com/seanturner026/pi/internal/feature"
 	"github.com/seanturner026/pi/internal/herdr"
@@ -319,12 +320,9 @@ func printPRs(d deps, name string, list []model.PR, errs map[string]error) {
 		case len(byRepo[repo]) == 0:
 			fmt.Println(dim("  no PR"))
 		}
-		for _, p := range byRepo[repo] {
-			indent := ""
-			if p.Stack > 1 {
-				indent = "└─ "
-			}
-			fmt.Printf("  %s#%d %-7s %s\n  %s       %s\n", indent, p.Number, p.Status, p.Title, strings.Repeat(" ", len(indent)), dim(p.URL))
+		for i, p := range byRepo[repo] {
+			indent := model.StackPrefix(byRepo[repo], i)
+			fmt.Printf("  %s#%d %-7s %s\n  %s       %s\n", indent, p.Number, p.Status, p.Title, strings.Repeat(" ", utf8.RuneCountInString(indent)), dim(p.URL))
 		}
 	}
 }

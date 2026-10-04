@@ -87,12 +87,12 @@ func TestPRClipboard(t *testing.T) {
 				{Repo: "a", URL: "u3", Title: "top", Stack: 3},
 				{Repo: "b", URL: "u4", Title: "flat"},
 			},
-			want: "u1: bottom\n└─ u2: middle\n└─ u3: top\nu4: flat\n",
+			want: "u1: bottom\n├── u2: middle\n└── u3: top\nu4: flat\n",
 		},
 		{
 			name: "merged bottom filtered out: tree starts at lowest present",
 			prs:  []model.PR{{Repo: "a", URL: "u2", Title: "middle", Stack: 2}, {Repo: "a", URL: "u3", Title: "top", Stack: 3}},
-			want: "u2: middle\n└─ u3: top\n",
+			want: "u2: middle\n└── u3: top\n",
 		},
 	}
 	for _, tt := range tests {

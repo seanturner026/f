@@ -65,25 +65,41 @@ func PRSummary(prs []PR) string {
 	return strings.Join(parts, " · ")
 }
 
-// PRClipboard formats PRs one per line as "url: title". Stacked PRs above the
-// lowest one in their repo get one level of tree indentation:
+// StackPrefix returns the tree prefix for prs[i]: "" for unstacked PRs and the
+// lowest stacked PR of its repo, "├── " for the ones above it, and "└── " for
+// the last of them (as in `tree`):
 //
 //	url: bottom
-//	└─ url: middle
-//	└─ url: top
-func PRClipboard(prs []PR) string {
-	lowest := map[string]int{} // repo -> lowest stack position present
-	for _, p := range prs {
-		if p.Stack > 0 && (lowest[p.Repo] == 0 || p.Stack < lowest[p.Repo]) {
-			lowest[p.Repo] = p.Stack
+//	├── url: middle
+//	└── url: top
+func StackPrefix(prs []PR, i int) string {
+	p := prs[i]
+	if p.Stack == 0 {
+		return ""
+	}
+	lowest, last := p.Stack, -1
+	for j, q := range prs {
+		if q.Repo == p.Repo && q.Stack > 0 {
+			lowest = min(lowest, q.Stack)
+			last = j
 		}
 	}
+	switch {
+	case p.Stack == lowest:
+		return ""
+	case i == last:
+		return "└── "
+	default:
+		return "├── "
+	}
+}
+
+// PRClipboard formats PRs one per line as "url: title", stacks as a tree
+// (see StackPrefix).
+func PRClipboard(prs []PR) string {
 	var b strings.Builder
-	for _, p := range prs {
-		if p.Stack > lowest[p.Repo] && lowest[p.Repo] > 0 {
-			b.WriteString("└─ ")
-		}
-		fmt.Fprintf(&b, "%s: %s\n", p.URL, p.Title)
+	for i, p := range prs {
+		fmt.Fprintf(&b, "%s%s: %s\n", StackPrefix(prs, i), p.URL, p.Title)
 	}
 	return b.String()
 }
