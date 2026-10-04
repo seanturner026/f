@@ -13,31 +13,14 @@ import (
 	"github.com/seanturner026/pi/internal/feature"
 )
 
-const help = `f: start a pi session that works across several repos, each on its own worktree.
+const help = `f: one pi session across several repos, each on its own worktree.
 
-Usage:
-  f <name>         start a feature: pick repos (fzf) → pi opens, ready for your prompt
-                   reopens the feature (continuing its pi session) if it exists
-  f                picker: features by what needs you (pi status + PRs) → jump there;
-                   ctrl-x removes one, alt-x cleans up merged ones
-  f add [repo...]  add repos to the current feature (fzf if none), with Herdr tabs
-  f goal [text]    show or set the feature's goal (pi sets it from your first prompt)
-  f comment ...    review comments for pi: add|list|send|clear (nvim uses these)
-  f prs            PRs for the current feature (saved state, instant); opens open ones
+  f <name>         start a feature (pick repos), or reopen it
+  f                picker: what needs you → jump there (ctrl-x remove, alt-x clean merged)
+  f add [repo...]  add repos to this feature
+  f prs [-r] [-c]  this feature's PRs (-r refresh, -c copy)
 
-Flags:
-  -r <repo>        repo, repeatable (skips fzf)
-  -p <prompt>      first prompt for pi
-  -f <feature>     feature for add/goal/prs (default: from cwd)
-  -r               prs: refresh live from GitHub (pi does this after every turn)
-  -n, --json       prs: don't open the browser / print JSON
-  -c               prs: copy "url: title" lines to the clipboard (gh stacks as a tree)
-
-Inside Herdr each feature gets its own workspace (chat · nvim · <repo>… · shell, each
-repo tab a live CodeDiff); outside,
-pi starts in this terminal. Starting a feature offers to clean up merged ones.
-Feature state (e.g. PRs) lives in <feature>/.context/, local-only.
-Features live in ~/code/features/.features/<name>/<repo> (override with F_BASE).
+f <cmd> -h for flags. Plumbing used by pi/nvim: f goal, f comment.
 `
 
 // featureFlag picks a feature explicitly; otherwise it's inferred from the cwd.
@@ -100,9 +83,10 @@ func main() {
 				},
 			},
 			{
-				Name:  "comment",
-				Usage: "review comments for pi (nvim: <leader>pc / <leader>ps)",
-				Flags: []cli.Flag{featureFlag},
+				Name:   "comment",
+				Hidden: true,
+				Usage:  "review comments for pi (nvim: <leader>pc / <leader>ps)",
+				Flags:  []cli.Flag{featureFlag},
 				Commands: []*cli.Command{
 					{Name: "add", Usage: "add a comment (JSON on stdin)", Flags: []cli.Flag{featureFlag},
 						Action: func(ctx context.Context, c *cli.Command) error {
@@ -124,6 +108,7 @@ func main() {
 			},
 			{
 				Name:      "goal",
+				Hidden:    true,
 				Usage:     "show or set this feature's goal",
 				ArgsUsage: "[text]",
 				Flags:     []cli.Flag{featureFlag},
