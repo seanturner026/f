@@ -144,26 +144,39 @@ func Unmerged(ctx context.Context, r Runner, l Layout, name string) ([]string, e
 	if err != nil {
 		return nil, err
 	}
+	// Each repo may need gh calls: check them concurrently, report in order.
+	found := make([][]string, len(repos))
+	var wg sync.WaitGroup
+	for i, repo := range repos {
+		wg.Add(1)
+		go func() { defer wg.Done(); found[i] = unmergedIn(ctx, r, l, name, repo) }()
+	}
+	wg.Wait()
 	var problems []string
-	for _, repo := range repos {
-		wt := filepath.Join(Dir(l, name), repo)
-		if n, err := git.ChangedFiles(ctx, r, wt); err != nil {
-			problems = append(problems, fmt.Sprintf("%s: %v", repo, err))
-			continue
-		} else if n > 0 {
-			problems = append(problems, fmt.Sprintf("%s: %d uncommitted change(s)", repo, n))
-		}
-		base := "origin/" + git.DefaultBranch(ctx, r, filepath.Join(l.Base, repo))
-		ahead, err := git.CommitsAhead(ctx, r, wt, base)
-		if err != nil || ahead == 0 {
-			continue
-		}
-		prs, err := github.RepoPRs(ctx, r, wt, repo, name)
-		if err != nil || !mergedAtHead(ctx, r, wt, prs) {
-			problems = append(problems, fmt.Sprintf("%s: %d commit(s) not in a merged PR", repo, ahead))
-		}
+	for _, p := range found {
+		problems = append(problems, p...)
 	}
 	return problems, nil
+}
+
+func unmergedIn(ctx context.Context, r Runner, l Layout, name, repo string) []string {
+	var problems []string
+	wt := filepath.Join(Dir(l, name), repo)
+	if n, err := git.ChangedFiles(ctx, r, wt); err != nil {
+		return []string{fmt.Sprintf("%s: %v", repo, err)}
+	} else if n > 0 {
+		problems = append(problems, fmt.Sprintf("%s: %d uncommitted change(s)", repo, n))
+	}
+	base := "origin/" + git.DefaultBranch(ctx, r, filepath.Join(l.Base, repo))
+	ahead, err := git.CommitsAhead(ctx, r, wt, base)
+	if err != nil || ahead == 0 {
+		return problems
+	}
+	prs, err := github.RepoPRs(ctx, r, wt, repo, name)
+	if err != nil || !mergedAtHead(ctx, r, wt, prs) {
+		problems = append(problems, fmt.Sprintf("%s: %d commit(s) not in a merged PR", repo, ahead))
+	}
+	return problems
 }
 
 // Remove deletes a feature's worktrees, branches, and directory. force

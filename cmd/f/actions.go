@@ -167,22 +167,38 @@ func start(ctx context.Context, d deps, name string, repos []string, prompt stri
 }
 
 func addRepos(ctx context.Context, d deps, name string, repos []string) error {
-	for _, repo := range repos {
-		info("  %s: fetching", repo)
-		result, base, err := feature.AddRepo(ctx, d.run, d.layout, name, repo)
-		if err != nil {
-			return err
-		}
-		switch result {
-		case feature.AddedNewBranch:
-			ok("  %s: worktree on new branch %s (from %s)", repo, name, base)
-		case feature.AddedExistingBranch:
+	info("  fetching %s", strings.Join(repos, ", "))
+	type added struct {
+		result feature.AddResult
+		base   string
+		err    error
+	}
+	// Repos are independent clones: fetch and add worktrees concurrently.
+	out := make([]added, len(repos))
+	var wg sync.WaitGroup
+	for i, repo := range repos {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			r, base, err := feature.AddRepo(ctx, d.run, d.layout, name, repo)
+			out[i] = added{r, base, err}
+		}()
+	}
+	wg.Wait()
+	var errs []error
+	for i, repo := range repos {
+		switch a := out[i]; {
+		case a.err != nil:
+			errs = append(errs, a.err)
+		case a.result == feature.AddedNewBranch:
+			ok("  %s: worktree on new branch %s (from %s)", repo, name, a.base)
+		case a.result == feature.AddedExistingBranch:
 			ok("  %s: worktree on existing branch %s", repo, name)
-		case feature.AlreadyPresent:
+		case a.result == feature.AlreadyPresent:
 			info("  %s: already present", repo)
 		}
 	}
-	return nil
+	return errors.Join(errs...)
 }
 
 // launch runs pi for the feature: in its own Herdr workspace when called from
