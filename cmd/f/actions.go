@@ -69,6 +69,13 @@ func ensureInfo(d deps, name string) error {
 	return err
 }
 
+// refreshInfo rewrites feature.json and AGENTS.md (keeping the goal) when a
+// feature is opened, so template and repo changes reach existing features.
+func refreshInfo(d deps, name string) error {
+	_, err := feature.Sync(d.layout, name, "")
+	return err
+}
+
 // goal prints the feature's goal, or sets it (regenerating AGENTS.md).
 func goal(ctx context.Context, d deps, explicit, text string) error {
 	name, err := resolve(d, explicit)
@@ -108,7 +115,7 @@ func start(ctx context.Context, d deps, name string, repos []string, prompt stri
 		if err != nil || picked == "" {
 			return err
 		}
-		if err := ensureInfo(d, picked); err != nil {
+		if err := refreshInfo(d, picked); err != nil {
 			return err
 		}
 		ensureIssue(ctx, d, picked)
@@ -118,7 +125,7 @@ func start(ctx context.Context, d deps, name string, repos []string, prompt stri
 		return err
 	}
 	if feature.Exists(d.layout, name) {
-		if err := ensureInfo(d, name); err != nil {
+		if err := refreshInfo(d, name); err != nil {
 			return err
 		}
 		ensureIssue(ctx, d, name)

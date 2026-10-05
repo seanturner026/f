@@ -9,7 +9,7 @@ what each part is; this covers how to use it.
 |---|---|
 | `f` | Creates and owns features: worktrees, branches, `AGENTS.md`, `.context/`, Herdr layout, cleanup, beads issue |
 | Herdr | Terminals: one workspace per feature, agent status |
-| pi | The agent. Extensions: `f.ts` (goal, checkpoints, PRs, plan), `guard.ts` (credentials) |
+| pi | The agent. Extensions: `f.ts` (goal, checkpoints, PRs, plan), `guard.ts` (credentials), `repo-instructions/` (must read a repo's CLAUDE.md/AGENTS.md in full before touching it) |
 | nvim | Review: one live CodeDiff tab per repo, comments for pi (`nvim/f.lua`) |
 | beads (`bd`) | The plan: one issue per feature, child issues for steps |
 
@@ -170,6 +170,7 @@ the real files, are blocked with a reason.
 | Workspace has an old tab layout | `ctrl+b shift+d` to close it, then `f <name>` |
 | pi bash says "guard not set up" | `f creds` in a shell shows the error; fix, `/reload` |
 | A command is blocked by guard | Read the reason; it's intended. Run it yourself if you really mean it |
+| pi says "Read `<repo>/CLAUDE.md` in full before working in <repo>/" | Intended: it reads the file (paging to the end), then retries. Again after a compaction |
 | `<leader>ps` failed | No pi in that feature; comments are kept and the message is on your clipboard |
 | `<leader>pr` says no last run | pi hasn't changed code in that repo since the guard/checkpoints started |
 | Repo tab says "no changes vs origin/main yet" | Nothing to diff yet; it checks every 3s and switches to CodeDiff once there is |
