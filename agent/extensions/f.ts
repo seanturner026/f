@@ -8,6 +8,8 @@
  *   before pi's last code change (nvim: <leader>pr in a repo tab).
  * - PRs: footer from `f prs --json` (instant), refreshed after each run;
  *   `gh pr create` output is recorded at once (`f prs --add`); /prs opens them.
+ * - CI: /ci sends failing checks with their failed-job logs (`f ci fix --print`)
+ *   as a prompt: find the cause, propose a fix, don't push.
  * - Plan: after each run, `f plan sync` saves the beads issue's progress for
  *   the picker (bd is too slow to query when the picker opens).
  */
@@ -89,6 +91,20 @@ export default function (pi: ExtensionAPI) {
 			const res = await f(ctx, "prs", "-r");
 			if (res.code !== 0) ctx.ui.notify(res.stderr.trim() || "f prs failed", "error");
 			await renderPRs(ctx, false);
+		},
+	});
+
+	pi.registerCommand("ci", {
+		description: "Send this feature's failing CI checks (with logs) to pi: find the cause, propose a fix, don't push",
+		handler: async (_args, ctx) => {
+			if (!featureInfo(ctx.cwd)) return ctx.ui.notify("not in an f feature", "warning");
+			ctx.ui.notify("checking CI\u2026", "info");
+			const res = await pi.exec("f", ["ci", "fix", "--print"], { cwd: ctx.cwd, timeout: 120_000 });
+			await renderPRs(ctx, false); // f ci fix refreshed them
+			if (res.code !== 0) return ctx.ui.notify(res.stderr.trim() || "f ci fix failed", "error");
+			const prompt = res.stdout.trim();
+			if (!prompt) return ctx.ui.notify("no failing checks", "info");
+			pi.sendUserMessage(prompt, ctx.isIdle() ? undefined : { deliverAs: "followUp" });
 		},
 	});
 

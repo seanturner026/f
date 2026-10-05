@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/seanturner026/pi/internal/github"
@@ -137,5 +138,36 @@ func TestRepoPRs(t *testing.T) {
 				t.Errorf("got  %+v\nwant %+v", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestJobRef(t *testing.T) {
+	repo, job, ok := github.JobRef("https://github.com/foat/argocd/actions/runs/37045276732/job/110963")
+	if !ok || repo != "foat/argocd" || job != "110963" {
+		t.Errorf("JobRef = %q %q %v", repo, job, ok)
+	}
+	if _, _, ok := github.JobRef("https://ci.example.com/build/1"); ok {
+		t.Error("non-Actions URL should not parse")
+	}
+}
+
+func TestLogExcerpt(t *testing.T) {
+	raw := strings.Join([]string{
+		"build\tUNKNOWN STEP\t2026-10-02T18:16:38.2782033Z rendering",
+		"build\tUNKNOWN STEP\t2026-10-02T18:16:43.0694428Z ❌ failed to get resources",
+		"build\tUNKNOWN STEP\t2026-10-02T18:16:43.1260277Z ##[error]Process completed with exit code 1.",
+		"build\tUNKNOWN STEP\t2026-10-02T18:16:43.1458004Z Post job cleanup.",
+		"build\tUNKNOWN STEP\t2026-10-02T18:16:43.2466156Z [command]/usr/bin/git version",
+	}, "\n")
+	want := "rendering\n❌ failed to get resources\n##[error]Process completed with exit code 1."
+	if got := github.LogExcerpt(raw, 10); got != want {
+		t.Errorf("LogExcerpt =\n%s\nwant\n%s", got, want)
+	}
+	want2 := "… (1 earlier lines)\n❌ failed to get resources\n##[error]Process completed with exit code 1."
+	if got := github.LogExcerpt(raw, 2); got != want2 {
+		t.Errorf("LogExcerpt(2) =\n%s\nwant\n%s", got, want2)
+	}
+	if got := github.LogExcerpt("a\nb", 10); got != "a\nb" {
+		t.Errorf("no error marker: keep all, got %q", got)
 	}
 }

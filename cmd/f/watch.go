@@ -27,7 +27,8 @@ import (
 //     remote-tracking refs in each worktree) or a state.json change (pi
 //     recorded or refreshed PRs)
 //
-// r refreshes now (re-runs, merges); q quits.
+// r refreshes now (re-runs, merges); f sends failing checks to pi (f ci fix);
+// q quits.
 const (
 	watchTick = 5 * time.Second
 	pollEvery = 60 * time.Second
@@ -152,6 +153,20 @@ func watchPRs(ctx context.Context, d deps, name string) error {
 				return nil
 			case k == 'r':
 				refresh()
+			case k == 'f':
+				note = "sending failing checks to pi…"
+				draw(watchView{name: name, repos: repos, state: state, errs: errs, mode: currentMode(state.PRs, time.Now(), settleUntil), note: note})
+				n, err := sendCIFix(ctx, d, name)
+				state, _ = feature.LoadState(d.layout, name) // sendCIFix refreshed it
+				stateMod, lastPoll = modTime(feature.StatePath(d.layout, name)), time.Now()
+				switch {
+				case err != nil:
+					note = red(err.Error())
+				case n == 0:
+					note = "no failing checks"
+				default:
+					note = green(fmt.Sprintf("sent %d failing check(s) to pi: it proposes a fix, doesn't push", n))
+				}
 			}
 			continue
 		case <-tick.C:
@@ -262,7 +277,7 @@ func renderWatch(v watchView) string {
 	if !v.state.PRsRefreshedAt.IsZero() {
 		ago = v.now.Sub(v.state.PRsRefreshedAt).Round(time.Second).String() + " ago"
 	}
-	fmt.Fprintf(&b, "%s %s\n%s %s\n\n", bold(v.name), dim("· PRs · updated "+ago), status, dim("· r refresh · q quit"))
+	fmt.Fprintf(&b, "%s %s\n%s %s\n\n", bold(v.name), dim("· PRs · updated "+ago), status, dim("· r refresh · f fix CI · q quit"))
 
 	byRepo := map[string][]model.PR{}
 	for _, p := range v.state.PRs {

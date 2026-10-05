@@ -103,7 +103,7 @@ func TestRenderWatch(t *testing.T) {
 		now:  now,
 	}
 	want := `webapp · PRs · updated 12s ago
-checks running: refreshing every minute · r refresh · q quit
+checks running: refreshing every minute · r refresh · f fix CI · q quit
 
 argocd
   #412 open  Add ACK app

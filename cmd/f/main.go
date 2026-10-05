@@ -18,7 +18,8 @@ const help = `f: one pi session across several repos, each on its own worktree.
   f <name>         start a feature (pick repos), or reopen it
   f                picker: what needs you → jump there (ctrl-x remove, alt-x clean merged)
   f add [repo...]  add repos to this feature
-  f prs [-r] [-c]  this feature's PRs (-r refresh, -c copy)
+  f prs [-r] [-c]  this feature's PRs (-r refresh, -c copy, -w live view)
+  f ci fix         send failing checks to pi (it proposes a fix, doesn't push)
 
 f <cmd> -h for flags. Plumbing used by pi/nvim: f goal, f comment.
 `
@@ -141,6 +142,18 @@ func main() {
 				Action: func(ctx context.Context, c *cli.Command) error {
 					return goal(ctx, d, c.String("feature"), strings.Join(c.Args().Slice(), " "))
 				},
+			},
+			{
+				Name:  "ci",
+				Usage: "CI on this feature's PRs",
+				Commands: []*cli.Command{{
+					Name:  "fix",
+					Usage: "send failing checks (with failed job logs) to pi: find the cause, propose a fix, don't push",
+					Flags: []cli.Flag{featureFlag, &cli.BoolFlag{Name: "print", Usage: "print the prompt instead (for /ci)"}},
+					Action: func(ctx context.Context, c *cli.Command) error {
+						return ciFix(ctx, d, c.String("feature"), c.Bool("print"))
+					},
+				}},
 			},
 			{
 				Name:  "prs",

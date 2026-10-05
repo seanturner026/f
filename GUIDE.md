@@ -59,6 +59,7 @@ picker (`3/5 done · next: …`).
 | Key | Does |
 |---|---|
 | `r` | Refresh now (a re-run on GitHub, a merge) |
+| `f` | Fix CI: send failing checks + logs to this feature's pi (same as `/ci`) |
 | `q` | Quit (back to a shell; `f prs -w` restarts it) |
 
 Each open PR lists its failing (with link) and running checks; passed and
@@ -90,6 +91,7 @@ unseen) → **working** → **idle** → **closed** (no pi running).
 | `ctrl+alt+up/down` | Jump between prompts in the transcript |
 | `!!f prs -c` | Copy PR links (`!!` = run without sending output to the model) |
 | `/prs` | Refresh PRs, open the open ones in the browser |
+| `/ci` | Send failing checks + failed-job logs to pi: it finds the cause and proposes a fix, no push until you OK |
 | `/remember [what]` | Save a preference as a rule in `agent/AGENTS.md` |
 | `/reload` | Pick up changed extensions, rules, keybindings |
 | `ctrl+d` (empty editor) / `/quit` | Quit pi (session is saved; `f <name>` continues it) |
@@ -122,7 +124,8 @@ Comment on the **right** side of a diff (the real file). Comments are saved in
 | `f <name>` | Start a feature, or reopen it (continues pi's session) |
 | `f` | Picker |
 | `f add [repo…]` | Add repos to this feature (+ Herdr tabs, before shell) |
-| `f prs [-r] [-c] [-n]` | PRs: from saved state; `-r` refresh live, `-c` copy, `-n` don't open browser |
+| `f prs [-r] [-c] [-n] [-w]` | PRs: from saved state; `-r` refresh live, `-c` copy, `-n` don't open browser, `-w` live view (the prs tab) |
+| `f ci fix` | Send failing checks + failed-job logs to the feature's pi (clipboard if pi isn't reachable) |
 | `f goal [text]` | Show / set the goal |
 | `f comment list\|send\|clear` | Review comments (nvim uses these) |
 

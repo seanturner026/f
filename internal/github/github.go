@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"regexp"
+	"strings"
 	"sync"
 
 	"github.com/seanturner026/pi/internal/model"
@@ -185,4 +187,63 @@ func RepoPRs(ctx context.Context, r Runner, dir, repo, branch string) ([]model.P
 		return ListPRs(ctx, r, dir, repo, branch)
 	}
 	return prs, err
+}
+
+// jobURL matches a GitHub Actions job link: .../<owner>/<repo>/actions/runs/<run>/job/<job>.
+var jobURL = regexp.MustCompile(`github\.com/([^/]+/[^/]+)/actions/runs/\d+/job/(\d+)`)
+
+// JobRef extracts "<owner>/<repo>" and the job ID from an Actions job URL.
+func JobRef(url string) (repo, job string, ok bool) {
+	m := jobURL.FindStringSubmatch(url)
+	if m == nil {
+		return "", "", false
+	}
+	return m[1], m[2], true
+}
+
+// FailedJobLog returns the log of a failed Actions job's failed steps.
+func FailedJobLog(ctx context.Context, r Runner, dir, url string) (string, error) {
+	repo, job, ok := JobRef(url)
+	if !ok {
+		return "", fmt.Errorf("%s: not a GitHub Actions job", url)
+	}
+	out, err := r.Run(ctx, dir, "gh", "run", "view", "--job", job, "--log-failed", "-R", repo)
+	if err != nil {
+		return "", fmt.Errorf("job log: %w", err)
+	}
+	return out, nil
+}
+
+// logTimestamp is the timestamp Actions puts before each log message.
+var logTimestamp = regexp.MustCompile(`^\d{4}-\d\d-\d\dT[\d:.]+Z ?`)
+
+const maxLogLine = 400 // characters kept per log line
+
+// LogExcerpt trims a `gh run view --log-failed` log to what explains the
+// failure: it drops the job/step columns and timestamps, cuts after the last
+// "##[error]" line (what follows is post-job cleanup), and keeps the last
+// maxLines lines, each at most maxLogLine characters.
+func LogExcerpt(raw string, maxLines int) string {
+	var lines []string
+	lastError := -1
+	for _, l := range strings.Split(strings.TrimRight(raw, "\n"), "\n") {
+		if parts := strings.SplitN(l, "\t", 3); len(parts) == 3 {
+			l = parts[2] // job \t step \t message
+		}
+		l = logTimestamp.ReplaceAllString(l, "")
+		if r := []rune(l); len(r) > maxLogLine {
+			l = string(r[:maxLogLine]) + "…"
+		}
+		if strings.Contains(l, "##[error]") {
+			lastError = len(lines)
+		}
+		lines = append(lines, l)
+	}
+	if lastError >= 0 {
+		lines = lines[:lastError+1]
+	}
+	if len(lines) > maxLines {
+		lines = append([]string{fmt.Sprintf("… (%d earlier lines)", len(lines)-maxLines)}, lines[len(lines)-maxLines:]...)
+	}
+	return strings.Join(lines, "\n")
 }
