@@ -19,7 +19,16 @@ import { isBashToolResult, type ExtensionAPI, type ExtensionContext } from "@ear
 type FeatureInfo = { name: string; root: string; repos: string[]; goal?: string; issue?: string };
 // `f prs --json` (model.PR in internal/model).
 type PRStatus = "draft" | "open" | "merged" | "closed";
-type PR = { repo: string; number: number; url: string; status: PRStatus };
+type CheckState = "pass" | "fail" | "pending" | "skipped";
+type PR = { repo: string; number: number; url: string; status: PRStatus; checks?: { state: CheckState }[] };
+
+// ciMark: ✗ if any check failed, ⋯ if any is running, ✓ if all passed; "" without checks.
+function ciMark(p: PR): "" | "✗" | "⋯" | "✓" {
+	const states = (p.checks ?? []).map((c) => c.state);
+	if (states.includes("fail")) return "✗";
+	if (states.includes("pending")) return "⋯";
+	return states.length ? "✓" : "";
+}
 
 const PR_URL = /https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/pull\/\d+/g;
 const STATUS_KEY = "f-prs";
@@ -48,7 +57,9 @@ export default function (pi: ExtensionAPI) {
 		const t = ctx.ui.theme;
 		const parts = ((JSON.parse(res.stdout) as { prs: PR[] | null }).prs ?? []).map((p) => {
 			const color = p.status === "merged" ? "success" : p.status === "open" ? "accent" : "dim";
-			return `${p.repo} #${p.number} ${t.fg(color, p.status)}`;
+			const mark = ciMark(p);
+			const ci = mark && " " + t.fg(mark === "✗" ? "error" : mark === "✓" ? "success" : "accent", mark);
+			return `${p.repo} #${p.number} ${t.fg(color, p.status)}${ci}`;
 		});
 		ctx.ui.setStatus(STATUS_KEY, parts.length ? t.fg("dim", "PRs: ") + parts.join(t.fg("dim", " · ")) : undefined);
 	}

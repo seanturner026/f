@@ -41,6 +41,24 @@ func TestListPRs(t *testing.T) {
 				{Repo: "argocd", Number: 2, Title: "b", URL: "u2", Status: model.PRStatusMerged, HeadOID: "h2"},
 			},
 		},
+		{
+			name: "maps checks",
+			runner: fakeRunner{out: `[{"number":3,"state":"OPEN","url":"u3","statusCheckRollup":[
+				{"__typename":"CheckRun","workflowName":"Test","name":"lint","status":"COMPLETED","conclusion":"SUCCESS","detailsUrl":"d1"},
+				{"__typename":"CheckRun","name":"build","status":"COMPLETED","conclusion":"FAILURE","detailsUrl":"d2"},
+				{"__typename":"CheckRun","name":"plan","status":"IN_PROGRESS","conclusion":""},
+				{"__typename":"CheckRun","name":"deploy","status":"COMPLETED","conclusion":"SKIPPED"},
+				{"__typename":"StatusContext","context":"atlantis/plan","state":"ERROR","targetUrl":"t1"},
+				{"__typename":"StatusContext","context":"ext","state":"PENDING"}]}]`},
+			want: []model.PR{{Repo: "argocd", Number: 3, URL: "u3", Status: model.PRStatusOpen, Checks: []model.Check{
+				{Name: "Test / lint", State: model.CheckPass, URL: "d1"},
+				{Name: "build", State: model.CheckFail, URL: "d2"},
+				{Name: "plan", State: model.CheckPending},
+				{Name: "deploy", State: model.CheckSkipped},
+				{Name: "atlantis/plan", State: model.CheckFail, URL: "t1"},
+				{Name: "ext", State: model.CheckPending},
+			}}},
+		},
 		{name: "gh fails", runner: fakeRunner{err: errors.New("boom")}, wantErr: true},
 		{name: "bad json", runner: fakeRunner{out: "nope"}, wantErr: true},
 	}

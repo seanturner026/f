@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/seanturner026/pi/internal/feature"
 	"github.com/seanturner026/pi/internal/herdr"
@@ -48,29 +49,53 @@ func toFeatureStatus(s herdr.AgentStatus, running bool) featureStatus {
 	}
 }
 
-type pickerRow struct {
-	name   string
-	status featureStatus
-	prs    []model.PR
-	plan   model.Plan
+var ciStyle = map[model.CIState]func(string) string{
+	model.CINone:    dim,
+	model.CIPassing: green,
+	model.CIPending: func(s string) string { return color("36", s) }, // cyan
+	model.CIFailing: red,
 }
 
-// pickerRows gathers each feature's pi status (from Herdr, if available) and
-// saved PRs, ordered by what needs attention.
+type pickerRow struct {
+	name    string
+	current bool // the workspace you're in (under the popup)
+	status  featureStatus
+	prs     []model.PR
+	plan    model.Plan
+}
+
+// pickerRows gathers each feature's pi status and whether it's the current
+// workspace (from Herdr, if available) and saved PRs and plan, ordered by what
+// needs attention.
 func pickerRows(ctx context.Context, d deps) []pickerRow {
-	// One herdr call; if Herdr isn't up it fails and every feature reads "closed".
+	// If Herdr isn't up these fail: every feature reads "closed", none current.
 	var agents map[string]herdr.AgentStatus
+	current := ""
 	if !d.noHerdr {
 		agents, _ = herdr.AgentStatuses(ctx, d.run)
+		current, _ = herdr.FocusedWorkspace(ctx, d.run)
 	}
 	var rows []pickerRow
 	for _, name := range feature.List(d.layout) {
 		s, running := agents[feature.Dir(d.layout, name)]
 		state, _ := feature.LoadState(d.layout, name)
-		rows = append(rows, pickerRow{name: name, status: toFeatureStatus(s, running), prs: state.PRs, plan: state.Plan})
+		rows = append(rows, pickerRow{
+			name: name, current: name == current, status: toFeatureStatus(s, running),
+			prs: state.PRs, plan: state.Plan,
+		})
 	}
-	sort.SliceStable(rows, func(i, j int) bool { return statusRank[rows[i].status] < statusRank[rows[j].status] })
+	sort.SliceStable(rows, func(i, j int) bool { return attention(rows[i]) < attention(rows[j]) })
 	return rows
+}
+
+// attention ranks a row: lower needs you sooner. Failing CI counts as much as
+// pi asking you something.
+func attention(r pickerRow) int {
+	rank := statusRank[r.status]
+	if state, _ := model.CI(r.prs); state == model.CIFailing {
+		rank = min(rank, statusRank[statusNeedsYou])
+	}
+	return rank
 }
 
 // pickFeature is the control center: features ordered by what needs you.
@@ -86,13 +111,16 @@ func pickFeature(ctx context.Context, d deps) (string, error) {
 			}
 			return "", nil
 		}
-		header := "ENTER open · ctrl-x remove · alt-x clean merged · ESC close"
+		titles, lines := pickerTable(rows)
+		header := []string{dim("⏎ open · ctrl-x remove · alt-x clean merged"), "", titles}
 		if msg != "" {
-			header = msg + "\n" + header
+			header = append([]string{msg}, header...)
 		}
 		// Full-screen (fast in Herdr's popup); ctrl-space closes it, like it opened.
-		out, err := runFzf(pickerLines(rows), "--ansi", "--delimiter=\t", "--with-nth=2..",
-			"--expect=ctrl-x,alt-x", "--bind=ctrl-space:abort", "--prompt=feature> ", "--header="+header)
+		// The cursor starts on the first feature you're not already in.
+		out, err := runFzf(lines, "--ansi", "--delimiter=\t", "--with-nth=2..",
+			"--expect=ctrl-x,alt-x", "--bind=ctrl-space:abort", "--prompt=feature> ",
+			"--header="+strings.Join(header, "\n"), fmt.Sprintf("--bind=load:pos(%d)", firstOther(rows)))
 		if err != nil || len(out) == 0 {
 			return "", err
 		}
@@ -117,25 +145,105 @@ func pickFeature(ctx context.Context, d deps) (string, error) {
 	}
 }
 
-func pickerLines(rows []pickerRow) []string {
-	width := 0
-	for _, r := range rows {
-		width = max(width, len(r.name))
+// firstOther is the 1-based fzf position of the first row that isn't the
+// current workspace.
+func firstOther(rows []pickerRow) int {
+	for i, r := range rows {
+		if !r.current {
+			return i + 1
+		}
 	}
+	return 1
+}
+
+// pickerColumn is a column of the picker table, in display order.
+type pickerColumn int
+
+const (
+	colFeature pickerColumn = iota
+	colPi
+	colCI
+	colPRs
+	colPlan
+	numColumns
+)
+
+var columnTitle = [numColumns]string{colFeature: "FEATURE", colPi: "PI", colCI: "CI", colPRs: "PRS", colPlan: "PLAN"}
+
+const (
+	currentMark = "● " // marks the workspace you're in
+	noValue     = "—"
+)
+
+// pickerTable renders rows as aligned columns: the title line (for fzf's
+// header) and one line per row, each prefixed with the feature name and a tab
+// (hidden by --with-nth; it's what the picker returns).
+func pickerTable(rows []pickerRow) (string, []string) {
+	cells := make([][numColumns]string, len(rows))
+	var width [numColumns]int
+	for c, t := range columnTitle {
+		width[c] = len(t)
+	}
+	for i, r := range rows {
+		cells[i] = [numColumns]string{
+			colFeature: r.name,
+			colPi:      string(r.status),
+			colCI:      orNone(model.CISummary(r.prs)),
+			colPRs:     orNone(model.PRSummary(r.prs)),
+			colPlan:    orNone(model.PlanSummary(r.plan)),
+		}
+		for c, s := range cells[i] {
+			width[c] = max(width[c], utf8.RuneCountInString(s))
+		}
+	}
+	// pad pads before styling, so escape codes don't break alignment; the last
+	// column isn't padded.
+	pad := func(c pickerColumn, s string) string {
+		if c == numColumns-1 {
+			return s
+		}
+		return s + strings.Repeat(" ", width[c]-utf8.RuneCountInString(s)+2)
+	}
+
+	var titles strings.Builder
+	titles.WriteString("  ")
+	for c, t := range columnTitle {
+		titles.WriteString(pad(pickerColumn(c), t))
+	}
+
 	lines := make([]string, len(rows))
 	for i, r := range rows {
-		status := statusStyle[r.status](fmt.Sprintf("%-9s", r.status))
-		var extra []string
-		if s := model.PRSummary(r.prs); s != "" {
-			extra = append(extra, "PRs: "+s)
+		mark := "  "
+		if r.current {
+			mark = green(currentMark)
 		}
-		if s := model.PlanSummary(r.plan); s != "" {
-			extra = append(extra, s)
+		ci, _ := model.CI(r.prs)
+		style := [numColumns]func(string) string{
+			colFeature: bold,
+			colPi:      statusStyle[r.status],
+			colCI:      ciStyle[ci],
+			colPRs:     func(s string) string { return s },
+			colPlan:    dim,
 		}
-		// name is the first tab-separated field; that's what we return.
-		lines[i] = fmt.Sprintf("%s\t%-*s  %s  %s", r.name, width, r.name, status, dim(strings.Join(extra, " · ")))
+		var b strings.Builder
+		b.WriteString(r.name + "\t" + mark)
+		for c, s := range cells[i] {
+			if s == noValue {
+				b.WriteString(dim(pad(pickerColumn(c), s)))
+			} else {
+				b.WriteString(style[c](pad(pickerColumn(c), s)))
+			}
+		}
+		lines[i] = b.String()
 	}
-	return lines
+	return dim(titles.String()), lines
+}
+
+func orNone(s string) string {
+	if s == "" {
+		return noValue
+	}
+	return s
 }
 
 // removeFeature removes a feature and its Herdr workspace. If it has unmerged

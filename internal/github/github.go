@@ -19,26 +19,85 @@ type Runner interface {
 // ErrNotInStack means the checkout isn't on a gh stack branch.
 var ErrNotInStack = errors.New("not in a gh stack")
 
-const prFields = "number,state,title,url,isDraft,headRefOid,headRefName,baseRefName"
+const prFields = "number,state,title,url,isDraft,headRefOid,headRefName,baseRefName,statusCheckRollup"
 
 type ghPR struct {
-	Number      int    `json:"number"`
-	State       string `json:"state"`
-	Title       string `json:"title"`
-	URL         string `json:"url"`
-	IsDraft     bool   `json:"isDraft"`
-	HeadRefOid  string `json:"headRefOid"`
-	HeadRefName string `json:"headRefName"`
-	BaseRefName string `json:"baseRefName"`
+	Number      int       `json:"number"`
+	State       string    `json:"state"`
+	Title       string    `json:"title"`
+	URL         string    `json:"url"`
+	IsDraft     bool      `json:"isDraft"`
+	HeadRefOid  string    `json:"headRefOid"`
+	HeadRefName string    `json:"headRefName"`
+	BaseRefName string    `json:"baseRefName"`
+	Checks      []ghCheck `json:"statusCheckRollup"`
+}
+
+// ghCheck is one entry of statusCheckRollup: a CheckRun (GitHub Actions job,
+// or another app's check) or a StatusContext (commit status).
+type ghCheck struct {
+	Typename string `json:"__typename"`
+	// CheckRun
+	Name         string `json:"name"`
+	WorkflowName string `json:"workflowName"`
+	Status       string `json:"status"`     // QUEUED, IN_PROGRESS, COMPLETED, ...
+	Conclusion   string `json:"conclusion"` // SUCCESS, FAILURE, SKIPPED, ...
+	DetailsURL   string `json:"detailsUrl"`
+	// StatusContext
+	Context   string `json:"context"`
+	State     string `json:"state"` // SUCCESS, FAILURE, ERROR, PENDING, EXPECTED
+	TargetURL string `json:"targetUrl"`
+}
+
+func (c ghCheck) toModel() model.Check {
+	if c.Typename == "StatusContext" {
+		return model.Check{Name: c.Context, State: statusState(c.State), URL: c.TargetURL}
+	}
+	name := c.Name
+	if c.WorkflowName != "" {
+		name = c.WorkflowName + " / " + c.Name
+	}
+	return model.Check{Name: name, State: checkRunState(c.Status, c.Conclusion), URL: c.DetailsURL}
+}
+
+func checkRunState(status, conclusion string) model.CheckState {
+	if status != "COMPLETED" {
+		return model.CheckPending
+	}
+	switch conclusion {
+	case "SUCCESS":
+		return model.CheckPass
+	case "SKIPPED", "NEUTRAL":
+		return model.CheckSkipped
+	}
+	return model.CheckFail // FAILURE, TIMED_OUT, CANCELLED, ACTION_REQUIRED, STARTUP_FAILURE, STALE
+}
+
+func statusState(state string) model.CheckState {
+	switch state {
+	case "SUCCESS":
+		return model.CheckPass
+	case "PENDING", "EXPECTED":
+		return model.CheckPending
+	}
+	return model.CheckFail // FAILURE, ERROR
 }
 
 func (p ghPR) toModel(repo string, stackPos int) model.PR {
+	status := model.PRStatusFromGitHub(p.State, p.IsDraft)
+	var checks []model.Check // only active PRs' checks matter
+	for _, c := range p.Checks {
+		if status.IsActive() {
+			checks = append(checks, c.toModel())
+		}
+	}
 	return model.PR{
+		Checks:  checks,
 		Repo:    repo,
 		Number:  p.Number,
 		Title:   p.Title,
 		URL:     p.URL,
-		Status:  model.PRStatusFromGitHub(p.State, p.IsDraft),
+		Status:  status,
 		HeadOID: p.HeadRefOid,
 		Head:    p.HeadRefName,
 		Base:    p.BaseRefName,

@@ -43,7 +43,7 @@ func TestParsePRURL(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if got != tt.want {
+			if !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("got %+v, want %+v", got, tt.want)
 			}
 		})

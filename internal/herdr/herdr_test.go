@@ -53,6 +53,26 @@ func TestFindWorkspace(t *testing.T) {
 	}
 }
 
+func TestFocusedWorkspace(t *testing.T) {
+	tests := []struct {
+		name, list, want string
+	}{
+		{name: "focused", list: `{"result":{"workspaces":[{"label":"pi"},{"label":"webapp","focused":true}]}}`, want: "webapp"},
+		{name: "none", list: `{"result":{"workspaces":[{"label":"pi"}]}}`, want: ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := herdr.FocusedWorkspace(context.Background(), fakeRunner{out: tt.list})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got != tt.want {
+				t.Errorf("got %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
 // recordingRunner records herdr calls and answers creates with fresh IDs.
 type recordingRunner struct{ calls []string }
 

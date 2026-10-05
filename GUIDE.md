@@ -28,7 +28,7 @@ by `f`).
    `<leader>pr` toggles to *just pi's last run*. Comment with `<leader>pc`,
    send them all with `<leader>ps`. Small fixes: edit the right-hand side
    directly and tell pi ("I edited X").
-4. **PRs**: pi opens them; they show in pi's footer. `!!f prs -c` copies
+4. **PRs**: pi opens them; they show in pi's footer with CI (`✓` `⋯` `✗`). `!!f prs -c` copies
    `url: title` lines (stacks as a tree).
 5. **Switch**: `ctrl+space` → picker, ordered by what needs you.
 6. **Done**: when PRs merge, the next `f <new>` offers cleanup, or `alt-x` in
@@ -62,8 +62,12 @@ picker (`3/5 done · next: …`).
 | `alt-x` | Clean up every merged feature |
 | `esc` / `ctrl-space` | Close |
 
-Status: **needs you** (pi asked something) → **done** (finished, unseen) →
-**working** → **idle** → **closed** (no pi running).
+Columns: `●` marks the workspace you're in (the cursor starts on the next one) ·
+FEATURE · PI status · CI of open PRs (`✓`, `⋯ running`, `✗ <repos>`) · PRS ·
+PLAN (beads steps).
+
+Order: **needs you** (pi asked something, or CI failing) → **done** (finished,
+unseen) → **working** → **idle** → **closed** (no pi running).
 
 ### pi
 
@@ -155,6 +159,6 @@ the real files, are blocked with a reason.
 | A command is blocked by guard | Read the reason; it's intended. Run it yourself if you really mean it |
 | `<leader>ps` failed | No pi in that feature; comments are kept and the message is on your clipboard |
 | `<leader>pr` says no last run | pi hasn't changed code in that repo since the guard/checkpoints started |
-| Repo tab shows "No changes" | CodeDiff has nothing vs `origin/HEAD...` yet |
-| Picker status looks stale | It's live from Herdr; PRs/plan refresh after each pi run (`f prs -r` forces) |
+| Repo tab says "no changes vs origin/main yet" | Nothing to diff yet; it checks every 3s and switches to CodeDiff once there is |
+| Picker status looks stale | pi status is live from Herdr; PRs, CI and plan refresh after each pi run (`f prs -r` forces) |
 | Extension changes not active | `/reload` in pi |

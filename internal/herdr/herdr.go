@@ -67,22 +67,48 @@ type created struct {
 	} `json:"result"`
 }
 
-// FindWorkspace returns the ID of the workspace with label, or "".
-func FindWorkspace(ctx context.Context, r Runner, label string) (string, error) {
+type workspace struct {
+	ID      string `json:"workspace_id"`
+	Label   string `json:"label"`
+	Focused bool   `json:"focused"`
+}
+
+func listWorkspaces(ctx context.Context, r Runner) ([]workspace, error) {
 	var resp struct {
 		Result struct {
-			Workspaces []struct {
-				ID    string `json:"workspace_id"`
-				Label string `json:"label"`
-			} `json:"workspaces"`
+			Workspaces []workspace `json:"workspaces"`
 		} `json:"result"`
 	}
 	if err := call(ctx, r, &resp, "workspace", "list"); err != nil {
+		return nil, fmt.Errorf("workspace list: %w", err)
+	}
+	return resp.Result.Workspaces, nil
+}
+
+// FindWorkspace returns the ID of the workspace with label, or "".
+func FindWorkspace(ctx context.Context, r Runner, label string) (string, error) {
+	workspaces, err := listWorkspaces(ctx, r)
+	if err != nil {
 		return "", fmt.Errorf("find workspace: %w", err)
 	}
-	for _, w := range resp.Result.Workspaces {
+	for _, w := range workspaces {
 		if w.Label == label {
 			return w.ID, nil
+		}
+	}
+	return "", nil
+}
+
+// FocusedWorkspace returns the label of the focused workspace (the one under a
+// popup), or "".
+func FocusedWorkspace(ctx context.Context, r Runner) (string, error) {
+	workspaces, err := listWorkspaces(ctx, r)
+	if err != nil {
+		return "", fmt.Errorf("focused workspace: %w", err)
+	}
+	for _, w := range workspaces {
+		if w.Focused {
+			return w.Label, nil
 		}
 	}
 	return "", nil

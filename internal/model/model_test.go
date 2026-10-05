@@ -151,3 +151,40 @@ func TestPlanSummary(t *testing.T) {
 		})
 	}
 }
+
+func TestCISummary(t *testing.T) {
+	pass := model.Check{Name: "lint", State: model.CheckPass}
+	fail := model.Check{Name: "build", State: model.CheckFail}
+	pending := model.Check{Name: "plan", State: model.CheckPending}
+	skipped := model.Check{Name: "deploy", State: model.CheckSkipped}
+	pr := func(repo string, status model.PRStatus, checks ...model.Check) model.PR {
+		return model.PR{Repo: repo, Status: status, Checks: checks}
+	}
+	tests := []struct {
+		name string
+		prs  []model.PR
+		want string
+	}{
+		{name: "no PRs", want: ""},
+		{name: "no checks", prs: []model.PR{pr("argocd", model.PRStatusOpen)}, want: ""},
+		{name: "passing", prs: []model.PR{pr("argocd", model.PRStatusOpen, pass, skipped)}, want: "✓"},
+		{name: "pending", prs: []model.PR{pr("argocd", model.PRStatusOpen, pass, pending)}, want: "⋯ running"},
+		{
+			name: "failing beats pending, repos listed once",
+			prs: []model.PR{
+				pr("argocd", model.PRStatusOpen, fail, pending),
+				pr("tf", model.PRStatusDraft, fail),
+				pr("argocd", model.PRStatusOpen, fail),
+			},
+			want: "✗ argocd, tf",
+		},
+		{name: "merged PRs ignored", prs: []model.PR{pr("argocd", model.PRStatusMerged, fail)}, want: ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := model.CISummary(tt.prs); got != tt.want {
+				t.Errorf("CISummary() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
