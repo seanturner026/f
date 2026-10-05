@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 
 	"github.com/seanturner026/pi/internal/git"
+	"github.com/seanturner026/pi/internal/github"
 	"github.com/seanturner026/pi/internal/model"
 )
 
@@ -17,6 +18,7 @@ const (
 	SyncReset   SyncAction = "reset"      // nothing new since the merged PR: branch reset to the default branch
 	SyncRebased SyncAction = "rebased"    // newer commits replayed onto the default branch
 	SyncNeeded  SyncAction = "needs sync" // couldn't do it safely (uncommitted changes, conflicts): see Detail
+	SyncStack   SyncAction = "stack synced" // a stack of 2+ branches: gh stack sync rebased and pushed it
 )
 
 // SyncResult is Reconcile's outcome for one repo.
@@ -38,13 +40,28 @@ type SyncResult struct {
 //
 // prs are the feature's PRs (refresh them first). The branch keeps its name, so
 // the next push needs --force-with-lease if the old remote branch still exists.
-func Reconcile(ctx context.Context, r Runner, l Layout, name string, prs []model.PR) ([]SyncResult, error) {
+//
+// Stacks of two or more branches are left to `gh stack sync` (it rebases the
+// rest of the stack and pushes), and only when stackSync is set: background
+// syncs shouldn't push.
+func Reconcile(ctx context.Context, r Runner, l Layout, name string, prs []model.PR, stackSync bool) ([]SyncResult, error) {
 	repos, err := Repos(l, name)
 	if err != nil {
 		return nil, err
 	}
 	var results []SyncResult
 	for _, repo := range repos {
+		wt := filepath.Join(Dir(l, name), repo)
+		if branches, err := github.StackBranches(ctx, r, wt); err == nil && len(branches) > 1 {
+			if stackSync && hasMergedPR(prs, repo) {
+				res := SyncResult{Repo: repo, Action: SyncStack, Detail: "gh stack sync: rebased onto main and pushed"}
+				if err := github.StackSync(ctx, r, wt); err != nil {
+					res.Action, res.Detail = SyncNeeded, err.Error()
+				}
+				results = append(results, res)
+			}
+			continue
+		}
 		res := reconcileRepo(ctx, r, l, name, repo, prs)
 		if res.Action != SyncNothing {
 			results = append(results, res)

@@ -171,3 +171,17 @@ func TestLogExcerpt(t *testing.T) {
 		t.Errorf("no error marker: keep all, got %q", got)
 	}
 }
+
+func TestRepoPRsStackWithoutPRsFallsBack(t *testing.T) {
+	r := cmdRunner{
+		"stack":   `{"trunk":"main","branches":[{"name":"feat"}]}`,
+		"pr list": `[{"number":5,"state":"OPEN","url":"u5","headRefName":"feat"}]`,
+	}
+	prs, err := github.RepoPRs(context.Background(), r, "/wt", "app", "feat")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(prs) != 1 || prs[0].Number != 5 {
+		t.Errorf("prs = %+v, want #5 from pr list", prs)
+	}
+}

@@ -106,7 +106,7 @@ func (f *syncFixture) mainMoves(file, content string) {
 }
 
 func (f *syncFixture) reconcile(prs ...model.PR) []feature.SyncResult {
-	res, err := feature.Reconcile(context.Background(), shell.Exec{}, f.l, "feat", prs)
+	res, err := feature.Reconcile(context.Background(), shell.Exec{}, f.l, "feat", prs, false)
 	if err != nil {
 		f.t.Fatal(err)
 	}

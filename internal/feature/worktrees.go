@@ -42,12 +42,14 @@ func AddRepo(ctx context.Context, r Runner, l Layout, name, repo string) (result
 		if err := git.AddWorktree(ctx, r, src, dst, name, ""); err != nil {
 			return "", "", fmt.Errorf("add %s: %w", repo, err)
 		}
+		_ = github.StackInit(ctx, r, dst, name) // PRs are always a stack (AGENTS.md)
 		return AddedExistingBranch, "", nil
 	}
 	base = "origin/" + git.DefaultBranch(ctx, r, src)
 	if err := git.AddWorktree(ctx, r, src, dst, name, base); err != nil {
 		return "", "", fmt.Errorf("add %s: %w", repo, err)
 	}
+	_ = github.StackInit(ctx, r, dst, name) // PRs are always a stack (AGENTS.md)
 	return AddedNewBranch, base, nil
 }
 

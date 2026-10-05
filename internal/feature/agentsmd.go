@@ -31,8 +31,8 @@ This session works across these git worktrees, all on branch ` + "`{{.Name}}`" +
 
 - Before reviewing, answering questions about, or changing anything in a repo (its PRs included), read its instructions file listed above (if any) in full with the read tool, and follow it. Tool calls on a repo are blocked until you have.
 - Run git commands inside the relevant repo directory; this root is not a git repo.
-- When a PR has merged (I'll say so), run ` + "`f sync`" + `: it resets that repo to main (or rebases newer commits onto it) so the next PR starts fresh. The next push to the branch needs ` + "`--force-with-lease`" + `.
-- One PR per repo, from branch ` + "`{{.Name}}`" + `.
+- When a PR has merged (I'll say so), run ` + "`f sync`" + `: one-branch stacks are reset to main (newer commits rebased); longer stacks get ` + "`gh stack sync`" + ` (rebases the rest onto main and pushes).
+- PRs are always a gh stack per repo, starting at branch ` + "`{{.Name}}`" + ` (f already ran ` + "`gh stack init {{.Name}}`" + `; run it if ` + "`gh stack view`" + ` says there's no stack). One change: commit on ` + "`{{.Name}}`" + `. More: ` + "`gh stack add {{.Name}}-<topic>`" + ` for each next PR. Open/update PRs with ` + "`gh stack submit`" + `. Follow the repo's instructions on merge order.
 - ` + "`.context/`" + ` holds feature state managed by ` + "`f`" + ` (e.g. ` + "`.context/state.json`" + ` lists this feature's PRs). Read it when useful; don't edit it.
 {{if .Issue}}
 ## Plan (beads)

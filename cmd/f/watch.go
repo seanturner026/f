@@ -154,7 +154,7 @@ func watchPRs(ctx context.Context, d deps, name string) error {
 			case k == 'r':
 				refresh()
 				if !piWorking(ctx, d, name) { // a merge? bring its repo back onto main
-					if lines, err := reconcileLines(ctx, d, name); err == nil && len(lines) > 0 {
+					if lines, err := reconcileLines(ctx, d, name, false); err == nil && len(lines) > 0 {
 						note = strings.Join(lines, "\n")
 					}
 					state, _ = feature.LoadState(d.layout, name)

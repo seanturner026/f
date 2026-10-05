@@ -183,10 +183,46 @@ func StackPRs(ctx context.Context, r Runner, dir, repo string) ([]model.PR, erro
 // PRs whose head is branch.
 func RepoPRs(ctx context.Context, r Runner, dir, repo, branch string) ([]model.PR, error) {
 	prs, err := StackPRs(ctx, r, dir, repo)
-	if errors.Is(err, ErrNotInStack) {
+	if errors.Is(err, ErrNotInStack) || (err == nil && len(prs) == 0) {
+		// No stack, or none of its branches submitted yet (a plain gh pr create).
 		return ListPRs(ctx, r, dir, repo, branch)
 	}
 	return prs, err
+}
+
+// StackBranches lists the branches of the gh stack checked out in dir, bottom
+// first. ErrNotInStack if there's no stack.
+func StackBranches(ctx context.Context, r Runner, dir string) ([]string, error) {
+	out, err := r.Run(ctx, dir, "gh", "stack", "view", "--json")
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", ErrNotInStack, err)
+	}
+	var view stackView
+	if err := json.Unmarshal([]byte(out), &view); err != nil {
+		return nil, fmt.Errorf("stack view: decode: %w", err)
+	}
+	var names []string
+	for _, b := range view.Branches {
+		names = append(names, b.Name)
+	}
+	return names, nil
+}
+
+// StackInit starts a gh stack at branch (adopting it) in dir. Best effort:
+// without gh-stack it fails and the repo just has no stack.
+func StackInit(ctx context.Context, r Runner, dir, branch string) error {
+	_, err := r.Run(ctx, dir, "gh", "stack", "init", branch)
+	return err
+}
+
+// StackSync runs `gh stack sync` in dir: fetch, rebase the stack onto its
+// updated parents, push (--force-with-lease), and sync PR state. On a rebase
+// conflict gh-stack restores the branches and fails.
+func StackSync(ctx context.Context, r Runner, dir string) error {
+	if _, err := r.Run(ctx, dir, "gh", "stack", "sync"); err != nil {
+		return fmt.Errorf("gh stack sync: %w", err)
+	}
+	return nil
 }
 
 // jobURL matches a GitHub Actions job link: .../<owner>/<repo>/actions/runs/<run>/job/<job>.

@@ -23,7 +23,7 @@ func syncFeature(ctx context.Context, d deps, explicit string, background bool) 
 	if background && piWorking(ctx, d, name) {
 		return nil
 	}
-	lines, err := reconcileLines(ctx, d, name)
+	lines, err := reconcileLines(ctx, d, name, !background) // only an explicit sync pushes stacks
 	if err != nil || background {
 		return err
 	}
@@ -37,12 +37,12 @@ func syncFeature(ctx context.Context, d deps, explicit string, background bool) 
 }
 
 // reconcileLines runs Reconcile and describes the results, one line per repo.
-func reconcileLines(ctx context.Context, d deps, name string) ([]string, error) {
+func reconcileLines(ctx context.Context, d deps, name string, stackSync bool) ([]string, error) {
 	state, _, err := feature.RefreshPRs(ctx, d.run, d.layout, name)
 	if err != nil {
 		return nil, err
 	}
-	results, err := feature.Reconcile(ctx, d.run, d.layout, name, state.PRs)
+	results, err := feature.Reconcile(ctx, d.run, d.layout, name, state.PRs, stackSync)
 	if err != nil {
 		return nil, err
 	}
@@ -52,6 +52,8 @@ func reconcileLines(ctx context.Context, d deps, name string) ([]string, error) 
 		switch r.Action {
 		case feature.SyncNeeded:
 			lines = append(lines, fmt.Sprintf("%s %s: %s: %s", red("✗"), r.Repo, pr, r.Detail))
+		case feature.SyncStack:
+			lines = append(lines, fmt.Sprintf("%s %s: %s", green("✓"), r.Repo, r.Detail))
 		default:
 			lines = append(lines, fmt.Sprintf("%s %s: %s, %s (next push: --force-with-lease)", green("✓"), r.Repo, pr, r.Detail))
 		}
