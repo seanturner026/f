@@ -28,7 +28,8 @@ by `f`).
    `<leader>pr` toggles to *just pi's last run*. Comment with `<leader>pc`,
    send them all with `<leader>ps`. Small fixes: edit the right-hand side
    directly and tell pi ("I edited X").
-4. **PRs**: pi opens them; they show in pi's footer with CI (`✓` `⋯` `✗`). `!!f prs -c` copies
+4. **PRs**: pi opens them; they show in pi's footer with CI (`✓` `⋯` `✗`), and the
+   `prs` tab lists each PR's failing/running checks. `!!f prs -c` copies
    `url: title` lines (stacks as a tree).
 5. **Switch**: `ctrl+space` → picker, ordered by what needs you.
 6. **Done**: when PRs merge, the next `f <new>` offers cleanup, or `alt-x` in
@@ -46,12 +47,24 @@ picker (`3/5 done · next: …`).
 | Key | Does |
 |---|---|
 | `ctrl+space` | Feature picker (press again to close) |
-| `opt+1…9` | Tab: `1` chat · `2` nvim · `3…` repos · last shell |
+| `opt+1…9` | Tab: `1` chat · `2` nvim · `3…` repos · then prs · last shell |
 | `ctrl+b t` | Popup shell (`exit` / `ctrl+d` closes it) |
 | `ctrl+b w` | Herdr's own workspace list |
 | `ctrl+b b` | Toggle the sidebar (hidden by default) |
 | `ctrl+b shift+d` | Close this workspace (pi's session is kept) |
 | `ctrl+b q` | Detach (everything keeps running; `herdr` reattaches) |
+
+### PRs tab (`f prs --watch`)
+
+| Key | Does |
+|---|---|
+| `r` | Refresh now (a re-run on GitHub, a merge) |
+| `q` | Quit (back to a shell; `f prs -w` restarts it) |
+
+Each open PR lists its failing (with link) and running checks; passed and
+skipped are a count. It asks GitHub every minute only while checks run or for
+5 minutes after a push or new PR; otherwise it just watches for pushes. What it
+learns shows in the picker too.
 
 ### Picker (`ctrl+space` or bare `f`)
 

@@ -93,8 +93,8 @@ func TestOpenWorkspaceTabOrder(t *testing.T) {
 		repos []string
 		want  []string
 	}{
-		{name: "two repos", repos: []string{"argocd", "infra"}, want: []string{"nvim", "argocd", "infra", "shell"}},
-		{name: "no repos", repos: nil, want: []string{"nvim", "shell"}},
+		{name: "two repos", repos: []string{"argocd", "infra"}, want: []string{"nvim", "argocd", "infra", "prs", "shell"}},
+		{name: "no repos", repos: nil, want: []string{"nvim", "prs", "shell"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -176,6 +176,60 @@ func TestPromptPi(t *testing.T) {
 			}
 			if tt.wantPane != "" && (len(r.prompt) != 2 || r.prompt[0] != tt.wantPane || r.prompt[1] != "hello") {
 				t.Errorf("prompt args = %v", r.prompt)
+			}
+		})
+	}
+}
+
+// tabsRunner answers workspace list, tab create, and tab list for AddRepoTab.
+type tabsRunner struct{ tabs string }
+
+func (r tabsRunner) Run(_ context.Context, _, _ string, args ...string) (string, error) {
+	switch strings.Join(args[:2], " ") {
+	case "workspace list":
+		return `{"result":{"workspaces":[{"workspace_id":"w1","label":"feat"}]}}`, nil
+	case "tab create":
+		return `{"result":{"tab":{"tab_id":"new"},"root_pane":{"pane_id":"p"}}}`, nil
+	case "tab list":
+		return r.tabs, nil
+	}
+	return "{}", nil
+}
+
+type moveCaller struct{ index any }
+
+func (c *moveCaller) Call(_ context.Context, method string, params, _ any) error {
+	if method == "tab.move" {
+		c.index = params.(map[string]any)["insert_index"]
+	}
+	return nil
+}
+
+func TestAddRepoTabPlacement(t *testing.T) {
+	tab := func(labels ...string) string {
+		var parts []string
+		for _, l := range labels {
+			parts = append(parts, `{"tab_id":"`+l+`","label":"`+l+`"}`)
+		}
+		return `{"result":{"tabs":[` + strings.Join(parts, ",") + `]}}`
+	}
+	tests := []struct {
+		name string
+		tabs string
+		want any
+	}{
+		{name: "before prs", tabs: tab("chat", "nvim", "argocd", "prs", "shell", "new"), want: 3},
+		{name: "before shell (older workspace)", tabs: tab("chat", "nvim", "argocd", "shell", "new"), want: 3},
+		{name: "neither: stays last", tabs: tab("chat", "new"), want: nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := &moveCaller{}
+			if _, err := herdr.AddRepoTab(context.Background(), tabsRunner{tabs: tt.tabs}, c, "feat", "/f", "infra"); err != nil {
+				t.Fatal(err)
+			}
+			if c.index != tt.want {
+				t.Errorf("insert_index = %v, want %v", c.index, tt.want)
 			}
 		})
 	}

@@ -152,8 +152,16 @@ func main() {
 					&cli.BoolFlag{Name: "json", Usage: "machine-readable output"},
 					&cli.StringFlag{Name: "add", Usage: "record a PR URL"},
 					&cli.BoolFlag{Name: "copy", Aliases: []string{"c"}, Usage: "copy url: title lines"},
+					&cli.BoolFlag{Name: "watch", Aliases: []string{"w"}, Usage: "live view with checks (the prs tab)"},
 				},
 				Action: func(ctx context.Context, c *cli.Command) error {
+					if c.Bool("watch") {
+						name, err := resolve(d, c.String("feature"))
+						if err != nil {
+							return err
+						}
+						return watchPRs(ctx, d, name)
+					}
 					return prs(ctx, d, c.String("feature"), prsOptions{
 						refresh: c.Bool("refresh"),
 						noOpen:  c.Bool("no-open") || c.Bool("json"),

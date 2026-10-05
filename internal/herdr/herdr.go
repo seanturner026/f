@@ -134,11 +134,17 @@ const (
 	OpenCreated OpenResult = "created"
 )
 
+// The PRs tab: each repo's PRs and checks, kept fresh (f prs --watch).
+const (
+	prsTab     = "prs"
+	prsCommand = "f prs --watch"
+)
+
 // reviewCommand runs nvim on one repo's live CodeDiff (:PiReview in nvim/f.lua).
 func reviewCommand(repo string) string { return "nvim -c " + shell.Quote("PiReview "+repo) }
 
 // OpenWorkspace focuses the workspace labelled label, or creates it in dir with
-// tabs: chat (pi with piArgs) · nvim · one review tab per repo · shell.
+// tabs: chat (pi with piArgs) · nvim · one review tab per repo · prs · shell.
 func OpenWorkspace(ctx context.Context, r Runner, label, dir string, repos, piArgs []string) (OpenResult, error) {
 	if id, err := FindWorkspace(ctx, r, label); err != nil {
 		return "", err
@@ -165,6 +171,9 @@ func OpenWorkspace(ctx context.Context, r Runner, label, dir string, repos, piAr
 			return "", err
 		}
 	}
+	if err := tabRunning(ctx, r, ws, dir, prsTab, prsCommand); err != nil {
+		return "", err
+	}
 	if err := call(ctx, r, nil, "tab", "create", "--workspace", ws, "--cwd", dir, "--label", "shell"); err != nil {
 		return "", fmt.Errorf("create shell tab: %w", err)
 	}
@@ -184,7 +193,8 @@ func OpenWorkspace(ctx context.Context, r Runner, label, dir string, repos, piAr
 }
 
 // AddRepoTab adds a review tab for repo to the workspace labelled label, if it
-// exists, placed just before the shell tab (or last if there's none).
+// exists, placed after the other repo tabs: before the prs or shell tab (or
+// last if there's neither).
 func AddRepoTab(ctx context.Context, r Runner, c Caller, label, dir, repo string) (bool, error) {
 	ws, err := FindWorkspace(ctx, r, label)
 	if err != nil || ws == "" {
@@ -206,7 +216,7 @@ func AddRepoTab(ctx context.Context, r Runner, c Caller, label, dir, repo string
 		return true, fmt.Errorf("list tabs: %w", err)
 	}
 	for i, t := range list.Result.Tabs {
-		if t.Label == "shell" {
+		if t.Label == prsTab || t.Label == "shell" {
 			if err := c.Call(ctx, "tab.move", map[string]any{"tab_id": tabID, "insert_index": i}, nil); err != nil {
 				return true, fmt.Errorf("move %s tab: %w", repo, err)
 			}
