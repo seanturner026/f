@@ -119,6 +119,7 @@ func start(ctx context.Context, d deps, name string, repos []string, prompt stri
 			return err
 		}
 		ensureIssue(ctx, d, picked)
+		syncInBackground(picked)
 		return launch(ctx, d, picked, "", true)
 	}
 	if err := checkName(name); err != nil {
@@ -129,6 +130,7 @@ func start(ctx context.Context, d deps, name string, repos []string, prompt stri
 			return err
 		}
 		ensureIssue(ctx, d, name)
+		syncInBackground(name)
 		return launch(ctx, d, name, "", true)
 	}
 

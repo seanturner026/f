@@ -10,6 +10,7 @@
  *   `gh pr create` output is recorded at once (`f prs --add`); /prs opens them.
  * - CI: /ci sends failing checks with their failed-job logs (`f ci fix --print`)
  *   as a prompt: find the cause, propose a fix, don't push.
+ * - Sync: /sync runs `f sync` (after a merge: reset that repo to main).
  * - Plan: after each run, `f plan sync` saves the beads issue's progress for
  *   the picker (bd is too slow to query when the picker opens).
  */
@@ -105,6 +106,17 @@ export default function (pi: ExtensionAPI) {
 			const prompt = res.stdout.trim();
 			if (!prompt) return ctx.ui.notify("no failing checks", "info");
 			pi.sendUserMessage(prompt, ctx.isIdle() ? undefined : { deliverAs: "followUp" });
+		},
+	});
+
+	pi.registerCommand("sync", {
+		description: "After a PR merges: reset its repo to main (or rebase newer commits onto it)",
+		handler: async (_args, ctx) => {
+			if (!featureInfo(ctx.cwd)) return ctx.ui.notify("not in an f feature", "warning");
+			const res = await pi.exec("f", ["sync"], { cwd: ctx.cwd, timeout: 120_000 });
+			await renderPRs(ctx, false);
+			const out = (res.stdout + res.stderr).replace(/\x1b\[[\d;]*m/g, "").trim();
+			ctx.ui.notify(out || "nothing to sync", res.code !== 0 || out.includes("\u2717") ? "warning" : "info");
 		},
 	});
 

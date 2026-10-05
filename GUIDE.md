@@ -32,7 +32,9 @@ by `f`).
    `prs` tab lists each PR's failing/running checks. `!!f prs -c` copies
    `url: title` lines (stacks as a tree).
 5. **Switch**: `ctrl+space` → picker, ordered by what needs you.
-6. **Done**: when PRs merge, the next `f <new>` offers cleanup, or `alt-x` in
+6. **Merged**: the repo resets to main by itself (on open, `r` in prs, `/sync`, or tell
+   pi "merged"), so more work in the feature starts a fresh PR.
+7. **Done**: when PRs merge, the next `f <new>` offers cleanup, or `alt-x` in
    the picker. The beads issue closes with the PR links.
 
 Big multi-step work (e.g. ACK across tf/argocd/prod/ops): start one
@@ -93,6 +95,7 @@ unseen) → **working** → **idle** → **closed** (no pi running).
 | `ctrl+alt+up/down` | Jump between prompts in the transcript |
 | `!!f prs -c` | Copy PR links (`!!` = run without sending output to the model) |
 | `/prs` | Refresh PRs, open the open ones in the browser |
+| `/sync` | After a PR merges: reset its repo to main (rebase newer commits onto it); also runs when you open the feature and on `r` in the prs tab |
 | `/ci` | Send failing checks + failed-job logs to pi: it finds the cause and proposes a fix, no push until you OK |
 | `/remember [what]` | Save a preference as a rule in `agent/AGENTS.md` |
 | `/reload` | Pick up changed extensions, rules, keybindings |
@@ -127,6 +130,7 @@ Comment on the **right** side of a diff (the real file). Comments are saved in
 | `f` | Picker |
 | `f add [repo…]` | Add repos to this feature (+ Herdr tabs, before shell) |
 | `f prs [-r] [-c] [-n] [-w]` | PRs: from saved state; `-r` refresh live, `-c` copy, `-n` don't open browser, `-w` live view (the prs tab) |
+| `f sync` | Same as `/sync`. Leaves repos with uncommitted changes or conflicts alone (says so) |
 | `f ci fix` | Send failing checks + failed-job logs to the feature's pi (clipboard if pi isn't reachable) |
 | `f goal [text]` | Show / set the goal |
 | `f comment list\|send\|clear` | Review comments (nvim uses these) |

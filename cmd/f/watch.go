@@ -27,7 +27,7 @@ import (
 //     remote-tracking refs in each worktree) or a state.json change (pi
 //     recorded or refreshed PRs)
 //
-// r refreshes now (re-runs, merges); f sends failing checks to pi (f ci fix);
+// r refreshes now (re-runs, merges) and syncs repos whose PR merged; f sends failing checks to pi (f ci fix);
 // q quits.
 const (
 	watchTick = 5 * time.Second
@@ -153,6 +153,13 @@ func watchPRs(ctx context.Context, d deps, name string) error {
 				return nil
 			case k == 'r':
 				refresh()
+				if !piWorking(ctx, d, name) { // a merge? bring its repo back onto main
+					if lines, err := reconcileLines(ctx, d, name); err == nil && len(lines) > 0 {
+						note = strings.Join(lines, "\n")
+					}
+					state, _ = feature.LoadState(d.layout, name)
+					stateMod = modTime(feature.StatePath(d.layout, name))
+				}
 			case k == 'f':
 				note = "sending failing checks to pi…"
 				draw(watchView{name: name, repos: repos, state: state, errs: errs, mode: currentMode(state.PRs, time.Now(), settleUntil), note: note})

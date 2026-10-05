@@ -22,6 +22,7 @@ const help = `f: one pi session across several repos, each on its own worktree.
   f add [repo...]  add repos to this feature
   f prs [-r] [-c]  this feature's PRs (-r refresh, -c copy, -w live view)
   f ci fix         send failing checks to pi (it proposes a fix, doesn't push)
+  f sync           after a PR merges: reset its repo to main (rebase newer commits)
 
 f <cmd> -h for flags. Plumbing used by pi/nvim: f goal, f comment.
 `
@@ -143,6 +144,14 @@ func main() {
 				Flags:     []cli.Flag{featureFlag},
 				Action: func(ctx context.Context, c *cli.Command) error {
 					return goal(ctx, d, c.String("feature"), strings.Join(c.Args().Slice(), " "))
+				},
+			},
+			{
+				Name:  "sync",
+				Usage: "after a PR merges: reset its repo to main (or rebase newer commits onto it)",
+				Flags: []cli.Flag{featureFlag, &cli.BoolFlag{Name: "background", Hidden: true}},
+				Action: func(ctx context.Context, c *cli.Command) error {
+					return syncFeature(ctx, d, c.String("feature"), c.Bool("background"))
 				},
 			},
 			{

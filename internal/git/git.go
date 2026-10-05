@@ -178,3 +178,30 @@ func IntentToAdd(ctx context.Context, r Runner, wt string) error {
 	}
 	return nil
 }
+
+// ResetHard moves the checked-out branch to rev, discarding local changes.
+func ResetHard(ctx context.Context, r Runner, wt, rev string) error {
+	if _, err := r.Run(ctx, wt, "git", "reset", "--hard", rev); err != nil {
+		return fmt.Errorf("reset: %w", err)
+	}
+	return nil
+}
+
+// RebaseOnto replays the commits after upstream onto newBase. On a conflict
+// it aborts (the branch is left as it was) and returns the error.
+func RebaseOnto(ctx context.Context, r Runner, wt, newBase, upstream string) error {
+	if _, err := r.Run(ctx, wt, "git", "rebase", "--onto", newBase, upstream); err != nil {
+		_, _ = r.Run(ctx, wt, "git", "rebase", "--abort")
+		return fmt.Errorf("rebase: %w", err)
+	}
+	return nil
+}
+
+// RevParse resolves rev to a commit ("" if it doesn't resolve).
+func RevParse(ctx context.Context, r Runner, wt, rev string) string {
+	out, err := r.Run(ctx, wt, "git", "rev-parse", "-q", "--verify", rev+"^{commit}")
+	if err != nil {
+		return ""
+	}
+	return out
+}

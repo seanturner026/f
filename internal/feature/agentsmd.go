@@ -31,6 +31,7 @@ This session works across these git worktrees, all on branch ` + "`{{.Name}}`" +
 
 - Before reviewing, answering questions about, or changing anything in a repo (its PRs included), read its instructions file listed above (if any) in full with the read tool, and follow it. Tool calls on a repo are blocked until you have.
 - Run git commands inside the relevant repo directory; this root is not a git repo.
+- When a PR has merged (I'll say so), run ` + "`f sync`" + `: it resets that repo to main (or rebases newer commits onto it) so the next PR starts fresh. The next push to the branch needs ` + "`--force-with-lease`" + `.
 - One PR per repo, from branch ` + "`{{.Name}}`" + `.
 - ` + "`.context/`" + ` holds feature state managed by ` + "`f`" + ` (e.g. ` + "`.context/state.json`" + ` lists this feature's PRs). Read it when useful; don't edit it.
 {{if .Issue}}

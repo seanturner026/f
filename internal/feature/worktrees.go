@@ -88,6 +88,7 @@ func Finished(ctx context.Context, r Runner, l Layout, name string) bool {
 	if err != nil {
 		return false
 	}
+	state, _ := LoadState(l, name)
 	merged := 0
 	for _, repo := range repos {
 		wt := filepath.Join(Dir(l, name), repo)
@@ -96,7 +97,10 @@ func Finished(ctx context.Context, r Runner, l Layout, name string) bool {
 		}
 		base := "origin/" + git.DefaultBranch(ctx, r, filepath.Join(l.Base, repo))
 		if ahead, err := git.CommitsAhead(ctx, r, wt, base); err == nil && ahead == 0 {
-			continue // untouched repo
+			if hasMergedPR(state.PRs, repo) {
+				merged++ // synced after its PR merged (f sync)
+			}
+			continue // untouched (or synced) repo
 		}
 		prs, err := github.RepoPRs(ctx, r, wt, repo, name)
 		if err != nil || !mergedAtHead(ctx, r, wt, prs) {
@@ -105,6 +109,15 @@ func Finished(ctx context.Context, r Runner, l Layout, name string) bool {
 		merged++
 	}
 	return merged > 0
+}
+
+func hasMergedPR(prs []model.PR, repo string) bool {
+	for _, p := range prs {
+		if p.Repo == repo && p.Status == model.PRStatusMerged {
+			return true
+		}
+	}
+	return false
 }
 
 func mergedAtHead(ctx context.Context, r Runner, wt string, prs []model.PR) bool {
