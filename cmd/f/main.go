@@ -6,7 +6,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"strconv"
 	"strings"
 
 	"github.com/urfave/cli/v3"
@@ -158,13 +157,9 @@ func main() {
 				// Bound to cmd+ctrl+<key> (WezTerm → ctrl+alt → Herdr shell command).
 				Name:      "tab",
 				Hidden:    true,
-				ArgsUsage: "chat|nvim|prs|shell|1..9 (nth repo)",
+				ArgsUsage: "<key> (c chat · v nvim · a s e r g repos · p prs · t shell)",
 				Action: func(ctx context.Context, c *cli.Command) error {
-					arg := c.Args().First()
-					if n, err := strconv.Atoi(arg); err == nil {
-						return herdr.FocusTab(ctx, d.run, "", n)
-					}
-					return herdr.FocusTab(ctx, d.run, herdr.TabRole(arg), 0)
+					return herdr.FocusTab(ctx, d.run, c.Args().First())
 				},
 			},
 			{

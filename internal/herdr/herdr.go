@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"slices"
 	"strings"
@@ -141,6 +142,35 @@ const (
 	prsCommand = "f prs --watch"
 )
 
+// Tab keys: cmd+ctrl+<key> focuses the tab (WezTerm → ctrl+alt → `f tab
+// <key>`), and each label starts with its key ("a:argocd") as a reminder.
+const (
+	keyChat  = "c"
+	keyNvim  = "v"
+	keyPRs   = "p"
+	keyShell = "t"
+)
+
+// repoKeys are the keys of the first repo tabs, in order; later repos get none.
+var repoKeys = []string{"a", "s", "e", "r", "g"}
+
+// tabLabel is "<key>:<name>", or just name without a key.
+func tabLabel(key, name string) string {
+	if key == "" {
+		return name
+	}
+	return key + ":" + name
+}
+
+// splitLabel returns a tab label's key and name ("a:argocd" → "a", "argocd");
+// labels from before keys have no key.
+func splitLabel(label string) (key, name string) {
+	if k, n, ok := strings.Cut(label, ":"); ok && len(k) == 1 {
+		return k, n
+	}
+	return "", label
+}
+
 // reviewCommand runs nvim on one repo's live CodeDiff (:PiReview in nvim/f.lua).
 func reviewCommand(repo string) string { return "nvim -c " + shell.Quote("PiReview "+repo) }
 
@@ -161,21 +191,25 @@ func OpenWorkspace(ctx context.Context, r Runner, label, dir string, repos, piAr
 		return "", fmt.Errorf("create workspace: %w", err)
 	}
 	ws, chatTab, chatPane := chat.Result.Workspace.ID, chat.Result.Tab.ID, chat.Result.RootPane.ID
-	if err := call(ctx, r, nil, "tab", "rename", chatTab, "chat"); err != nil {
+	if err := call(ctx, r, nil, "tab", "rename", chatTab, tabLabel(keyChat, "chat")); err != nil {
 		return "", fmt.Errorf("rename tab: %w", err)
 	}
-	if err := tabRunning(ctx, r, ws, dir, "nvim", "nvim"); err != nil {
+	if err := tabRunning(ctx, r, ws, dir, tabLabel(keyNvim, "nvim"), "nvim"); err != nil {
 		return "", err
 	}
-	for _, repo := range repos {
-		if err := tabRunning(ctx, r, ws, dir, repo, reviewCommand(repo)); err != nil {
+	for i, repo := range repos {
+		key := ""
+		if i < len(repoKeys) {
+			key = repoKeys[i]
+		}
+		if err := tabRunning(ctx, r, ws, dir, tabLabel(key, repo), reviewCommand(repo)); err != nil {
 			return "", err
 		}
 	}
-	if err := tabRunning(ctx, r, ws, dir, prsTab, prsCommand); err != nil {
+	if err := tabRunning(ctx, r, ws, dir, tabLabel(keyPRs, prsTab), prsCommand); err != nil {
 		return "", err
 	}
-	if err := call(ctx, r, nil, "tab", "create", "--workspace", ws, "--cwd", dir, "--label", "shell"); err != nil {
+	if err := call(ctx, r, nil, "tab", "create", "--workspace", ws, "--cwd", dir, "--label", tabLabel(keyShell, "shell")); err != nil {
 		return "", fmt.Errorf("create shell tab: %w", err)
 	}
 	if err := call(ctx, r, nil, "tab", "focus", chatTab); err != nil {
@@ -201,23 +235,28 @@ func AddRepoTab(ctx context.Context, r Runner, c Caller, label, dir, repo string
 	if err != nil || ws == "" {
 		return false, err
 	}
-	tabID, err := tabRunningID(ctx, r, ws, dir, repo, reviewCommand(repo))
+	tabs, err := listTabs(ctx, r, ws)
 	if err != nil {
 		return true, err
 	}
-	var list struct {
-		Result struct {
-			Tabs []struct {
-				ID    string `json:"tab_id"`
-				Label string `json:"label"`
-			} `json:"tabs"`
-		} `json:"result"`
+	used := map[string]bool{}
+	for _, t := range tabs {
+		k, _ := splitLabel(t.Label)
+		used[k] = true
 	}
-	if err := call(ctx, r, &list, "tab", "list", "--workspace", ws); err != nil {
-		return true, fmt.Errorf("list tabs: %w", err)
+	key := ""
+	for _, k := range repoKeys {
+		if !used[k] {
+			key = k
+			break
+		}
 	}
-	for i, t := range list.Result.Tabs {
-		if t.Label == prsTab || t.Label == "shell" {
+	tabID, err := tabRunningID(ctx, r, ws, dir, tabLabel(key, repo), reviewCommand(repo))
+	if err != nil {
+		return true, err
+	}
+	for i, t := range tabs {
+		if _, name := splitLabel(t.Label); name == prsTab || name == "shell" {
 			if err := c.Call(ctx, "tab.move", map[string]any{"tab_id": tabID, "insert_index": i}, nil); err != nil {
 				return true, fmt.Errorf("move %s tab: %w", repo, err)
 			}
@@ -225,6 +264,23 @@ func AddRepoTab(ctx context.Context, r Runner, c Caller, label, dir, repo string
 		}
 	}
 	return true, nil
+}
+
+type tab struct {
+	ID    string `json:"tab_id"`
+	Label string `json:"label"`
+}
+
+func listTabs(ctx context.Context, r Runner, ws string) ([]tab, error) {
+	var list struct {
+		Result struct {
+			Tabs []tab `json:"tabs"`
+		} `json:"result"`
+	}
+	if err := call(ctx, r, &list, "tab", "list", "--workspace", ws); err != nil {
+		return nil, fmt.Errorf("list tabs: %w", err)
+	}
+	return list.Result.Tabs, nil
 }
 
 // tabRunning creates a tab labelled tabLabel in workspace ws and runs cmd in it.
@@ -320,20 +376,13 @@ func PromptPi(ctx context.Context, r Runner, dir, text string) error {
 	return fmt.Errorf("%s: %w", dir, ErrNoPi)
 }
 
-// TabRole names a tab of a feature workspace for FocusTab.
-type TabRole string
+// legacyNames finds tabs by name in workspaces made before tab keys.
+var legacyNames = map[string]string{keyChat: "chat", keyNvim: "nvim", keyPRs: prsTab, keyShell: "shell"}
 
-const (
-	TabChat  TabRole = "chat"
-	TabNvim  TabRole = "nvim"
-	TabPRs   TabRole = prsTab
-	TabShell TabRole = "shell"
-)
-
-// FocusTab focuses a tab of the focused workspace: a role's tab (by label) or,
-// for repo n (1-based), the nth tab that isn't one of the roles. A missing tab
-// is a no-op.
-func FocusTab(ctx context.Context, r Runner, role TabRole, repo int) error {
+// FocusTab focuses the focused workspace's tab for key: the tab labelled
+// "<key>:…". Older workspaces without keys: by name, or for a repo key the
+// nth tab that isn't chat/nvim/prs/shell. A missing tab is a no-op.
+func FocusTab(ctx context.Context, r Runner, key string) error {
 	workspaces, err := listWorkspaces(ctx, r)
 	if err != nil {
 		return err
@@ -347,26 +396,45 @@ func FocusTab(ctx context.Context, r Runner, role TabRole, repo int) error {
 	if ws == "" {
 		return nil
 	}
-	var list struct {
-		Result struct {
-			Tabs []struct {
-				ID    string `json:"tab_id"`
-				Label string `json:"label"`
-			} `json:"tabs"`
-		} `json:"result"`
+	tabs, err := listTabs(ctx, r, ws)
+	if err != nil {
+		return err
 	}
-	if err := call(ctx, r, &list, "tab", "list", "--workspace", ws); err != nil {
-		return fmt.Errorf("list tabs: %w", err)
-	}
-	n := 0
-	for _, t := range list.Result.Tabs {
-		isRole := slices.Contains([]TabRole{TabChat, TabNvim, TabPRs, TabShell}, TabRole(t.Label))
-		if role != "" && TabRole(t.Label) == role || role == "" && !isRole && repo == n+1 {
-			return call(ctx, r, nil, "tab", "focus", t.ID)
-		}
-		if !isRole {
-			n++
-		}
+	if id := findTab(tabs, key); id != "" {
+		return call(ctx, r, nil, "tab", "focus", id)
 	}
 	return nil
+}
+
+func findTab(tabs []tab, key string) string {
+	keyed := false
+	for _, t := range tabs {
+		k, _ := splitLabel(t.Label)
+		if k == key {
+			return t.ID
+		}
+		keyed = keyed || k != ""
+	}
+	if keyed {
+		return "" // a workspace with keys just has no such tab
+	}
+	if name, ok := legacyNames[key]; ok {
+		for _, t := range tabs {
+			if t.Label == name {
+				return t.ID
+			}
+		}
+		return ""
+	}
+	n := slices.Index(repoKeys, key) + 1 // 0: not a repo key
+	roles := slices.Collect(maps.Values(legacyNames))
+	for _, t := range tabs {
+		if slices.Contains(roles, t.Label) {
+			continue
+		}
+		if n--; n == 0 {
+			return t.ID
+		}
+	}
+	return ""
 }

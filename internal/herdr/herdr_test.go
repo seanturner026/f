@@ -93,8 +93,8 @@ func TestOpenWorkspaceTabOrder(t *testing.T) {
 		repos []string
 		want  []string
 	}{
-		{name: "two repos", repos: []string{"argocd", "infra"}, want: []string{"nvim", "argocd", "infra", "prs", "shell"}},
-		{name: "no repos", repos: nil, want: []string{"nvim", "prs", "shell"}},
+		{name: "two repos", repos: []string{"argocd", "infra"}, want: []string{"v:nvim", "a:argocd", "s:infra", "p:prs", "t:shell"}},
+		{name: "no repos", repos: nil, want: []string{"v:nvim", "p:prs", "t:shell"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -218,9 +218,9 @@ func TestAddRepoTabPlacement(t *testing.T) {
 		tabs string
 		want any
 	}{
-		{name: "before prs", tabs: tab("chat", "nvim", "argocd", "prs", "shell", "new"), want: 3},
-		{name: "before shell (older workspace)", tabs: tab("chat", "nvim", "argocd", "shell", "new"), want: 3},
-		{name: "neither: stays last", tabs: tab("chat", "new"), want: nil},
+		{name: "before prs", tabs: tab("c:chat", "v:nvim", "a:argocd", "p:prs", "t:shell"), want: 3},
+		{name: "before shell (older workspace)", tabs: tab("chat", "nvim", "argocd", "shell"), want: 3},
+		{name: "neither: stays last", tabs: tab("chat"), want: nil},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -253,24 +253,24 @@ func (r *focusRunner) Run(_ context.Context, _, _ string, args ...string) (strin
 }
 
 func TestFocusTab(t *testing.T) {
-	tabs := `{"result":{"tabs":[{"tab_id":"t1","label":"chat"},{"tab_id":"t2","label":"nvim"},{"tab_id":"t3","label":"argocd"},{"tab_id":"t4","label":"tf"},{"tab_id":"t5","label":"prs"},{"tab_id":"t6","label":"shell"}]}}`
+	keyed := `{"result":{"tabs":[{"tab_id":"t1","label":"c:chat"},{"tab_id":"t2","label":"v:nvim"},{"tab_id":"t3","label":"a:argocd"},{"tab_id":"t4","label":"s:tf"},{"tab_id":"t5","label":"p:prs"},{"tab_id":"t6","label":"t:shell"}]}}`
+	legacy := `{"result":{"tabs":[{"tab_id":"t1","label":"chat"},{"tab_id":"t2","label":"nvim"},{"tab_id":"t3","label":"argocd"},{"tab_id":"t4","label":"tf"},{"tab_id":"t5","label":"shell"}]}}`
 	tests := []struct {
-		name string
-		role herdr.TabRole
-		repo int
-		want string
+		name, tabs, key, want string
 	}{
-		{name: "chat", role: herdr.TabChat, want: "t1"},
-		{name: "shell", role: herdr.TabShell, want: "t6"},
-		{name: "prs", role: herdr.TabPRs, want: "t5"},
-		{name: "repo 1", repo: 1, want: "t3"},
-		{name: "repo 2", repo: 2, want: "t4"},
-		{name: "repo 3 missing", repo: 3, want: ""},
+		{name: "chat", tabs: keyed, key: "c", want: "t1"},
+		{name: "repo s", tabs: keyed, key: "s", want: "t4"},
+		{name: "prs", tabs: keyed, key: "p", want: "t5"},
+		{name: "missing repo key", tabs: keyed, key: "e", want: ""},
+		{name: "legacy shell by name", tabs: legacy, key: "t", want: "t5"},
+		{name: "legacy repo by position", tabs: legacy, key: "s", want: "t4"},
+		{name: "legacy prs missing", tabs: legacy, key: "p", want: ""},
+		{name: "unknown key", tabs: keyed, key: "z", want: ""},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			r := &focusRunner{tabs: tabs}
-			if err := herdr.FocusTab(context.Background(), r, tt.role, tt.repo); err != nil {
+			r := &focusRunner{tabs: tt.tabs}
+			if err := herdr.FocusTab(context.Background(), r, tt.key); err != nil {
 				t.Fatal(err)
 			}
 			if r.focused != tt.want {
