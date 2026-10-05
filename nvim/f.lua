@@ -261,8 +261,62 @@ local function close_if_empty(tab)
   end
 end
 
--- :PiReview [repo]: with a repo (as in f's Herdr repo tabs), just that repo;
--- without, every repo in the feature, one nvim tab each.
+local function git(dir, ...)
+  return vim.system({ "git", "-C", dir, ... }, { text = true }):wait()
+end
+
+-- has_changes: anything for CodeDiff to show vs FEATURE (committed, uncommitted
+-- or untracked). Unsure (e.g. no origin/HEAD) counts as yes, so CodeDiff reports it.
+local function has_changes(dir)
+  local base = git(dir, "merge-base", "origin/HEAD", "HEAD")
+  if base.code ~= 0 then
+    return true
+  end
+  if git(dir, "diff", "--quiet", vim.trim(base.stdout)).code ~= 0 then
+    return true
+  end
+  return vim.trim(git(dir, "ls-files", "--others", "--exclude-standard").stdout or "") ~= ""
+end
+
+local WAIT_MS = 3000 -- how often a waiting review tab checks for changes
+
+-- wait_for_changes shows a placeholder in the current tab until repo has
+-- changes, then opens its CodeDiff and closes the placeholder.
+local function wait_for_changes(root, repo)
+  local dir = root .. "/" .. repo
+  local upstream = vim.trim(git(dir, "rev-parse", "--abbrev-ref", "origin/HEAD").stdout or "")
+  vim.cmd("enew")
+  local buf, tab = vim.api.nvim_get_current_buf(), vim.api.nvim_get_current_tabpage()
+  vim.bo[buf].buftype, vim.bo[buf].bufhidden, vim.bo[buf].swapfile = "nofile", "wipe", false
+  vim.api.nvim_buf_set_lines(buf, 0, -1, false, {
+    "",
+    "  " .. repo .. ": no changes vs " .. (upstream ~= "" and upstream or "origin/HEAD") .. " yet.",
+    "  This tab switches to CodeDiff once there are.",
+  })
+  vim.bo[buf].modifiable, vim.bo[buf].modified = false, false
+  vim.api.nvim_tabpage_set_var(tab, "pi_repo", repo)
+  vim.cmd("redrawtabline")
+
+  local timer = vim.uv.new_timer()
+  timer:start(WAIT_MS, WAIT_MS, vim.schedule_wrap(function()
+    if not vim.api.nvim_tabpage_is_valid(tab) or not vim.api.nvim_buf_is_valid(buf) then
+      return timer:close()
+    end
+    if not has_changes(dir) then
+      return
+    end
+    timer:close()
+    open_codediff(root, { repo }, FEATURE, function()
+      if vim.api.nvim_tabpage_is_valid(tab) and #vim.api.nvim_list_tabpages() > 1 then
+        vim.cmd("tabclose " .. vim.api.nvim_tabpage_get_number(tab))
+      end
+    end)
+  end))
+end
+
+-- :PiReview [repo]: with a repo (as in f's Herdr repo tabs), just that repo
+-- (waiting for changes if there are none yet); without, every repo in the
+-- feature, one nvim tab each.
 local function review(opts)
   local root, repos = feature_repos()
   if not root then
@@ -274,6 +328,9 @@ local function review(opts)
       return vim.notify("PiReview: no repo " .. only .. " in this feature", vim.log.levels.WARN)
     end
     repos = { only }
+    if not has_changes(root .. "/" .. only) then
+      return wait_for_changes(root, only)
+    end
   else
     vim.o.tabline = "%!v:lua.require'f'.tabline()"
     vim.o.showtabline = 2
