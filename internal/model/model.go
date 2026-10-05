@@ -173,12 +173,36 @@ func StackPrefix(prs []PR, i int) string {
 
 // PRClipboard formats PRs one per line as "url: title", stacks as a tree
 // (see StackPrefix).
+//
+// Stacked PRs are labelled with their position ("1/3 " bottom first) rather
+// than a tree: box-drawing characters don't line up in Slack's proportional font.
 func PRClipboard(prs []PR) string {
 	var b strings.Builder
 	for i, p := range prs {
-		fmt.Fprintf(&b, "%s%s: %s\n", StackPrefix(prs, i), p.URL, p.Title)
+		fmt.Fprintf(&b, "%s%s: %s\n", stackLabel(prs, i), p.URL, p.Title)
 	}
 	return b.String()
+}
+
+// stackLabel is "k/n " for the kth of n stacked PRs of prs[i]'s repo present in
+// prs (bottom first), or "" for an unstacked PR or a stack of one.
+func stackLabel(prs []PR, i int) string {
+	if prs[i].Stack == 0 {
+		return ""
+	}
+	k, n := 0, 0
+	for j, p := range prs {
+		if p.Repo == prs[i].Repo && p.Stack > 0 {
+			n++
+			if j <= i {
+				k++
+			}
+		}
+	}
+	if n < 2 {
+		return ""
+	}
+	return fmt.Sprintf("%d/%d ", k, n)
 }
 
 // Comment is a review comment on a line range, waiting to be sent to pi.

@@ -30,7 +30,7 @@ by `f`).
    directly and tell pi ("I edited X").
 4. **PRs**: pi opens them; they show in pi's footer with CI (`✓` `⋯` `✗`), and the
    `prs` tab lists each PR's failing/running checks. `!!f prs -c` copies
-   `url: title` lines (stacks as a tree).
+   `url: title` lines (stacks numbered 1/3, 2/3, …).
 5. **Switch**: `ctrl+space` → picker, ordered by what needs you.
 6. **Merged**: the repo resets to main by itself (on open, `r` in prs, `/sync`, or tell
    pi "merged"), so more work in the feature starts a fresh PR.
