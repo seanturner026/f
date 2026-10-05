@@ -9,7 +9,7 @@ what each part is; this covers how to use it.
 |---|---|
 | `f` | Creates and owns features: worktrees, branches, `AGENTS.md`, `.context/`, Herdr layout, cleanup, beads issue |
 | Herdr | Terminals: one workspace per feature, agent status |
-| pi | The agent. Extensions: `f.ts` (goal, checkpoints, PRs, plan), `guard.ts` (credentials), `repo-instructions/` (must read a repo's CLAUDE.md/AGENTS.md in full before touching it) |
+| pi | The agent. Extensions: `f.ts` (goal, checkpoints, PRs, plan), `guard.ts` (credentials), `repo-instructions/` (must read a repo's CLAUDE.md/AGENTS.md in full before touching it), `compact-read.ts` (one-line reads) |
 | nvim | Review: one live CodeDiff tab per repo, comments for pi (`nvim/f.lua`) |
 | beads (`bd`) | The plan: one issue per feature, child issues for steps |
 
@@ -95,6 +95,7 @@ unseen) → **working** → **idle** → **closed** (no pi running).
 | `ctrl+alt+up/down` | Jump between prompts in the transcript |
 | `!!f prs -c` | Copy PR links (`!!` = run without sending output to the model) |
 | `/prs` | Refresh PRs, open the open ones in the browser |
+| `/f <name> [repo…]` | Open a feature or start one without leaving chat (tab completes names and repos; asks for repos if new and none given) |
 | `/sync` | After a PR merges: reset its repo to main (rebase newer commits onto it); also runs when you open the feature and on `r` in the prs tab |
 | `/ci` | Send failing checks + failed-job logs to pi: it finds the cause and proposes a fix, no push until you OK |
 | `/remember [what]` | Save a preference as a rule in `agent/AGENTS.md` |

@@ -11,10 +11,12 @@
  * - CI: /ci sends failing checks with their failed-job logs (`f ci fix --print`)
  *   as a prompt: find the cause, propose a fix, don't push.
  * - Sync: /sync runs `f sync` (after a merge: reset that repo to main).
+ * - /f <name> [repo...]: open or start a feature without leaving chat.
  * - Plan: after each run, `f plan sync` saves the beads issue's progress for
  *   the picker (bd is too slow to query when the picker opens).
  */
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { homedir } from "node:os";
 import { join } from "node:path";
 import { isBashToolResult, type ExtensionAPI, type ExtensionContext } from "@earendil-works/pi-coding-agent";
 
@@ -45,6 +47,22 @@ function featureInfo(cwd: string): FeatureInfo | undefined {
 		return undefined;
 	}
 }
+
+// The f layout (internal/feature: DefaultLayout): base clones and features.
+const BASE = process.env.F_BASE || join(homedir(), "code", "features");
+
+function subdirs(dir: string, keep: (name: string) => boolean = () => true): string[] {
+	try {
+		return readdirSync(dir, { withFileTypes: true })
+			.filter((e) => e.isDirectory() && !e.name.startsWith(".") && keep(e.name))
+			.map((e) => e.name)
+			.sort();
+	} catch {
+		return [];
+	}
+}
+const featureNames = () => subdirs(join(BASE, ".features"));
+const baseRepos = () => subdirs(BASE, (n) => existsSync(join(BASE, n, ".git")));
 
 export default function (pi: ExtensionAPI) {
 	const f = (ctx: ExtensionContext, ...args: string[]) => pi.exec("f", args, { cwd: ctx.cwd, timeout: 30_000 });
@@ -92,6 +110,44 @@ export default function (pi: ExtensionAPI) {
 			const res = await f(ctx, "prs", "-r");
 			if (res.code !== 0) ctx.ui.notify(res.stderr.trim() || "f prs failed", "error");
 			await renderPRs(ctx, false);
+		},
+	});
+
+	// /f <name> [repo...]: open a feature (its Herdr workspace) or start one,
+	// like `f` in a terminal. A new feature without repos asks for them.
+	pi.registerCommand("f", {
+		description: "Open a feature, or start one: /f <name> [repo...]",
+		getArgumentCompletions: (prefix) => {
+			const words = prefix.split(/\s+/);
+			const current = words.pop() ?? "";
+			const done = words.join(" ");
+			const options = words.length === 0 ? featureNames() : baseRepos().filter((r) => !words.slice(1).includes(r));
+			const items = options
+				.filter((o) => o.startsWith(current))
+				.map((o) => ({ value: done ? `${done} ${o} ` : `${o} `, label: o }));
+			return items.length ? items : null;
+		},
+		handler: async (args, ctx) => {
+			const [name, ...repos] = args.trim().split(/\s+/).filter(Boolean);
+			if (!name) return ctx.ui.notify("usage: /f <name> [repo...]", "warning");
+			if (!featureNames().includes(name) && repos.length === 0) {
+				const DONE = "\u2713 done";
+				for (;;) {
+					const left = baseRepos().filter((r) => !repos.includes(r));
+					const pick = await ctx.ui.select(
+						`${name}: repos${repos.length ? ` (${repos.join(", ")})` : ""}`,
+						repos.length ? [DONE, ...left] : left,
+					);
+					if (!pick) return ctx.ui.notify("cancelled", "info");
+					if (pick === DONE) break;
+					repos.push(pick);
+				}
+			}
+			ctx.ui.notify(`f ${name}\u2026`, "info");
+			const res = await pi.exec("f", [name, ...repos.flatMap((r) => ["-r", r])], { cwd: ctx.cwd, timeout: 180_000 });
+			const out = (res.stdout + res.stderr).replace(/\x1b\[[\d;]*m/g, "").trim();
+			if (res.code !== 0) return ctx.ui.notify(out || `f ${name} failed`, "error");
+			ctx.ui.notify(out.split("\n").pop() || `opened ${name}`, "info");
 		},
 	});
 
