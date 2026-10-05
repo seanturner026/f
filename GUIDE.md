@@ -47,6 +47,8 @@ picker (`3/5 done · next: …`).
 | Key | Does |
 |---|---|
 | `ctrl+space` | Feature picker (press again to close) |
+| `cmd+ctrl+c/v/p/t` | Tab: chat · nvim · prs · shell (WezTerm → ctrl+alt → `f tab`) |
+| `cmd+ctrl+a s d f g` | Repo tabs 1–5 |
 | `opt+1…9` | Tab: `1` chat · `2` nvim · `3…` repos · then prs · last shell |
 | `ctrl+b t` | Popup shell (`exit` / `ctrl+d` closes it) |
 | `ctrl+b w` | Herdr's own workspace list |

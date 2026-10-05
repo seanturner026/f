@@ -6,11 +6,13 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/urfave/cli/v3"
 
 	"github.com/seanturner026/pi/internal/feature"
+	"github.com/seanturner026/pi/internal/herdr"
 )
 
 const help = `f: one pi session across several repos, each on its own worktree.
@@ -141,6 +143,19 @@ func main() {
 				Flags:     []cli.Flag{featureFlag},
 				Action: func(ctx context.Context, c *cli.Command) error {
 					return goal(ctx, d, c.String("feature"), strings.Join(c.Args().Slice(), " "))
+				},
+			},
+			{
+				// Bound to cmd+ctrl+<key> (WezTerm → ctrl+alt → Herdr shell command).
+				Name:      "tab",
+				Hidden:    true,
+				ArgsUsage: "chat|nvim|prs|shell|1..9 (nth repo)",
+				Action: func(ctx context.Context, c *cli.Command) error {
+					arg := c.Args().First()
+					if n, err := strconv.Atoi(arg); err == nil {
+						return herdr.FocusTab(ctx, d.run, "", n)
+					}
+					return herdr.FocusTab(ctx, d.run, herdr.TabRole(arg), 0)
 				},
 			},
 			{

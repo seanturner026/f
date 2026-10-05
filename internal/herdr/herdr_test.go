@@ -234,3 +234,48 @@ func TestAddRepoTabPlacement(t *testing.T) {
 		})
 	}
 }
+
+type focusRunner struct {
+	tabs    string
+	focused string
+}
+
+func (r *focusRunner) Run(_ context.Context, _, _ string, args ...string) (string, error) {
+	switch strings.Join(args[:2], " ") {
+	case "workspace list":
+		return `{"result":{"workspaces":[{"workspace_id":"w1"},{"workspace_id":"w2","focused":true}]}}`, nil
+	case "tab list":
+		return r.tabs, nil
+	case "tab focus":
+		r.focused = args[2]
+	}
+	return "{}", nil
+}
+
+func TestFocusTab(t *testing.T) {
+	tabs := `{"result":{"tabs":[{"tab_id":"t1","label":"chat"},{"tab_id":"t2","label":"nvim"},{"tab_id":"t3","label":"argocd"},{"tab_id":"t4","label":"tf"},{"tab_id":"t5","label":"prs"},{"tab_id":"t6","label":"shell"}]}}`
+	tests := []struct {
+		name string
+		role herdr.TabRole
+		repo int
+		want string
+	}{
+		{name: "chat", role: herdr.TabChat, want: "t1"},
+		{name: "shell", role: herdr.TabShell, want: "t6"},
+		{name: "prs", role: herdr.TabPRs, want: "t5"},
+		{name: "repo 1", repo: 1, want: "t3"},
+		{name: "repo 2", repo: 2, want: "t4"},
+		{name: "repo 3 missing", repo: 3, want: ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := &focusRunner{tabs: tabs}
+			if err := herdr.FocusTab(context.Background(), r, tt.role, tt.repo); err != nil {
+				t.Fatal(err)
+			}
+			if r.focused != tt.want {
+				t.Errorf("focused %q, want %q", r.focused, tt.want)
+			}
+		})
+	}
+}

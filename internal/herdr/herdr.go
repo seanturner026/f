@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"slices"
 	"strings"
 
 	"github.com/seanturner026/pi/internal/shell"
@@ -317,4 +318,55 @@ func PromptPi(ctx context.Context, r Runner, dir, text string) error {
 		}
 	}
 	return fmt.Errorf("%s: %w", dir, ErrNoPi)
+}
+
+// TabRole names a tab of a feature workspace for FocusTab.
+type TabRole string
+
+const (
+	TabChat  TabRole = "chat"
+	TabNvim  TabRole = "nvim"
+	TabPRs   TabRole = prsTab
+	TabShell TabRole = "shell"
+)
+
+// FocusTab focuses a tab of the focused workspace: a role's tab (by label) or,
+// for repo n (1-based), the nth tab that isn't one of the roles. A missing tab
+// is a no-op.
+func FocusTab(ctx context.Context, r Runner, role TabRole, repo int) error {
+	workspaces, err := listWorkspaces(ctx, r)
+	if err != nil {
+		return err
+	}
+	ws := ""
+	for _, w := range workspaces {
+		if w.Focused {
+			ws = w.ID
+		}
+	}
+	if ws == "" {
+		return nil
+	}
+	var list struct {
+		Result struct {
+			Tabs []struct {
+				ID    string `json:"tab_id"`
+				Label string `json:"label"`
+			} `json:"tabs"`
+		} `json:"result"`
+	}
+	if err := call(ctx, r, &list, "tab", "list", "--workspace", ws); err != nil {
+		return fmt.Errorf("list tabs: %w", err)
+	}
+	n := 0
+	for _, t := range list.Result.Tabs {
+		isRole := slices.Contains([]TabRole{TabChat, TabNvim, TabPRs, TabShell}, TabRole(t.Label))
+		if role != "" && TabRole(t.Label) == role || role == "" && !isRole && repo == n+1 {
+			return call(ctx, r, nil, "tab", "focus", t.ID)
+		}
+		if !isRole {
+			n++
+		}
+	}
+	return nil
 }
