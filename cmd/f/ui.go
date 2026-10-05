@@ -48,13 +48,23 @@ func runFzf(items []string, args ...string) ([]string, error) {
 	if err != nil {
 		return nil, fmt.Errorf("fzf: %w", err)
 	}
+	expect := false
+	for _, a := range args {
+		expect = expect || strings.HasPrefix(a, "--expect")
+	}
+	return parseFzfOutput(string(out), expect), nil
+}
+
+// parseFzfOutput splits fzf's output into lines. With --expect, the first line
+// is the key pressed and is empty for ENTER, so it's kept even when empty.
+func parseFzfOutput(out string, expect bool) []string {
 	var picked []string
-	for _, l := range strings.Split(strings.TrimRight(string(out), "\n"), "\n") {
-		if l != "" {
+	for i, l := range strings.Split(strings.TrimRight(out, "\n"), "\n") {
+		if l != "" || (expect && i == 0) {
 			picked = append(picked, l)
 		}
 	}
-	return picked, nil
+	return picked
 }
 
 // pickRepos multi-selects from all, excluding ones in exclude.
