@@ -23,8 +23,11 @@ type Runner interface {
 var ErrUnavailable = errors.New("herdr unavailable")
 
 // Inside reports whether the current process runs in Herdr: a pane sets
-// HERDR_ENV; popups and custom commands only get HERDR_SOCKET_PATH.
-func Inside() bool { return os.Getenv("HERDR_ENV") == "1" || os.Getenv("HERDR_SOCKET_PATH") != "" }
+// HERDR_ENV; popups and custom commands only get HERDR_SOCKET_PATH; plugin
+// panes (the picker) get HERDR_PLUGIN_CONTEXT_JSON.
+func Inside() bool {
+	return os.Getenv("HERDR_ENV") == "1" || os.Getenv("HERDR_SOCKET_PATH") != "" || os.Getenv("HERDR_PLUGIN_CONTEXT_JSON") != ""
+}
 
 // Available reports whether the Herdr server answers.
 func Available(ctx context.Context, r Runner) bool {

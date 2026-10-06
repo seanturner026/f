@@ -8,5 +8,6 @@
   ],
   "warnings": {
     "anthropicExtraUsage": false
-  }
+  },
+  "hideThinkingBlock": false
 }

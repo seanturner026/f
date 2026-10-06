@@ -21,5 +21,8 @@ done
 # nvim: f (require("f").setup() in init.lua)
 link "$repo/nvim/f.lua" "$HOME/.config/nvim/lua/f.lua"
 
+# Herdr plugin: the f picker popup (bound to ctrl+space in herdr/config.toml)
+command -v herdr >/dev/null && herdr plugin link "$repo/herdr-plugin" >/dev/null && echo "linked herdr plugin f"
+
 # f (feature workspace CLI) → $(go env GOPATH)/bin/f
 (cd "$repo" && go install ./cmd/f) && echo "installed f -> $(go env GOPATH)/bin/f"

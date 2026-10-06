@@ -1,0 +1,23 @@
+# f's Herdr plugin: the feature picker as a titled popup that runs `f`
+# directly (argv, no shell), so it opens without waiting for zsh to start.
+# Linked by install.sh; bound in herdr/config.toml (dotfiles):
+#   [[keys.command]] key = "ctrl+space", type = "plugin_action", command = "f.open-picker"
+id = "f"
+name = "f"
+version = "0.1.0"
+min_herdr_version = "0.9.0"
+description = "Feature picker for f workspaces"
+platforms = ["macos", "linux"]
+
+[[actions]]
+id = "open-picker"
+title = "Feature picker"
+command = ["herdr", "plugin", "pane", "open", "--plugin", "f", "--entrypoint", "picker"]
+
+[[panes]]
+id = "picker"
+title = "workspaces"
+placement = "popup"
+width = "70%"
+height = "50%"
+command = ["f"]
