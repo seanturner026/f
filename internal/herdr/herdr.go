@@ -441,3 +441,20 @@ func findTab(tabs []tab, key string) string {
 	}
 	return ""
 }
+
+// OpenPicker opens f's picker popup (the f plugin's "picker" pane). If Herdr
+// says a popup is already open but none is showing (e.g. orphaned by a client
+// reload), it closes that one and opens the picker again.
+func OpenPicker(ctx context.Context, r Runner, c Caller) error {
+	open := func() error {
+		_, err := r.Run(ctx, "", "herdr", "plugin", "pane", "open", "--plugin", "f", "--entrypoint", "picker")
+		return err
+	}
+	if err := open(); err == nil {
+		return nil
+	}
+	if err := c.Call(ctx, "popup.close", map[string]any{}, nil); err != nil {
+		return fmt.Errorf("close stale popup: %w", err)
+	}
+	return open()
+}

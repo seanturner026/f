@@ -12,7 +12,8 @@ platforms = ["macos", "linux"]
 [[actions]]
 id = "open-picker"
 title = "Feature picker"
-command = ["herdr", "plugin", "pane", "open", "--plugin", "f", "--entrypoint", "picker"]
+# f opens the picker pane, closing a stale popup first if Herdr has one.
+command = ["f", "open-picker"]
 
 [[panes]]
 id = "picker"

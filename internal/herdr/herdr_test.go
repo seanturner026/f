@@ -279,3 +279,31 @@ func TestFocusTab(t *testing.T) {
 		})
 	}
 }
+
+type pickerRunner struct{ opens, failFirst int }
+
+func (r *pickerRunner) Run(_ context.Context, _, _ string, args ...string) (string, error) {
+	r.opens++
+	if r.opens <= r.failFirst {
+		return "", errors.New("ui_busy: a popup pane is already open")
+	}
+	return "{}", nil
+}
+
+type closeCaller struct{ closed bool }
+
+func (c *closeCaller) Call(_ context.Context, method string, _, _ any) error {
+	c.closed = c.closed || method == "popup.close"
+	return nil
+}
+
+func TestOpenPicker(t *testing.T) {
+	r, c := &pickerRunner{}, &closeCaller{}
+	if err := herdr.OpenPicker(context.Background(), r, c); err != nil || r.opens != 1 || c.closed {
+		t.Errorf("normal open: err=%v opens=%d closed=%v", err, r.opens, c.closed)
+	}
+	r, c = &pickerRunner{failFirst: 1}, &closeCaller{}
+	if err := herdr.OpenPicker(context.Background(), r, c); err != nil || r.opens != 2 || !c.closed {
+		t.Errorf("stale popup: err=%v opens=%d closed=%v", err, r.opens, c.closed)
+	}
+}

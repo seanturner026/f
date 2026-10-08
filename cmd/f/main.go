@@ -146,6 +146,12 @@ func main() {
 				},
 			},
 			{
+				// The f Herdr plugin's open-picker action (ctrl+space).
+				Name:   "open-picker",
+				Hidden: true,
+				Action: func(ctx context.Context, c *cli.Command) error { return herdr.OpenPicker(ctx, d.run, d.socket) },
+			},
+			{
 				Name:  "sync",
 				Usage: "after a PR merges: reset its repo to main (or rebase newer commits onto it)",
 				Flags: []cli.Flag{
