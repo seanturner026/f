@@ -75,6 +75,10 @@ func planSync(ctx context.Context, d deps) error {
 	if err != nil {
 		return err
 	}
+	return planSyncFeature(ctx, d, name)
+}
+
+func planSyncFeature(ctx context.Context, d deps, name string) error {
 	info, err := feature.LoadInfo(d.layout, name)
 	if err != nil || info.Issue == "" {
 		return err

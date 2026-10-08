@@ -13,7 +13,7 @@ import (
 var ansiCodes = regexp.MustCompile(`\x1b\[[0-9;]*m`)
 
 // syncAll is the periodic sync (launchd, every 30 min): for every feature,
-// refresh PRs/CI (the picker stays accurate) and reconcile repos whose PR
+// refresh PRs/CI and beads progress (the picker stays accurate) and reconcile repos whose PR
 // merged, without pushing. It skips the workspace you're in and features
 // whose pi is running, and leaves pi a note about anything it changed. Logs
 // one line per change to stdout (the launchd log).
@@ -31,6 +31,9 @@ func syncAll(ctx context.Context, d deps) error {
 		case piWorking(ctx, d, name):
 			fmt.Printf("%s %s: skipped (pi is running)\n", stamp, name)
 			continue
+		}
+		if err := planSyncFeature(ctx, d, name); err != nil {
+			fmt.Printf("%s %s: plan: %v\n", stamp, name, err)
 		}
 		lines, err := reconcileLines(ctx, d, name, false)
 		if err != nil {

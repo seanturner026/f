@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/seanturner026/pi/internal/model"
@@ -34,33 +35,21 @@ type State struct {
 
 // AddSyncNotes queues notes for pi.
 func AddSyncNotes(l Layout, name string, notes ...string) error {
-	s, err := LoadState(l, name)
-	if err != nil {
-		return err
-	}
-	s.SyncNotes = append(s.SyncNotes, notes...)
-	return SaveState(l, name, s)
+	_, err := UpdateState(l, name, func(s *State) { s.SyncNotes = append(s.SyncNotes, notes...) })
+	return err
 }
 
 // TakeSyncNotes returns and clears the queued notes.
 func TakeSyncNotes(l Layout, name string) ([]string, error) {
-	s, err := LoadState(l, name)
-	if err != nil || len(s.SyncNotes) == 0 {
-		return nil, err
-	}
-	notes := s.SyncNotes
-	s.SyncNotes = nil
-	return notes, SaveState(l, name, s)
+	var notes []string
+	_, err := UpdateState(l, name, func(s *State) { notes, s.SyncNotes = s.SyncNotes, nil })
+	return notes, err
 }
 
 // SavePlan records the feature's beads progress.
 func SavePlan(l Layout, name string, p model.Plan) error {
-	s, err := LoadState(l, name)
-	if err != nil {
-		return err
-	}
-	s.Plan = p
-	return SaveState(l, name, s)
+	_, err := UpdateState(l, name, func(s *State) { s.Plan = p })
+	return err
 }
 
 // StatePath is the feature's state file.
@@ -84,7 +73,44 @@ func LoadState(l Layout, name string) (State, error) {
 	return s, nil
 }
 
-// SaveState writes the feature's state atomically.
+// UpdateState changes the feature's state under a lock: it re-reads the file,
+// applies fn, and writes it back. Several writers run at once (pi's post-run
+// PR refresh and plan sync, the prs tab, launchd's f sync --all); without the
+// lock each would write back its own stale copy and drop the others' fields.
+func UpdateState(l Layout, name string, fn func(*State)) (State, error) {
+	unlock, err := lockState(l, name)
+	if err != nil {
+		return State{}, err
+	}
+	defer unlock()
+	s, err := LoadState(l, name)
+	if err != nil {
+		return State{}, err
+	}
+	fn(&s)
+	return s, SaveState(l, name, s)
+}
+
+// lockState takes an exclusive lock on the feature's state (a lock file next
+// to state.json; flock is released if the process dies).
+func lockState(l Layout, name string) (func(), error) {
+	path := StatePath(l, name) + ".lock"
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return nil, fmt.Errorf("lock state: %w", err)
+	}
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0o644)
+	if err != nil {
+		return nil, fmt.Errorf("lock state: %w", err)
+	}
+	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX); err != nil {
+		f.Close()
+		return nil, fmt.Errorf("lock state: %w", err)
+	}
+	return func() { _ = syscall.Flock(int(f.Fd()), syscall.LOCK_UN); f.Close() }, nil
+}
+
+// SaveState writes the feature's state atomically. Use UpdateState to change
+// it: SaveState alone would overwrite concurrent changes.
 func SaveState(l Layout, name string, s State) error {
 	if err := writeJSON(StatePath(l, name), s); err != nil {
 		return fmt.Errorf("save state: %w", err)
@@ -119,21 +145,19 @@ func writeJSON(path string, v any) error {
 // RefreshPRs looks up PRs live and saves them. For repos whose lookup failed,
 // previously known PRs are kept.
 func RefreshPRs(ctx context.Context, r Runner, l Layout, name string) (State, map[string]error, error) {
-	s, err := LoadState(l, name)
+	live, errs, err := PRs(ctx, r, l, name) // network: outside the lock
 	if err != nil {
 		return State{}, nil, err
 	}
-	live, errs, err := PRs(ctx, r, l, name)
-	if err != nil {
-		return State{}, nil, err
-	}
-	for _, p := range s.PRs {
-		if errs[p.Repo] != nil {
-			live = append(live, p)
+	s, err := UpdateState(l, name, func(s *State) {
+		for _, p := range s.PRs {
+			if errs[p.Repo] != nil {
+				live = append(live, p)
+			}
 		}
-	}
-	s.PRs, s.PRsRefreshedAt = live, time.Now()
-	if err := SaveState(l, name, s); err != nil {
+		s.PRs, s.PRsRefreshedAt = live, time.Now()
+	})
+	if err != nil {
 		return State{}, nil, err
 	}
 	return s, errs, nil
@@ -141,18 +165,16 @@ func RefreshPRs(ctx context.Context, r Runner, l Layout, name string) (State, ma
 
 // RecordPR adds (or replaces) a PR in the feature's state without an API call.
 func RecordPR(l Layout, name string, pr model.PR) error {
-	s, err := LoadState(l, name)
-	if err != nil {
-		return err
-	}
-	kept := s.PRs[:0]
-	for _, p := range s.PRs {
-		if p.Repo != pr.Repo || p.Number != pr.Number {
-			kept = append(kept, p)
+	_, err := UpdateState(l, name, func(s *State) {
+		kept := s.PRs[:0]
+		for _, p := range s.PRs {
+			if p.Repo != pr.Repo || p.Number != pr.Number {
+				kept = append(kept, p)
+			}
 		}
-	}
-	s.PRs = append(kept, pr)
-	return SaveState(l, name, s)
+		s.PRs = append(kept, pr)
+	})
+	return err
 }
 
 // ParsePRURL turns https://github.com/<owner>/<repo>/pull/<n> into an open PR

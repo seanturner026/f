@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"reflect"
+	"sync"
 	"testing"
 
 	"github.com/seanturner026/pi/internal/feature"
@@ -159,5 +160,29 @@ func TestRefreshPRs(t *testing.T) {
 				t.Errorf("saved %+v, returned %+v", saved.PRs, s.PRs)
 			}
 		})
+	}
+}
+
+func TestUpdateStateConcurrentWritersKeepEachOthersFields(t *testing.T) {
+	l := newLayout(t, "feat", "argocd")
+	var wg sync.WaitGroup
+	for i := range 20 {
+		wg.Add(2)
+		go func() { defer wg.Done(); _ = feature.SavePlan(l, "feat", model.Plan{Issue: "f-1", Total: 5, Done: i % 5}) }()
+		go func() {
+			defer wg.Done()
+			_ = feature.RecordPR(l, "feat", model.PR{Repo: "argocd", Number: i, URL: "u"})
+		}()
+	}
+	wg.Wait()
+	s, err := feature.LoadState(l, "feat")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s.Plan.Total != 5 {
+		t.Errorf("plan lost: %+v", s.Plan)
+	}
+	if len(s.PRs) != 20 {
+		t.Errorf("PRs = %d, want 20 (no update lost)", len(s.PRs))
 	}
 }
