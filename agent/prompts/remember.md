@@ -13,4 +13,7 @@ Steps:
 3. Choose a section: Workflow, Code taste, or Communication. Add a new section only if none fits.
 4. If an existing rule overlaps, merge or tighten it. Never duplicate.
 5. Show me the exact diff and wait for my OK before editing.
-6. After editing, tell me to run /reload.
+6. After editing, commit just that file in its repo:
+   `git -C /Users/sean/code/github/seanturner026/pi commit -m "AGENTS.md: <the rule, in a few words>" -- agent/AGENTS.md`
+   (only this file, even if the repo has other changes).
+7. Tell me to run /reload.
