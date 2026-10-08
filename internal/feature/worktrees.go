@@ -164,6 +164,9 @@ func Unmerged(ctx context.Context, r Runner, l Layout, name string) ([]string, e
 func unmergedIn(ctx context.Context, r Runner, l Layout, name, repo string) []string {
 	var problems []string
 	wt := filepath.Join(Dir(l, name), repo)
+	if !git.IsRepo(filepath.Join(l.Base, repo)) {
+		return nil // base clone deleted: the worktree's history is gone with it
+	}
 	if n, err := git.ChangedFiles(ctx, r, wt); err != nil {
 		return []string{fmt.Sprintf("%s: %v", repo, err)}
 	} else if n > 0 {
@@ -190,6 +193,9 @@ func Remove(ctx context.Context, r Runner, l Layout, name string, force bool) er
 	}
 	for _, repo := range repos {
 		src := filepath.Join(l.Base, repo)
+		if !git.IsRepo(src) {
+			continue // base clone deleted: nothing to unregister; the directory goes below
+		}
 		if err := git.RemoveWorktree(ctx, r, src, filepath.Join(Dir(l, name), repo), force); err != nil {
 			return fmt.Errorf("remove %s: %w", name, err)
 		}

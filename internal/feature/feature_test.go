@@ -324,3 +324,21 @@ func TestComments(t *testing.T) {
 		t.Errorf("after clear: %v", cs)
 	}
 }
+
+func TestRemoveWithDeletedBaseClone(t *testing.T) {
+	l := newLayout(t, "feat", "gone")
+	if err := os.RemoveAll(filepath.Join(l.Base, "gone")); err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	problems, err := feature.Unmerged(ctx, fakeRunner{}, l, "feat")
+	if err != nil || len(problems) != 0 {
+		t.Fatalf("Unmerged = %v, %v; want nothing (no history left to lose)", problems, err)
+	}
+	if err := feature.Remove(ctx, fakeRunner{}, l, "feat", false); err != nil {
+		t.Fatal(err)
+	}
+	if feature.Exists(l, "feat") {
+		t.Error("feature still exists")
+	}
+}
