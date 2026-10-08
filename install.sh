@@ -26,3 +26,27 @@ command -v herdr >/dev/null && herdr plugin link "$repo/herdr-plugin" >/dev/null
 
 # f (feature workspace CLI) → $(go env GOPATH)/bin/f
 (cd "$repo" && go install ./cmd/f) && echo "installed f -> $(go env GOPATH)/bin/f"
+
+# launchd: f sync --all every 30 min (PR/CI refresh for the picker; repos reset
+# after their PR merged; never pushes). Log: ~/Library/Logs/f-sync.log
+label=com.seanturner026.f-sync
+plist="$HOME/Library/LaunchAgents/$label.plist"
+mkdir -p "$(dirname "$plist")"
+cat > "$plist" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>$label</string>
+  <key>ProgramArguments</key>
+  <array><string>$(go env GOPATH)/bin/f</string><string>sync</string><string>--all</string></array>
+  <key>EnvironmentVariables</key>
+  <dict><key>PATH</key><string>$(go env GOPATH)/bin:$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string></dict>
+  <key>StartInterval</key><integer>1800</integer>
+  <key>StandardOutPath</key><string>$HOME/Library/Logs/f-sync.log</string>
+  <key>StandardErrorPath</key><string>$HOME/Library/Logs/f-sync.log</string>
+</dict>
+</plist>
+PLIST
+launchctl bootout "gui/$(id -u)/$label" 2>/dev/null || true
+launchctl bootstrap "gui/$(id -u)" "$plist" && echo "loaded launchd $label (every 30 min)"

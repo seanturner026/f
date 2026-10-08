@@ -10,7 +10,8 @@
  *   `gh pr create` output is recorded at once (`f prs --add`); /prs opens them.
  * - CI: /ci sends failing checks with their failed-job logs (`f ci fix --print`)
  *   as a prompt: find the cause, propose a fix, don't push.
- * - Sync: /sync runs `f sync` (after a merge: reset that repo to main).
+ * - Sync: /sync runs `f sync` (after a merge: reset that repo to main). Notes
+ *   from the background sync (launchd: f sync --all) come with the next prompt.
  * - /f <name> [repo...]: open or start a feature without leaving chat.
  * - Plan: after each run, `f plan sync` saves the beads issue's progress for
  *   the picker (bd is too slow to query when the picker opens).
@@ -194,6 +195,22 @@ export default function (pi: ExtensionAPI) {
 		} catch {
 			// never block a run on bookkeeping
 		}
+	});
+
+	// Background syncs (launchd) may have reset or rebased a repo after its PR
+	// merged: tell pi with the next prompt, so it doesn't work from old contents.
+	pi.on("before_agent_start", async (_e, ctx) => {
+		if (!featureInfo(ctx.cwd)) return undefined;
+		const res = await f(ctx, "sync", "notes", "--take").catch(() => undefined);
+		const notes = res?.code === 0 ? res.stdout.trim() : "";
+		if (!notes) return undefined;
+		return {
+			message: {
+				customType: "f-sync",
+				content: `While you were idle, f sync changed repos in this feature (re-read files before editing them):\n${notes}`,
+				display: true,
+			},
+		};
 	});
 
 	pi.on("agent_settled", async (_e, ctx) => {

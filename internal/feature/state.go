@@ -27,6 +27,30 @@ type State struct {
 	PRs            []model.PR `json:"prs"`
 	PRsRefreshedAt time.Time  `json:"prs_refreshed_at,omitzero"`
 	Plan           model.Plan `json:"plan,omitzero"` // beads progress, synced after each pi run
+	// SyncNotes tell pi what a background f sync changed (e.g. a repo reset to
+	// main after its PR merged); the f extension hands them over on the next prompt.
+	SyncNotes []string `json:"sync_notes,omitempty"`
+}
+
+// AddSyncNotes queues notes for pi.
+func AddSyncNotes(l Layout, name string, notes ...string) error {
+	s, err := LoadState(l, name)
+	if err != nil {
+		return err
+	}
+	s.SyncNotes = append(s.SyncNotes, notes...)
+	return SaveState(l, name, s)
+}
+
+// TakeSyncNotes returns and clears the queued notes.
+func TakeSyncNotes(l Layout, name string) ([]string, error) {
+	s, err := LoadState(l, name)
+	if err != nil || len(s.SyncNotes) == 0 {
+		return nil, err
+	}
+	notes := s.SyncNotes
+	s.SyncNotes = nil
+	return notes, SaveState(l, name, s)
 }
 
 // SavePlan records the feature's beads progress.

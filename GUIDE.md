@@ -131,6 +131,7 @@ Comment on the **right** side of a diff (the real file). Comments are saved in
 | `f` | Picker |
 | `f add [repo…]` | Add repos to this feature (+ Herdr tabs, before shell) |
 | `f prs [-r] [-c] [-n] [-w]` | PRs: from saved state; `-r` refresh live, `-c` copy, `-n` don't open browser, `-w` live view (the prs tab) |
+| `f sync --all` | What launchd runs every 30 min: PR/CI refresh + post-merge reset for every feature except the one you're in or a busy pi; never pushes; pi gets a note with its next prompt. Log: `~/Library/Logs/f-sync.log` |
 | `f sync` | Same as `/sync`. Leaves repos with uncommitted changes or conflicts alone (says so) |
 | `f ci fix` | Send failing checks + failed-job logs to the feature's pi (clipboard if pi isn't reachable) |
 | `f goal [text]` | Show / set the goal |
@@ -184,5 +185,5 @@ the real files, are blocked with a reason.
 | `<leader>ps` failed | No pi in that feature; comments are kept and the message is on your clipboard |
 | `<leader>pr` says no last run | pi hasn't changed code in that repo since the guard/checkpoints started |
 | Repo tab says "no changes vs origin/main yet" | Nothing to diff yet; it checks every 3s and switches to CodeDiff once there is |
-| Picker status looks stale | pi status is live from Herdr; PRs, CI and plan refresh after each pi run (`f prs -r` forces) |
+| Picker status looks stale | pi status is live from Herdr; PRs and CI refresh every 30 min (launchd), after each pi run, and in the prs tab; `f prs -r` forces |
 | Extension changes not active | `/reload` in pi |
