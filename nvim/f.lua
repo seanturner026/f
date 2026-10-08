@@ -235,6 +235,12 @@ local function open_codediff(root, repos, rev, done)
         if not before[t] then
           vim.api.nvim_tabpage_set_var(t, "pi_repo", repo)
           vim.api.nvim_tabpage_set_var(t, "pi_rev", rev)
+          -- CodeDiff fixes the merge-base when it opens; remember it so a
+          -- rebase (or a sync reset) can be noticed and the tab reopened.
+          local mb = vim.system({ "git", "-C", root .. "/" .. repo, "merge-base", "origin/HEAD", "HEAD" }, { text = true }):wait()
+          if mb.code == 0 then
+            vim.api.nvim_tabpage_set_var(t, "pi_base", vim.trim(mb.stdout))
+          end
           vim.cmd("redrawtabline")
           return open(i + 1)
         end
@@ -314,6 +320,53 @@ local function wait_for_changes(root, repo)
   end))
 end
 
+-- watch_bases reopens a whole-feature review tab when its merge-base moves
+-- (a rebase onto newer main, f sync): CodeDiff computed the base once, so it
+-- would otherwise show everything main gained since as changes.
+local base_timer, reopening = nil, false
+local function watch_bases()
+  if base_timer then
+    return
+  end
+  local function var(t, name)
+    local ok, v = pcall(vim.api.nvim_tabpage_get_var, t, name)
+    return ok and v or nil
+  end
+  base_timer = vim.uv.new_timer()
+  base_timer:start(WAIT_MS, WAIT_MS, vim.schedule_wrap(function()
+    local root = feature_of(nil)
+    if reopening or not root then
+      return
+    end
+    for _, t in ipairs(vim.api.nvim_list_tabpages()) do
+      local repo, base = var(t, "pi_repo"), var(t, "pi_base")
+      if repo and base and var(t, "pi_rev") == FEATURE then
+        local dir = root .. "/" .. repo
+        local mb = git(dir, "merge-base", "origin/HEAD", "HEAD")
+        local now = mb.code == 0 and vim.trim(mb.stdout) or nil
+        if now and now ~= base then
+          reopening = true
+          vim.api.nvim_tabpage_set_var(t, "pi_base", now)
+          local function close_old()
+            if vim.api.nvim_tabpage_is_valid(t) and #vim.api.nvim_list_tabpages() > 1 then
+              vim.cmd("tabclose " .. vim.api.nvim_tabpage_get_number(t))
+            end
+            reopening = false
+          end
+          if has_changes(dir) then
+            open_codediff(root, { repo }, FEATURE, close_old)
+          else -- e.g. reset to main after a merge: wait for the next change
+            vim.cmd("tabnew")
+            wait_for_changes(root, repo)
+            close_old()
+          end
+          return -- one at a time
+        end
+      end
+    end
+  end))
+end
+
 -- :PiReview [repo]: with a repo (as in f's Herdr repo tabs), just that repo
 -- (waiting for changes if there are none yet); without, every repo in the
 -- feature, one nvim tab each.
@@ -322,6 +375,7 @@ local function review(opts)
   if not root then
     return vim.notify("PiReview: not inside an f feature", vim.log.levels.WARN)
   end
+  watch_bases()
   local only = opts and opts.args or ""
   if only ~= "" then
     if not vim.tbl_contains(repos, only) then
