@@ -80,7 +80,7 @@ learns shows in the picker too.
 | `alt-x` | Clean up every merged feature |
 | `esc` / `ctrl-space` | Close |
 
-Columns: `●` marks the workspace you're in (the cursor starts on the next one) ·
+Columns: `●` marks the workspace you're in (listed first; the cursor starts on the next one) ·
 FEATURE · PI status · CI of open PRs (`✓`, `⋯ running`, `✗ <repos>`) · PRS ·
 PLAN (beads steps).
 

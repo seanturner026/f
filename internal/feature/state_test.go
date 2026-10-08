@@ -168,7 +168,10 @@ func TestUpdateStateConcurrentWritersKeepEachOthersFields(t *testing.T) {
 	var wg sync.WaitGroup
 	for i := range 20 {
 		wg.Add(2)
-		go func() { defer wg.Done(); _ = feature.SavePlan(l, "feat", model.Plan{Issue: "f-1", Total: 5, Done: i % 5}) }()
+		go func() {
+			defer wg.Done()
+			_ = feature.SavePlan(l, "feat", model.Plan{Issue: "f-1", Total: 5, Done: i % 5})
+		}()
 		go func() {
 			defer wg.Done()
 			_ = feature.RecordPR(l, "feat", model.PR{Repo: "argocd", Number: i, URL: "u"})

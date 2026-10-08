@@ -14,10 +14,10 @@ import (
 type SyncAction string
 
 const (
-	SyncNothing SyncAction = ""           // no merged PR in this branch's history, or already synced
-	SyncReset   SyncAction = "reset"      // nothing new since the merged PR: branch reset to the default branch
-	SyncRebased SyncAction = "rebased"    // newer commits replayed onto the default branch
-	SyncNeeded  SyncAction = "needs sync" // couldn't do it safely (uncommitted changes, conflicts): see Detail
+	SyncNothing SyncAction = ""             // no merged PR in this branch's history, or already synced
+	SyncReset   SyncAction = "reset"        // nothing new since the merged PR: branch reset to the default branch
+	SyncRebased SyncAction = "rebased"      // newer commits replayed onto the default branch
+	SyncNeeded  SyncAction = "needs sync"   // couldn't do it safely (uncommitted changes, conflicts): see Detail
 	SyncStack   SyncAction = "stack synced" // a stack of 2+ branches: gh stack sync rebased and pushed it
 )
 

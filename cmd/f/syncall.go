@@ -8,6 +8,7 @@ import (
 
 	"github.com/seanturner026/pi/internal/feature"
 	"github.com/seanturner026/pi/internal/herdr"
+	"github.com/seanturner026/pi/internal/model"
 )
 
 var ansiCodes = regexp.MustCompile(`\x1b\[[0-9;]*m`)
@@ -35,12 +36,19 @@ func syncAll(ctx context.Context, d deps) error {
 		if err := planSyncFeature(ctx, d, name); err != nil {
 			fmt.Printf("%s %s: plan: %v\n", stamp, name, err)
 		}
+		before, _ := feature.LoadState(d.layout, name)
 		lines, err := reconcileLines(ctx, d, name, false)
 		if err != nil {
 			fmt.Printf("%s %s: %v\n", stamp, name, err)
 			continue
 		}
+		after, _ := feature.LoadState(d.layout, name)
 		var notes []string
+		for _, p := range newlyMerged(before.PRs, after.PRs) {
+			n := fmt.Sprintf("%s #%d merged (%s): close its beads step (bd close <id> --reason %s)", p.Repo, p.Number, p.URL, p.URL)
+			fmt.Printf("%s %s: %s\n", stamp, name, n)
+			notes = append(notes, n)
+		}
 		for _, l := range lines {
 			l = ansiCodes.ReplaceAllString(l, "")
 			fmt.Printf("%s %s: %s\n", stamp, name, l)
@@ -51,6 +59,21 @@ func syncAll(ctx context.Context, d deps) error {
 		}
 	}
 	return nil
+}
+
+// newlyMerged lists PRs merged in after that weren't merged in before.
+func newlyMerged(before, after []model.PR) []model.PR {
+	was := map[string]bool{}
+	for _, p := range before {
+		was[p.URL] = p.Status == model.PRStatusMerged
+	}
+	var out []model.PR
+	for _, p := range after {
+		if merged, known := was[p.URL]; p.Status == model.PRStatusMerged && known && !merged {
+			out = append(out, p)
+		}
+	}
+	return out
 }
 
 // takeSyncNotes prints and clears the feature's queued notes (for the f

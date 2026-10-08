@@ -84,7 +84,13 @@ func pickerRows(ctx context.Context, d deps) []pickerRow {
 			prs: state.PRs, plan: state.Plan,
 		})
 	}
-	sort.SliceStable(rows, func(i, j int) bool { return attention(rows[i]) < attention(rows[j]) })
+	// The workspace you're in first (where you are), then what needs you.
+	sort.SliceStable(rows, func(i, j int) bool {
+		if rows[i].current != rows[j].current {
+			return rows[i].current
+		}
+		return attention(rows[i]) < attention(rows[j])
+	})
 	return rows
 }
 
