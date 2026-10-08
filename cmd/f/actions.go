@@ -139,6 +139,10 @@ func start(ctx context.Context, d deps, name string, repos []string, prompt stri
 		offerCleanup(ctx, d)
 	}
 
+	if len(repos) == 0 && !interactive() {
+		// fzf would wait forever for a terminal that isn't there (pi's !f).
+		return fmt.Errorf("new feature %q needs repos: f %s -r <repo> [-r <repo>...], or /f %s in pi (it asks)", name, name, name)
+	}
 	if len(repos) == 0 {
 		all, err := feature.BaseRepos(d.layout)
 		if err != nil {
