@@ -77,12 +77,17 @@ export default function (pi: ExtensionAPI) {
 		const res = await f(ctx, "prs", "--json", ...(refresh ? ["-r"] : []));
 		if (res.code !== 0) return;
 		const t = ctx.ui.theme;
-		const parts = ((JSON.parse(res.stdout) as { prs: PR[] | null }).prs ?? []).map((p) => {
-			const color = p.status === "merged" ? "success" : p.status === "open" ? "accent" : "dim";
+		const all = (JSON.parse(res.stdout) as { prs: PR[] | null }).prs ?? [];
+		// Open/draft PRs by name; merged and closed ones only as a count (f keeps them in state).
+		const active = all.filter((p) => p.status === "open" || p.status === "draft");
+		const parts = active.map((p) => {
+			const color = p.status === "open" ? "accent" : "dim";
 			const mark = ciMark(p);
-			const ci = mark && " " + t.fg(mark === "✗" ? "error" : mark === "✓" ? "success" : "accent", mark);
+			const ci = mark && " " + t.fg(mark === "\u2717" ? "error" : mark === "\u2713" ? "success" : "accent", mark);
 			return `${p.repo} #${p.number} ${t.fg(color, p.status)}${ci}`;
 		});
+		const merged = all.filter((p) => p.status === "merged").length;
+		if (merged) parts.push(t.fg("success", `${merged} merged`));
 		ctx.ui.setStatus(STATUS_KEY, parts.length ? t.fg("dim", "PRs: ") + parts.join(t.fg("dim", " · ")) : undefined);
 	}
 

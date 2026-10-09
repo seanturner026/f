@@ -298,10 +298,21 @@ func renderWatch(v watchView) string {
 		if len(byRepo[repo]) == 0 {
 			fmt.Fprintln(&b, dim("  no PR"))
 		}
+		// Merged/closed PRs: one dim line per status; open ones in full.
+		var done = map[model.PRStatus][]string{}
+		for _, p := range byRepo[repo] {
+			if !p.Status.IsActive() {
+				done[p.Status] = append(done[p.Status], fmt.Sprintf("#%d", p.Number))
+			}
+		}
+		for _, st := range []model.PRStatus{model.PRStatusMerged, model.PRStatusClosed} {
+			if len(done[st]) > 0 {
+				fmt.Fprintf(&b, "  %s\n", dim(fmt.Sprintf("%s: %s", st, strings.Join(done[st], " "))))
+			}
+		}
 		for i, p := range byRepo[repo] {
 			prefix := model.StackPrefix(byRepo[repo], i)
 			if !p.Status.IsActive() {
-				fmt.Fprintf(&b, "  %s%s\n", prefix, dim(fmt.Sprintf("#%d %s  %s", p.Number, p.Status, p.Title)))
 				continue
 			}
 			fmt.Fprintf(&b, "  %s#%d %s  %s\n", prefix, p.Number, p.Status, p.Title)

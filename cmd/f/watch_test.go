@@ -116,7 +116,7 @@ core
   no PR
 
 tf
-  #88 merged  ACK IAM
+  merged: #88
 
 `
 	if got := ansi.ReplaceAllString(renderWatch(v), ""); got != want {
