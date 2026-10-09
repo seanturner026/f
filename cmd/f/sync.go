@@ -69,14 +69,17 @@ func piWorking(ctx context.Context, d deps, name string) bool {
 	return agents[feature.Dir(d.layout, name)] == herdr.AgentWorking
 }
 
-// syncInBackground starts `f sync --background` for name, detached so it
-// outlives the picker's popup.
-func syncInBackground(name string) {
+// syncInBackground starts `f sync --background` for name.
+func syncInBackground(name string) { startDetached("sync", "-f", name, "--background") }
+
+// startDetached runs f with args in its own session, so it outlives the
+// picker's popup.
+func startDetached(args ...string) {
 	self, err := os.Executable()
 	if err != nil {
 		return
 	}
-	cmd := exec.Command(self, "sync", "-f", name, "--background")
+	cmd := exec.Command(self, args...)
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 	_ = cmd.Start()
 }

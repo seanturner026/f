@@ -141,7 +141,11 @@ func mergedAtHead(ctx context.Context, r Runner, wt string, prs []model.PR) bool
 // Unmerged describes work in the feature that removing it would lose:
 // uncommitted changes, and commits not contained in a merged PR. Empty means
 // it's safe to remove.
-func Unmerged(ctx context.Context, r Runner, l Layout, name string) ([]string, error) {
+//
+// known are PRs to check against (e.g. from state.json, no network); nil looks
+// them up live with gh. Known PRs can only be stale in the safe direction: a
+// merge they haven't seen makes work look unmerged, never the reverse.
+func Unmerged(ctx context.Context, r Runner, l Layout, name string, known []model.PR) ([]string, error) {
 	repos, err := Repos(l, name)
 	if err != nil {
 		return nil, err
@@ -151,7 +155,7 @@ func Unmerged(ctx context.Context, r Runner, l Layout, name string) ([]string, e
 	var wg sync.WaitGroup
 	for i, repo := range repos {
 		wg.Add(1)
-		go func() { defer wg.Done(); found[i] = unmergedIn(ctx, r, l, name, repo) }()
+		go func() { defer wg.Done(); found[i] = unmergedIn(ctx, r, l, name, repo, known) }()
 	}
 	wg.Wait()
 	var problems []string
@@ -161,7 +165,7 @@ func Unmerged(ctx context.Context, r Runner, l Layout, name string) ([]string, e
 	return problems, nil
 }
 
-func unmergedIn(ctx context.Context, r Runner, l Layout, name, repo string) []string {
+func unmergedIn(ctx context.Context, r Runner, l Layout, name, repo string, known []model.PR) []string {
 	var problems []string
 	wt := filepath.Join(Dir(l, name), repo)
 	if !git.IsRepo(filepath.Join(l.Base, repo)) {
@@ -177,8 +181,17 @@ func unmergedIn(ctx context.Context, r Runner, l Layout, name, repo string) []st
 	if err != nil || ahead == 0 {
 		return problems
 	}
-	prs, err := github.RepoPRs(ctx, r, wt, repo, name)
-	if err != nil || !mergedAtHead(ctx, r, wt, prs) {
+	var prs []model.PR
+	if known != nil {
+		for _, p := range known {
+			if p.Repo == repo {
+				prs = append(prs, p)
+			}
+		}
+	} else if prs, err = github.RepoPRs(ctx, r, wt, repo, name); err != nil {
+		prs = nil
+	}
+	if !mergedAtHead(ctx, r, wt, prs) {
 		problems = append(problems, fmt.Sprintf("%s: %d commit(s) not in a merged PR", repo, ahead))
 	}
 	return problems

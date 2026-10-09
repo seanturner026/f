@@ -146,6 +146,18 @@ func main() {
 				},
 			},
 			{
+				// Started by the picker after removing a feature (bd is slow).
+				Name:   "close-issue",
+				Hidden: true,
+				Flags: []cli.Flag{
+					&cli.StringFlag{Name: "issue"}, &cli.StringFlag{Name: "name"},
+					&cli.StringFlag{Name: "reason"}, &cli.StringFlag{Name: "note"},
+				},
+				Action: func(ctx context.Context, c *cli.Command) error {
+					return closeIssueCmd(ctx, d, c.String("issue"), c.String("name"), c.String("reason"), c.String("note"))
+				},
+			},
+			{
 				// The f Herdr plugin's open-picker action (ctrl+space).
 				Name:   "open-picker",
 				Hidden: true,

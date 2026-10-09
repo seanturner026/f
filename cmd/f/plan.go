@@ -89,3 +89,38 @@ func planSyncFeature(ctx context.Context, d deps, name string) error {
 	}
 	return feature.SavePlan(d.layout, name, plan)
 }
+
+// issueUpdateInBackground prepares the beads update for a feature about to be
+// removed (reading its info and PRs now, while they exist) and returns a func
+// that runs it detached (`f close-issue`): close it with its merged PRs, or,
+// with force, note the unmerged work and leave it open.
+func issueUpdateInBackground(d deps, name string, force bool, problems []string) func() {
+	info, _ := feature.LoadInfo(d.layout, name)
+	if info.Issue == "" {
+		return func() {}
+	}
+	args := []string{"close-issue", "--issue", info.Issue, "--name", name}
+	if force {
+		args = append(args, "--note", "f feature removed with unmerged work: "+strings.Join(problems, "; "))
+	} else {
+		state, _ := feature.LoadState(d.layout, name)
+		reason := "feature removed (no changes)"
+		if urls := prURLs(state.PRs, model.PRStatusMerged); len(urls) > 0 {
+			reason = "merged: " + strings.Join(urls, " ")
+		}
+		args = append(args, "--reason", reason)
+	}
+	return func() { startDetached(args...) }
+}
+
+// closeIssueCmd is `f close-issue`: close the issue with reason (if bd won't,
+// e.g. plan steps still open, note why and leave it open), or just add note.
+func closeIssueCmd(ctx context.Context, d deps, issue, name, reason, note string) error {
+	if note != "" {
+		return beads.Note(ctx, d.run, d.layout.Base, issue, note)
+	}
+	if err := beads.Close(ctx, d.run, d.layout.Base, issue, reason); err != nil {
+		return beads.Note(ctx, d.run, d.layout.Base, issue, "f feature "+name+" removed; issue left open: "+err.Error())
+	}
+	return nil
+}

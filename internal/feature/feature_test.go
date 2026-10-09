@@ -245,6 +245,7 @@ func TestUnmerged(t *testing.T) {
 	tests := []struct {
 		name   string
 		runner fakeRunner
+		known  []model.PR // nil: live gh lookup
 		want   []string
 	}{
 		{
@@ -267,12 +268,30 @@ func TestUnmerged(t *testing.T) {
 			runner: fakeRunner{"git status": "", "git rev-list": "3", "gh pr list": "[]", "git rev-parse HEAD": "abc"},
 			want:   []string{"argocd: 3 commit(s) not in a merged PR"},
 		},
+		{
+			name:   "saved PR merged at head: no gh call",
+			runner: fakeRunner{"git status": "", "git rev-list": "2", "git rev-parse HEAD": "abc"},
+			known:  []model.PR{{Repo: "argocd", Status: model.PRStatusMerged, HeadOID: "abc"}},
+			want:   nil,
+		},
+		{
+			name:   "saved PR still open: unmerged",
+			runner: fakeRunner{"git status": "", "git rev-list": "2", "git rev-parse HEAD": "abc"},
+			known:  []model.PR{{Repo: "argocd", Status: model.PRStatusOpen, HeadOID: "abc"}},
+			want:   []string{"argocd: 2 commit(s) not in a merged PR"},
+		},
+		{
+			name:   "saved PR merged but commits after it",
+			runner: fakeRunner{"git status": "", "git rev-list": "3", "git rev-parse HEAD": "def", "git merge-base": "ERR"},
+			known:  []model.PR{{Repo: "argocd", Status: model.PRStatusMerged, HeadOID: "abc"}},
+			want:   []string{"argocd: 3 commit(s) not in a merged PR"},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			l := newLayout(t, "feat", "argocd")
 			tt.runner["git symbolic-ref"] = "origin/main"
-			got, err := feature.Unmerged(context.Background(), tt.runner, l, "feat")
+			got, err := feature.Unmerged(context.Background(), tt.runner, l, "feat", tt.known)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -331,7 +350,7 @@ func TestRemoveWithDeletedBaseClone(t *testing.T) {
 		t.Fatal(err)
 	}
 	ctx := context.Background()
-	problems, err := feature.Unmerged(ctx, fakeRunner{}, l, "feat")
+	problems, err := feature.Unmerged(ctx, fakeRunner{}, l, "feat", nil)
 	if err != nil || len(problems) != 0 {
 		t.Fatalf("Unmerged = %v, %v; want nothing (no history left to lose)", problems, err)
 	}

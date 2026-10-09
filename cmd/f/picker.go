@@ -255,7 +255,17 @@ func orNone(s string) string {
 // removeFeature removes a feature and its Herdr workspace. If it has unmerged
 // work, it lists it and asks first. Returns a status line for the picker.
 func removeFeature(ctx context.Context, d deps, name string) string {
-	problems, err := feature.Unmerged(ctx, d.run, d.layout, name)
+	// Saved PRs first (no network). Only if that finds unmerged work, check
+	// GitHub live before asking: maybe a merge the saved state hasn't seen.
+	state, _ := feature.LoadState(d.layout, name)
+	known := state.PRs
+	if known == nil {
+		known = []model.PR{}
+	}
+	problems, err := feature.Unmerged(ctx, d.run, d.layout, name, known)
+	if err == nil && len(problems) > 0 {
+		problems, err = feature.Unmerged(ctx, d.run, d.layout, name, nil)
+	}
 	if err != nil {
 		return red(fmt.Sprintf("%s: %v", name, err))
 	}
@@ -272,20 +282,15 @@ func removeFeature(ctx context.Context, d deps, name string) string {
 		}
 		force = true
 	}
-	issueNote := ""
-	if force {
-		keepIssueOpen(ctx, d, name, problems)
-	} else {
-		issueNote = closeIssue(ctx, d, name)
-	}
+	// The beads issue is closed (or noted) in the background: bd takes ~0.5s.
+	// Read what it needs now, before the feature's files are gone.
+	issue := issueUpdateInBackground(d, name, force, problems)
 	if err := feature.Remove(ctx, d.run, d.layout, name, force); err != nil {
 		return red(err.Error())
 	}
 	if !d.noHerdr {
 		_ = herdr.CloseWorkspace(ctx, d.run, name)
 	}
-	if issueNote != "" {
-		return green("removed "+name) + dim(" · "+issueNote)
-	}
+	issue()
 	return green("removed " + name)
 }
