@@ -96,6 +96,7 @@ unseen) → **working** → **idle** → **closed** (no pi running).
 | `!!f prs -c` | Copy PR links (`!!` = run without sending output to the model) |
 | `/prs` | Refresh PRs, open the open ones in the browser |
 | `/code [n]` | Copy code block(s) from the last reply exactly as written (no wrap/indent); several: pick one or all. `/copy` (ctrl+x) copies the whole reply |
+| `/slack` | Copy the last reply formatted for Slack: `*bold*`, headings as bold lines, `•` bullets, links as `text (url)`; code untouched |
 | `/f <name> [repo…]` | Open a feature or start one without leaving chat (tab completes names and repos; asks for repos if new and none given) |
 | `/sync` | After a PR merges: reset its repo to main (rebase newer commits onto it); also runs when you open the feature and on `r` in the prs tab |
 | `/ci` | Send failing checks + failed-job logs to pi: it finds the cause and proposes a fix, no push until you OK |
