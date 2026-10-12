@@ -9,5 +9,6 @@
   "warnings": {
     "anthropicExtraUsage": false
   },
-  "hideThinkingBlock": false
+  "hideThinkingBlock": false,
+  "httpIdleTimeoutMs": 90000
 }
