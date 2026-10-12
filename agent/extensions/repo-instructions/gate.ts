@@ -78,11 +78,15 @@ export class Coverage {
 /** blockReason explains which files still need reading, or "" if none. */
 export function blockReason(repo: string, unread: { rel: string; missing: string; total: number }[]): string {
 	if (unread.length === 0) return "";
+	// Say the file exists: a read that raced with the repo being added (f add
+	// in the same turn) fails, and pi then wrongly concludes there's no file.
 	const files = unread.map((u) =>
-		u.missing === `1-${u.total}` || u.total <= 1 ? `\`${u.rel}\`` : `\`${u.rel}\` (lines ${u.missing} still unread)`,
+		u.missing === `1-${u.total}` || u.total <= 1
+			? `\`${u.rel}\` (it exists: ${u.total} lines)`
+			: `\`${u.rel}\` (it exists; lines ${u.missing} still unread)`,
 	);
 	return (
 		`Read ${files.join(" and ")} in full before working in ${repo}/ (reviews and questions included). ` +
-		"Use the read tool, paging with offset until the end; then retry."
+		"Use the read tool, paging with offset until the end; then retry. If an earlier read failed, the repo was still being added: read it again now."
 	);
 }

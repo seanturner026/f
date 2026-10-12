@@ -62,7 +62,7 @@ test("Coverage: gaps and single lines", () => {
 test("blockReason", () => {
 	strictEqual(blockReason("argocd", []), "");
 	const r = blockReason("argocd", [{ rel: "argocd/CLAUDE.md", missing: "2001-2400", total: 2400 }]);
-	strictEqual(r.includes("`argocd/CLAUDE.md` (lines 2001-2400 still unread)"), true);
+	strictEqual(r.includes("`argocd/CLAUDE.md` (it exists; lines 2001-2400 still unread)"), true);
 	const whole = blockReason("argocd", [{ rel: "argocd/CLAUDE.md", missing: "1-500", total: 500 }]);
-	strictEqual(whole.startsWith("Read `argocd/CLAUDE.md` in full before working in argocd/"), true);
+	strictEqual(whole.startsWith("Read `argocd/CLAUDE.md` (it exists: 500 lines) in full before working in argocd/"), true);
 });
