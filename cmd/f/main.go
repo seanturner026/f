@@ -146,6 +146,12 @@ func main() {
 				},
 			},
 			{
+				// Started after removing features: deletes their files (renamed into .features/.trash).
+				Name:   "empty-trash",
+				Hidden: true,
+				Action: func(ctx context.Context, c *cli.Command) error { return feature.EmptyTrash(d.layout) },
+			},
+			{
 				// Started by the picker after removing a feature (bd is slow).
 				Name:   "close-issue",
 				Hidden: true,

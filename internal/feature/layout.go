@@ -81,7 +81,7 @@ func List(l Layout) []string {
 	entries, _ := os.ReadDir(l.Features)
 	var names []string
 	for _, e := range entries {
-		if e.IsDir() {
+		if e.IsDir() && !strings.HasPrefix(e.Name(), ".") { // .trash: removed features
 			names = append(names, e.Name())
 		}
 	}

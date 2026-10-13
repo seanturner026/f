@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"time"
 
 	"github.com/seanturner026/pi/internal/git"
 	"github.com/seanturner026/pi/internal/github"
@@ -197,25 +198,44 @@ func unmergedIn(ctx context.Context, r Runner, l Layout, name, repo string, know
 	return problems
 }
 
-// Remove deletes a feature's worktrees, branches, and directory. force
-// discards uncommitted changes (and the branches' unmerged commits).
+// Remove deletes a feature's worktrees, branches, and directory, fast: the
+// directory is renamed into .features/.trash (instant, whatever its size),
+// git forgets the worktrees (worktree prune) and drops the branch, and
+// EmptyTrash deletes the files later (in the background). Check Unmerged
+// first: Remove doesn't refuse dirty worktrees. force is kept for callers'
+// intent (removing unmerged work); the outcome is the same.
 func Remove(ctx context.Context, r Runner, l Layout, name string, force bool) error {
 	repos, err := Repos(l, name)
 	if err != nil {
 		return err
 	}
+	trash := TrashDir(l)
+	if err := os.MkdirAll(trash, 0o755); err != nil {
+		return fmt.Errorf("remove %s: %w", name, err)
+	}
+	dst := filepath.Join(trash, name+"-"+time.Now().Format("20060102-150405.000"))
+	if err := os.Rename(Dir(l, name), dst); err != nil {
+		return fmt.Errorf("remove %s: %w", name, err)
+	}
+	var wg sync.WaitGroup
 	for _, repo := range repos {
 		src := filepath.Join(l.Base, repo)
 		if !git.IsRepo(src) {
-			continue // base clone deleted: nothing to unregister; the directory goes below
+			continue // base clone deleted: nothing to unregister
 		}
-		if err := git.RemoveWorktree(ctx, r, src, filepath.Join(Dir(l, name), repo), force); err != nil {
-			return fmt.Errorf("remove %s: %w", name, err)
-		}
-		_ = git.DeleteBranch(ctx, r, src, name)
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_ = git.PruneWorktrees(ctx, r, src) // the worktree's directory is gone now
+			_ = git.DeleteBranch(ctx, r, src, name)
+		}()
 	}
-	if err := os.RemoveAll(Dir(l, name)); err != nil {
-		return fmt.Errorf("remove %s: %w", name, err)
-	}
+	wg.Wait()
 	return nil
 }
+
+// TrashDir holds removed features until EmptyTrash deletes them.
+func TrashDir(l Layout) string { return filepath.Join(l.Features, ".trash") }
+
+// EmptyTrash deletes removed features' files.
+func EmptyTrash(l Layout) error { return os.RemoveAll(TrashDir(l)) }

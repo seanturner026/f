@@ -291,6 +291,7 @@ func removeFeature(ctx context.Context, d deps, name string) string {
 	if !d.noHerdr {
 		_ = herdr.CloseWorkspace(ctx, d.run, name)
 	}
+	startDetached("empty-trash") // the files go in the background
 	issue()
 	return green("removed " + name)
 }

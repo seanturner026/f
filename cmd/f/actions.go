@@ -454,5 +454,8 @@ func cleanMerged(ctx context.Context, d deps, ask bool) []string {
 			ok("removed %s", name)
 		}
 	}
+	if len(removed) > 0 {
+		startDetached("empty-trash")
+	}
 	return removed
 }

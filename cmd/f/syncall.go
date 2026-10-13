@@ -24,6 +24,7 @@ func syncAll(ctx context.Context, d deps) error {
 		focused, _ = herdr.FocusedWorkspace(ctx, d.run) // "" if Herdr isn't running
 	}
 	stamp := time.Now().Format(time.DateTime)
+	_ = feature.EmptyTrash(d.layout) // leftovers of removals whose background delete was interrupted
 	for _, name := range feature.List(d.layout) {
 		switch {
 		case name == focused:

@@ -57,14 +57,10 @@ func AddWorktree(ctx context.Context, r Runner, repoDir, path, branch, base stri
 	return nil
 }
 
-// RemoveWorktree removes the worktree at path; force discards uncommitted changes.
-func RemoveWorktree(ctx context.Context, r Runner, repoDir, path string, force bool) error {
-	args := []string{"worktree", "remove", path}
-	if force {
-		args = append(args, "--force")
-	}
-	if _, err := r.Run(ctx, repoDir, "git", args...); err != nil {
-		return fmt.Errorf("remove worktree: %w", err)
+// PruneWorktrees drops git's records of worktrees whose directories are gone.
+func PruneWorktrees(ctx context.Context, r Runner, repoDir string) error {
+	if _, err := r.Run(ctx, repoDir, "git", "worktree", "prune"); err != nil {
+		return fmt.Errorf("worktree prune: %w", err)
 	}
 	return nil
 }

@@ -199,3 +199,35 @@ func TestReconcileIgnoresUnmergedAndOtherBranches(t *testing.T) {
 	other.Head = "someone-else"
 	onlyAction(t, f.reconcile(open, other), feature.SyncNothing)
 }
+
+func TestRemoveRenamesThenPrunes(t *testing.T) {
+	f := newSyncFixture(t)
+	f.commit("b.txt", "work\n")
+	write(t, filepath.Join(f.wt, "dirty.txt"), "uncommitted\n") // Remove doesn't refuse: callers check Unmerged
+	base := filepath.Join(f.l.Base, "app")
+	if err := feature.Remove(context.Background(), shell.Exec{}, f.l, "feat", true); err != nil {
+		t.Fatal(err)
+	}
+	if feature.Exists(f.l, "feat") {
+		t.Error("feature directory still there")
+	}
+	if got := feature.List(f.l); len(got) != 0 {
+		t.Errorf("List = %v, want none (.trash isn't a feature)", got)
+	}
+	if out := git(t, base, "worktree", "list"); strings.Contains(out, "feat") {
+		t.Errorf("worktree still registered:\n%s", out)
+	}
+	if out := git(t, base, "branch", "--list", "feat"); out != "" {
+		t.Errorf("branch still there: %q", out)
+	}
+	entries, _ := os.ReadDir(feature.TrashDir(f.l))
+	if len(entries) != 1 {
+		t.Fatalf("trash has %d entries, want 1", len(entries))
+	}
+	if err := feature.EmptyTrash(f.l); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(feature.TrashDir(f.l)); !os.IsNotExist(err) {
+		t.Error("trash not emptied")
+	}
+}
