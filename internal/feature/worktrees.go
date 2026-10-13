@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"sync"
 	"time"
 
@@ -83,33 +84,57 @@ func PRs(ctx context.Context, r Runner, l Layout, name string) (prs []model.PR, 
 	return prs, errs, nil
 }
 
-// Finished reports whether a feature is done: every repo is clean and either
-// untouched or has a merged PR containing its HEAD, and at least one merged.
-// Uses the merged PR's head commit, so it works after the remote branch is deleted.
+// Finished reports whether a feature's work has all landed: every repo is
+// clean, and every repo with commits has them in a merged PR (by its saved
+// PRs: no network, so it's instant; a merge the saved state hasn't seen just
+// means the feature isn't offered for cleanup yet). Repos are checked
+// concurrently.
 func Finished(ctx context.Context, r Runner, l Layout, name string) bool {
 	repos, err := Repos(l, name)
 	if err != nil {
 		return false
 	}
 	state, _ := LoadState(l, name)
-	merged := 0
-	for _, repo := range repos {
-		wt := filepath.Join(Dir(l, name), repo)
-		if n, err := git.ChangedFiles(ctx, r, wt); err != nil || n > 0 {
-			return false
-		}
-		base := "origin/" + git.DefaultBranch(ctx, r, filepath.Join(l.Base, repo))
-		if ahead, err := git.CommitsAhead(ctx, r, wt, base); err == nil && ahead == 0 {
-			if hasMergedPR(state.PRs, repo) {
-				merged++ // synced after its PR merged (f sync)
+	if !slices.ContainsFunc(state.PRs, func(p model.PR) bool { return p.Status == model.PRStatusMerged }) {
+		return false // nothing merged yet: can't be finished, skip the git checks
+	}
+	type result struct{ done, merged bool }
+	results := make([]result, len(repos))
+	var wg sync.WaitGroup
+	for i, repo := range repos {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			wt := filepath.Join(Dir(l, name), repo)
+			if n, err := git.ChangedFiles(ctx, r, wt); err != nil || n > 0 {
+				return // dirty: not done
 			}
-			continue // untouched (or synced) repo
-		}
-		prs, err := github.RepoPRs(ctx, r, wt, repo, name)
-		if err != nil || !mergedAtHead(ctx, r, wt, prs) {
+			base := "origin/" + git.DefaultBranch(ctx, r, filepath.Join(l.Base, repo))
+			if ahead, err := git.CommitsAhead(ctx, r, wt, base); err == nil && ahead == 0 {
+				// untouched, or synced after its PR merged (f sync)
+				results[i] = result{done: true, merged: hasMergedPR(state.PRs, repo)}
+				return
+			}
+			var prs []model.PR
+			for _, p := range state.PRs {
+				if p.Repo == repo {
+					prs = append(prs, p)
+				}
+			}
+			if mergedAtHead(ctx, r, wt, prs) {
+				results[i] = result{done: true, merged: true}
+			}
+		}()
+	}
+	wg.Wait()
+	merged := 0
+	for _, res := range results {
+		if !res.done {
 			return false
 		}
-		merged++
+		if res.merged {
+			merged++
+		}
 	}
 	return merged > 0
 }

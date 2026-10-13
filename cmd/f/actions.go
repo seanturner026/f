@@ -134,9 +134,12 @@ func start(ctx context.Context, d deps, name string, repos []string, prompt stri
 		return launch(ctx, d, name, "", true)
 	}
 
-	// Starting something new: offer to clean up finished features first.
+	// Starting something new: offer to clean up finished features. Find them
+	// while you pick repos (git checks on big repos take a moment), ask after.
+	var finished chan []string
 	if len(repos) == 0 && interactive() {
-		offerCleanup(ctx, d)
+		finished = make(chan []string, 1)
+		go func() { finished <- findFinished(ctx, d) }()
 	}
 
 	if len(repos) == 0 && !interactive() {
@@ -154,6 +157,9 @@ func start(ctx context.Context, d deps, name string, repos []string, prompt stri
 	}
 	if len(repos) == 0 {
 		return errors.New("no repos selected; aborted")
+	}
+	if finished != nil {
+		removeFinished(ctx, d, <-finished, true)
 	}
 	if err := feature.CheckRepos(d.layout, repos); err != nil {
 		return err
@@ -407,12 +413,14 @@ func printPRs(d deps, name string, list []model.PR, errs map[string]error) {
 	}
 }
 
-// offerCleanup offers to remove finished features before starting a new one.
-func offerCleanup(ctx context.Context, d deps) { cleanMerged(ctx, d, true) }
-
-// cleanMerged finds finished features (checked in parallel) and removes them:
-// worktrees, branches, and Herdr workspace. With ask, it confirms first.
+// cleanMerged finds finished features and removes them: worktrees, branches,
+// and Herdr workspace. With ask, it confirms first.
 func cleanMerged(ctx context.Context, d deps, ask bool) []string {
+	return removeFinished(ctx, d, findFinished(ctx, d), ask)
+}
+
+// findFinished lists features whose work has all landed (checked in parallel).
+func findFinished(ctx context.Context, d deps) []string {
 	names := feature.List(d.layout)
 	finished := make([]bool, len(names))
 	var wg sync.WaitGroup
@@ -427,6 +435,11 @@ func cleanMerged(ctx context.Context, d deps, ask bool) []string {
 			done = append(done, name)
 		}
 	}
+	return done
+}
+
+// removeFinished removes the given finished features; with ask, it confirms first.
+func removeFinished(ctx context.Context, d deps, done []string, ask bool) []string {
 	if len(done) == 0 {
 		return nil
 	}
