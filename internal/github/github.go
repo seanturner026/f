@@ -182,10 +182,21 @@ func StackPRs(ctx context.Context, r Runner, dir, repo string) ([]model.PR, erro
 // RepoPRs returns the repo's stack PRs if dir is on a gh stack, otherwise the
 // PRs whose head is branch.
 func RepoPRs(ctx context.Context, r Runner, dir, repo, branch string) ([]model.PR, error) {
+	// Both lookups at once (each is a ~1s gh call); use the stack's if it has PRs.
+	type res struct {
+		prs []model.PR
+		err error
+	}
+	listed := make(chan res, 1)
+	go func() {
+		prs, err := ListPRs(ctx, r, dir, repo, branch)
+		listed <- res{prs, err}
+	}()
 	prs, err := StackPRs(ctx, r, dir, repo)
 	if errors.Is(err, ErrNotInStack) || (err == nil && len(prs) == 0) {
 		// No stack, or none of its branches submitted yet (a plain gh pr create).
-		return ListPRs(ctx, r, dir, repo, branch)
+		l := <-listed
+		return l.prs, l.err
 	}
 	return prs, err
 }

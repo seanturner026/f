@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"sync"
 
 	"github.com/seanturner026/pi/internal/git"
 	"github.com/seanturner026/pi/internal/github"
@@ -49,20 +50,32 @@ func Reconcile(ctx context.Context, r Runner, l Layout, name string, prs []model
 	if err != nil {
 		return nil, err
 	}
-	var results []SyncResult
-	for _, repo := range repos {
-		wt := filepath.Join(Dir(l, name), repo)
-		if branches, err := github.StackBranches(ctx, r, wt); err == nil && len(branches) > 1 {
-			if stackSync && hasMergedPR(prs, repo) {
-				res := SyncResult{Repo: repo, Action: SyncStack, Detail: "gh stack sync: rebased onto main and pushed"}
-				if err := github.StackSync(ctx, r, wt); err != nil {
-					res.Action, res.Detail = SyncNeeded, err.Error()
-				}
-				results = append(results, res)
-			}
-			continue
+	// Repos are independent: reconcile them concurrently, report in order.
+	found := make([]SyncResult, len(repos))
+	var wg sync.WaitGroup
+	for i, repo := range repos {
+		if !hasMergedPR(prs, repo) {
+			continue // nothing merged here: nothing to do (and no gh call)
 		}
-		res := reconcileRepo(ctx, r, l, name, repo, prs)
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			wt := filepath.Join(Dir(l, name), repo)
+			if branches, err := github.StackBranches(ctx, r, wt); err == nil && len(branches) > 1 {
+				if stackSync {
+					found[i] = SyncResult{Repo: repo, Action: SyncStack, Detail: "gh stack sync: rebased onto main and pushed"}
+					if err := github.StackSync(ctx, r, wt); err != nil {
+						found[i].Action, found[i].Detail = SyncNeeded, err.Error()
+					}
+				}
+				return
+			}
+			found[i] = reconcileRepo(ctx, r, l, name, repo, prs)
+		}()
+	}
+	wg.Wait()
+	var results []SyncResult
+	for _, res := range found {
 		if res.Action != SyncNothing {
 			results = append(results, res)
 		}
