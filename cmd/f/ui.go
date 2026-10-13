@@ -9,11 +9,20 @@ import (
 	"strings"
 )
 
-func color(code, s string) string { return "\033[" + code + "m" + s + "\033[0m" }
-func red(s string) string         { return color("31", s) }
-func green(s string) string       { return color("32", s) }
-func dim(s string) string         { return color("2", s) }
-func bold(s string) string        { return color("1", s) }
+// useColor: only when a person is looking. nvim, pi and launchd read f's
+// output as text, where escape codes show up as junk ("^[[31merror:").
+var useColor = isTerminal(os.Stdout) && isTerminal(os.Stderr)
+
+func color(code, s string) string {
+	if !useColor {
+		return s
+	}
+	return "\033[" + code + "m" + s + "\033[0m"
+}
+func red(s string) string   { return color("31", s) }
+func green(s string) string { return color("32", s) }
+func dim(s string) string   { return color("2", s) }
+func bold(s string) string  { return color("1", s) }
 
 func info(format string, a ...any) { fmt.Println(dim(fmt.Sprintf(format, a...))) }
 func ok(format string, a ...any)   { fmt.Println(green(fmt.Sprintf(format, a...))) }
