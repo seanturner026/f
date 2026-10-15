@@ -78,6 +78,28 @@ func planSync(ctx context.Context, d deps) error {
 	return planSyncFeature(ctx, d, name)
 }
 
+// planShow prints the current feature's plan (/plan in pi).
+func planShow(ctx context.Context, d deps) error {
+	name, err := resolve(d, "")
+	if err != nil {
+		return err
+	}
+	info, err := feature.LoadInfo(d.layout, name)
+	if err != nil {
+		return err
+	}
+	if info.Issue == "" {
+		fmt.Printf("%s has no beads issue\n", name)
+		return nil
+	}
+	steps, err := beads.Steps(ctx, d.run, d.layout.Base, info.Issue)
+	if err != nil {
+		return err
+	}
+	fmt.Print(model.PlanView(name, info.Issue, steps))
+	return nil
+}
+
 func planSyncFeature(ctx context.Context, d deps, name string) error {
 	info, err := feature.LoadInfo(d.layout, name)
 	if err != nil || info.Issue == "" {

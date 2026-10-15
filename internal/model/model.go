@@ -249,3 +249,112 @@ func PlanSummary(p Plan) string {
 	}
 	return s
 }
+
+// StepStatus is a beads issue's status.
+type StepStatus string
+
+const (
+	StepOpen       StepStatus = "open"
+	StepInProgress StepStatus = "in_progress"
+	StepBlocked    StepStatus = "blocked"
+	StepDeferred   StepStatus = "deferred"
+	StepClosed     StepStatus = "closed"
+)
+
+// Step is one child step of a feature's beads issue.
+type Step struct {
+	ID        string
+	Title     string
+	Status    StepStatus
+	BlockedBy []string // steps this one depends on ("blocks" dependencies)
+}
+
+// stepGroup is a section of PlanView, in display order.
+type stepGroup struct {
+	title, mark string
+}
+
+var (
+	groupInProgress = stepGroup{"In progress", "◐"}
+	groupReady      = stepGroup{"Ready", "○"}
+	groupBlocked    = stepGroup{"Blocked", "●"}
+	groupDeferred   = stepGroup{"Deferred", "❄"}
+	groupDone       = stepGroup{"Done", "✓"}
+	planGroups      = []stepGroup{groupInProgress, groupReady, groupBlocked, groupDeferred, groupDone}
+)
+
+// PlanView renders a feature's plan for people: steps grouped by what you can
+// do about them (in progress, ready, blocked, deferred, done), each blocked
+// step with the unfinished steps it waits on.
+func PlanView(name, issue string, steps []Step) string {
+	byID := map[string]Step{}
+	for _, s := range steps {
+		byID[s.ID] = s
+	}
+	waiting := func(s Step) []string {
+		var ids []string
+		for _, id := range s.BlockedBy {
+			if dep, ok := byID[id]; ok && dep.Status != StepClosed {
+				ids = append(ids, id)
+			}
+		}
+		return ids
+	}
+	groupOf := func(s Step) stepGroup {
+		switch {
+		case s.Status == StepClosed:
+			return groupDone
+		case s.Status == StepInProgress:
+			return groupInProgress
+		case s.Status == StepDeferred:
+			return groupDeferred
+		case s.Status == StepBlocked || len(waiting(s)) > 0:
+			return groupBlocked
+		}
+		return groupReady
+	}
+	done := 0
+	grouped := map[stepGroup][]Step{}
+	for _, s := range steps {
+		g := groupOf(s)
+		grouped[g] = append(grouped[g], s)
+		if g == groupDone {
+			done++
+		}
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "%s (%s) · %d/%d done\n", name, issue, done, len(steps))
+	if len(steps) == 0 {
+		b.WriteString("no steps yet (pi plans them as child issues for multi-step work)\n")
+		return b.String()
+	}
+	for _, g := range planGroups {
+		if len(grouped[g]) == 0 {
+			continue
+		}
+		slices.SortStableFunc(grouped[g], func(a, b Step) int { return compareStepIDs(a.ID, b.ID) })
+		fmt.Fprintf(&b, "\n%s\n", g.title)
+		for _, s := range grouped[g] {
+			fmt.Fprintf(&b, "  %s %s  %s\n", g.mark, s.ID, s.Title)
+			if w := waiting(s); len(w) > 0 {
+				fmt.Fprintf(&b, "      waits on %s\n", strings.Join(w, ", "))
+			}
+		}
+	}
+	return b.String()
+}
+
+// compareStepIDs orders "f-3vh.2" before "f-3vh.10" (numeric suffix).
+func compareStepIDs(a, b string) int {
+	num := func(id string) int {
+		n := 0
+		if i := strings.LastIndex(id, "."); i >= 0 {
+			fmt.Sscanf(id[i+1:], "%d", &n)
+		}
+		return n
+	}
+	if c := num(a) - num(b); c != 0 {
+		return c
+	}
+	return strings.Compare(a, b)
+}

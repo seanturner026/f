@@ -55,10 +55,17 @@ func main() {
 				// Called by agent/extensions/f.ts after each pi run: beads progress for the picker.
 				Name:   "plan",
 				Hidden: true,
-				Commands: []*cli.Command{{
-					Name:   "sync",
-					Action: func(ctx context.Context, c *cli.Command) error { return planSync(ctx, d) },
-				}},
+				Commands: []*cli.Command{
+					{
+						Name:   "sync",
+						Action: func(ctx context.Context, c *cli.Command) error { return planSync(ctx, d) },
+					},
+					{
+						// /plan in pi: steps grouped by in progress / ready / blocked / done.
+						Name:   "show",
+						Action: func(ctx context.Context, c *cli.Command) error { return planShow(ctx, d) },
+					},
+				},
 			},
 			{
 				// Called by agent/extensions/guard.ts when pi starts.

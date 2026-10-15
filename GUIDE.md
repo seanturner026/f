@@ -99,6 +99,8 @@ unseen) → **working** → **idle** → **closed** (no pi running).
 | `/slack` | Copy the last reply formatted for Slack: `*bold*`, headings as bold lines, `•` bullets, links as `text (url)`; code untouched |
 | `/f <name> [repo…]` | Open a feature or start one without leaving chat (tab completes names and repos; asks for repos if new and none given) |
 | `/sync` | After a PR merges: reset its repo to main (rebase newer commits onto it); also runs when you open the feature and on `r` in the prs tab |
+| `/plan` | Show/hide the feature's beads plan above the input: in progress, ready, blocked (← waits on), done count. Full list: `f plan show` |
+| `/prc` | Copy the feature's open PRs as `url: title` lines (same as `!!f prs -c`) |
 | `/ci` | Send failing checks + failed-job logs to pi: it finds the cause and proposes a fix, no push until you OK |
 | `/remember [what]` | Save a preference as a rule in `agent/AGENTS.md` |
 | `/reload` | Pick up changed extensions, rules, keybindings |

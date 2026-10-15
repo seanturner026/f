@@ -24,9 +24,13 @@ const (
 )
 
 type issue struct {
-	ID     string `json:"id"`
-	Title  string `json:"title"`
-	Status string `json:"status"`
+	ID           string `json:"id"`
+	Title        string `json:"title"`
+	Status       string `json:"status"`
+	Dependencies []struct {
+		DependsOn string `json:"depends_on_id"`
+		Type      string `json:"type"` // "blocks", "parent-child", ...
+	} `json:"dependencies"`
 }
 
 // decodeIssues accepts bd's JSON: a list, or a single object.
@@ -110,4 +114,28 @@ func Progress(ctx context.Context, r Runner, dir, id string) (model.Plan, error)
 		}
 	}
 	return plan, nil
+}
+
+// Steps lists the issue's child steps with what each is blocked by (its
+// "blocks" dependencies), in bd's order.
+func Steps(ctx context.Context, r Runner, dir, id string) ([]model.Step, error) {
+	out, err := r.Run(ctx, dir, "bd", "children", id, "--json")
+	if err != nil {
+		return nil, fmt.Errorf("bd children %s: %w", id, err)
+	}
+	children, err := decodeIssues(out)
+	if err != nil {
+		return nil, err
+	}
+	steps := make([]model.Step, 0, len(children))
+	for _, c := range children {
+		s := model.Step{ID: c.ID, Title: c.Title, Status: model.StepStatus(c.Status)}
+		for _, d := range c.Dependencies {
+			if d.Type == "blocks" {
+				s.BlockedBy = append(s.BlockedBy, d.DependsOn)
+			}
+		}
+		steps = append(steps, s)
+	}
+	return steps, nil
 }

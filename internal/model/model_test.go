@@ -193,3 +193,32 @@ func TestCISummary(t *testing.T) {
 		})
 	}
 }
+
+func TestPlanView(t *testing.T) {
+	steps := []model.Step{
+		{ID: "f-1.10", Title: "argocd app", Status: model.StepInProgress},
+		{ID: "f-1.9", Title: "e2e", Status: model.StepOpen, BlockedBy: []string{"f-1.10", "f-1.2"}},
+		{ID: "f-1.2", Title: "dispatcher", Status: model.StepClosed},
+		{ID: "f-1.6", Title: "monitors", Status: model.StepOpen},
+		{ID: "f-1.3", Title: "trigger", Status: model.StepOpen, BlockedBy: []string{"f-1.2"}}, // dep done: ready
+	}
+	want := `sqs (f-1) · 1/5 done
+
+In progress
+  ◐ f-1.10  argocd app
+
+Ready
+  ○ f-1.3  trigger
+  ○ f-1.6  monitors
+
+Blocked
+  ● f-1.9  e2e
+      waits on f-1.10
+
+Done
+  ✓ f-1.2  dispatcher
+`
+	if got := model.PlanView("sqs", "f-1", steps); got != want {
+		t.Errorf("PlanView:\n%s\nwant:\n%s", got, want)
+	}
+}

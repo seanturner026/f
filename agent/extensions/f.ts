@@ -65,6 +65,37 @@ function subdirs(dir: string, keep: (name: string) => boolean = () => true): str
 const featureNames = () => subdirs(join(BASE, ".features"));
 const baseRepos = () => subdirs(BASE, (n) => existsSync(join(BASE, n, ".git")));
 
+// compactPlan fits `f plan show` into a widget (pi shows ~10 lines): one line
+// per open step with what it waits on, done steps as a count, every line cut
+// to width.
+function compactPlan(text: string, t: ExtensionContext["ui"]["theme"], width: number): string[] {
+	const cut = (s: string) => (s.length > width ? `${s.slice(0, width - 1)}\u2026` : s);
+	const out: string[] = [];
+	let group = "";
+	let done = 0;
+	for (const line of text.trimEnd().split("\n")) {
+		if (!line.trim()) continue;
+		if (out.length === 0) {
+			out.push(t.bold(cut(line)));
+		} else if (/^\S/.test(line)) {
+			group = line;
+			if (group !== "Done") out.push(t.fg("accent", cut(group)));
+		} else if (line.trimStart().startsWith("waits on")) {
+			const last = out.pop() ?? "";
+			out.push(last + t.fg("warning", `  \u2190 ${line.trim()}`));
+		} else if (group === "Done") {
+			done++;
+		} else {
+			out.push(cut(line));
+		}
+	}
+	// a "waits on" suffix may have pushed a line past the width: re-cut plainly
+	const fitted = out.map((l) => (l.replace(/\x1b\[[\d;]*m/g, "").length > width + 2 ? cut(l.replace(/\x1b\[[\d;]*m/g, "")) : l));
+	if (done) fitted.push(t.fg("dim", `\u2713 ${done} done \u00b7 /plan again to hide`));
+	else fitted.push(t.fg("dim", "/plan again to hide"));
+	return fitted;
+}
+
 export default function (pi: ExtensionAPI) {
 	const f = (ctx: ExtensionContext, ...args: string[]) => pi.exec("f", args, { cwd: ctx.cwd, timeout: 30_000 });
 	// Never block pi on background work, and ignore a ctx that went stale.
@@ -154,6 +185,38 @@ export default function (pi: ExtensionAPI) {
 			const out = (res.stdout + res.stderr).replace(/\x1b\[[\d;]*m/g, "").trim();
 			if (res.code !== 0) return ctx.ui.notify(out || `f ${name} failed`, "error");
 			ctx.ui.notify(out.split("\n").pop() || `opened ${name}`, "info");
+		},
+	});
+
+	// /plan toggles the feature's beads plan above the editor (shown to you only,
+	// not sent to the model): in progress, ready, blocked (and on what), done.
+	const PLAN_WIDGET = "f-plan";
+	let planShown = false;
+	pi.registerCommand("plan", {
+		description: "Show/hide this feature's plan: in progress, ready, blocked (on what), done",
+		handler: async (_args, ctx) => {
+			if (planShown) {
+				ctx.ui.setWidget(PLAN_WIDGET, undefined);
+				planShown = false;
+				return;
+			}
+			if (!featureInfo(ctx.cwd)) return ctx.ui.notify("not in an f feature", "warning");
+			const res = await f(ctx, "plan", "show");
+			if (res.code !== 0) return ctx.ui.notify(res.stderr.trim() || "f plan show failed", "error");
+			ctx.ui.setWidget(PLAN_WIDGET, compactPlan(res.stdout, ctx.ui.theme, (process.stdout.columns || 100) - 2));
+			planShown = true;
+		},
+	});
+
+	// /prc: copy this feature's PRs as "url: title" lines (f prs -c).
+	pi.registerCommand("prc", {
+		description: "Copy this feature's PRs as url: title lines (stacks numbered)",
+		handler: async (_args, ctx) => {
+			if (!featureInfo(ctx.cwd)) return ctx.ui.notify("not in an f feature", "warning");
+			const res = await f(ctx, "prs", "-c");
+			const out = (res.stdout + res.stderr).trim();
+			const summary = res.code === 0 ? out.split("\n").pop() || "copied" : out || "f prs -c failed";
+			ctx.ui.notify(summary, res.code === 0 ? "info" : "error");
 		},
 	});
 
