@@ -31,8 +31,9 @@ This session works across these git worktrees, all on branch ` + "`{{.Name}}`" +
 
 - Before reviewing, answering questions about, or changing anything in a repo (its PRs included), read its instructions file listed above (if any) in full with the read tool, and follow it. Tool calls on a repo are blocked until you have.
 - Run git commands inside the relevant repo directory; this root is not a git repo.
+- Open PRs ready for review, not as drafts: ` + "`gh stack submit --open`" + ` (with ` + "`--auto`" + ` it makes drafts otherwise), ` + "`gh pr create`" + ` without ` + "`--draft`" + `. Draft only if I ask, or say why first (e.g. it can't merge yet).
 - When a PR has merged (I'll say so), run ` + "`f sync`" + `: one-branch stacks are reset to main (newer commits rebased); longer stacks get ` + "`gh stack sync`" + ` (rebases the rest onto main and pushes).
-- PRs are always a gh stack per repo, starting at branch ` + "`{{.Name}}`" + ` (f already ran ` + "`gh stack init {{.Name}}`" + `; run it if ` + "`gh stack view`" + ` says there's no stack). One change: commit on ` + "`{{.Name}}`" + `. More: ` + "`gh stack add {{.Name}}-<topic>`" + ` for each next PR. Open/update PRs with ` + "`gh stack submit`" + `. Follow the repo's instructions on merge order.
+- PRs are always a gh stack per repo, starting at branch ` + "`{{.Name}}`" + ` (f already ran ` + "`gh stack init {{.Name}}`" + `; run it if ` + "`gh stack view`" + ` says there's no stack). One change: commit on ` + "`{{.Name}}`" + `. More: ` + "`gh stack add {{.Name}}-<topic>`" + ` for each next PR. Open/update PRs with ` + "`gh stack submit --open`" + `. Follow the repo's instructions on merge order.
 - ` + "`.context/`" + ` holds feature state managed by ` + "`f`" + ` (e.g. ` + "`.context/state.json`" + ` lists this feature's PRs). Read it when useful; don't edit it.
 {{if .Issue}}
 ## Plan (beads)
