@@ -131,7 +131,8 @@ Comment on the **right** side of a diff (the real file). Comments are saved in
 
 | Command | Does |
 |---|---|
-| `f <name>` | Start a feature, or reopen it (continues pi's session) |
+| `f <name>` | Start a feature, or reopen it (continues pi's session; restarts any of its tabs that are back at a bare shell) |
+| `f resume` | After quitting WezTerm/Herdr: Herdr restores the layout as bare shells; this restarts pi (`--continue`), nvim, review, and prs in every feature workspace. Shell tabs and anything still running are left alone |
 | `f` | Picker |
 | `f add [repo…]` | Add repos to this feature (+ Herdr tabs, before shell) |
 | `f prs [-r] [-c] [-n] [-w]` | PRs: from saved state; `-r` refresh live, `-c` copy, `-n` don't open browser, `-w` live view (the prs tab) |
@@ -182,6 +183,7 @@ the real files, are blocked with a reason.
 
 | Symptom | Fix |
 |---|---|
+| Tabs are bare shells after a restart (no pi, no CodeDiff) | `f resume` (all features) or `f <name>` (one) |
 | Workspace has an old tab layout | `ctrl+b shift+d` to close it, then `f <name>` |
 | pi bash says "guard not set up" | `f creds` in a shell shows the error; fix, `/reload` |
 | A command is blocked by guard | Read the reason; it's intended. Run it yourself if you really mean it |

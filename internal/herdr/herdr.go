@@ -131,11 +131,13 @@ func CloseWorkspace(ctx context.Context, r Runner, label string) error {
 	return nil
 }
 
-// OpenResult says whether OpenWorkspace focused an existing workspace or created one.
+// OpenResult says whether OpenWorkspace focused an existing workspace (and
+// revived any of its tabs) or created one.
 type OpenResult string
 
 const (
 	OpenFocused OpenResult = "focused"
+	OpenRevived OpenResult = "revived"
 	OpenCreated OpenResult = "created"
 )
 
@@ -179,12 +181,20 @@ func reviewCommand(repo string) string { return "nvim -c " + shell.Quote("PiRevi
 
 // OpenWorkspace focuses the workspace labelled label, or creates it in dir with
 // tabs: chat (pi with piArgs) · nvim · one review tab per repo · prs · shell.
+// An existing workspace gets its stopped tabs restarted (ReviveWorkspace).
 func OpenWorkspace(ctx context.Context, r Runner, label, dir string, repos, piArgs []string) (OpenResult, error) {
 	if id, err := FindWorkspace(ctx, r, label); err != nil {
 		return "", err
 	} else if id != "" {
 		if err := call(ctx, r, nil, "workspace", "focus", id); err != nil {
 			return "", fmt.Errorf("focus workspace: %w", err)
+		}
+		n, err := ReviveWorkspace(ctx, r, id, label, repos, piArgs)
+		if err != nil {
+			return "", err
+		}
+		if n > 0 {
+			return OpenRevived, nil
 		}
 		return OpenFocused, nil
 	}
@@ -219,15 +229,125 @@ func OpenWorkspace(ctx context.Context, r Runner, label, dir string, repos, piAr
 		return "", fmt.Errorf("focus chat tab: %w", err)
 	}
 
-	start := append([]string{"agent", "start", AgentName(label), "--kind", "pi", "--pane", chatPane, "--"}, piArgs...)
+	if err := startPi(ctx, r, label, chatPane, piArgs); err != nil {
+		return "", err
+	}
+	return OpenCreated, nil
+}
+
+// startPi starts pi with piArgs in pane, at its shell prompt.
+func startPi(ctx context.Context, r Runner, label, pane string, piArgs []string) error {
+	start := append([]string{"agent", "start", AgentName(label), "--kind", "pi", "--pane", pane, "--"}, piArgs...)
 	if err := call(ctx, r, nil, start...); err != nil {
 		// Fall back to typing the command into the pane.
 		cmd := "pi " + strings.Join(shell.QuoteAll(piArgs), " ")
-		if err2 := call(ctx, r, nil, "pane", "run", chatPane, cmd); err2 != nil {
-			return "", fmt.Errorf("start pi: %w (fallback: %w)", err, err2)
+		if err2 := call(ctx, r, nil, "pane", "run", pane, cmd); err2 != nil {
+			return fmt.Errorf("start pi: %w (fallback: %w)", err, err2)
 		}
 	}
-	return OpenCreated, nil
+	return nil
+}
+
+// tabCommand is what a tab of a feature with repos runs, by its label: "" for
+// the shell tab and tabs f doesn't know. pi (the chat tab) is "pi".
+func tabCommand(label string, repos []string) string {
+	_, name := splitLabel(label)
+	switch {
+	case name == "chat":
+		return "pi"
+	case name == "nvim":
+		return "nvim"
+	case name == prsTab:
+		return prsCommand
+	case slices.Contains(repos, name):
+		return reviewCommand(name)
+	}
+	return ""
+}
+
+type pane struct {
+	ID  string `json:"pane_id"`
+	Tab string `json:"tab_id"`
+}
+
+// atShell reports whether nothing runs in pane but its shell.
+func atShell(ctx context.Context, r Runner, pane string) (bool, error) {
+	var resp struct {
+		Result struct {
+			Info struct {
+				Foreground int `json:"foreground_process_group_id"`
+				Shell      int `json:"shell_pid"`
+			} `json:"process_info"`
+		} `json:"result"`
+	}
+	if err := call(ctx, r, &resp, "pane", "process-info", "--pane", pane); err != nil {
+		return false, fmt.Errorf("process info: %w", err)
+	}
+	return resp.Result.Info.Shell != 0 && resp.Result.Info.Foreground == resp.Result.Info.Shell, nil
+}
+
+// ReviveWorkspace restarts what f's tabs run (pi with piArgs, nvim, review,
+// prs) in workspace ws wherever the tab is back at a bare shell, e.g. after
+// Herdr restored its layout on restart. Split tabs, the shell tab, and tabs f
+// doesn't know are left alone. Returns how many tabs it restarted.
+func ReviveWorkspace(ctx context.Context, r Runner, ws, label string, repos, piArgs []string) (int, error) {
+	tabs, err := listTabs(ctx, r, ws)
+	if err != nil {
+		return 0, err
+	}
+	var resp struct {
+		Result struct {
+			Panes []pane `json:"panes"`
+		} `json:"result"`
+	}
+	if err := call(ctx, r, &resp, "pane", "list", "--workspace", ws); err != nil {
+		return 0, fmt.Errorf("list panes: %w", err)
+	}
+	panes := map[string][]string{} // tab → panes
+	for _, p := range resp.Result.Panes {
+		panes[p.Tab] = append(panes[p.Tab], p.ID)
+	}
+	n := 0
+	for _, t := range tabs {
+		cmd := tabCommand(t.Label, repos)
+		if cmd == "" || len(panes[t.ID]) != 1 {
+			continue
+		}
+		p := panes[t.ID][0]
+		idle, err := atShell(ctx, r, p)
+		if err != nil {
+			return n, err
+		}
+		if !idle {
+			continue
+		}
+		if cmd == "pi" {
+			err = startPi(ctx, r, label, p, piArgs)
+		} else if err = call(ctx, r, nil, "pane", "run", p, cmd); err != nil {
+			err = fmt.Errorf("start %s tab: %w", t.Label, err)
+		}
+		if err != nil {
+			return n, err
+		}
+		n++
+	}
+	return n, nil
+}
+
+// FeatureWorkspaces returns the IDs of open workspaces labelled with one of
+// names, keyed by label.
+func FeatureWorkspaces(ctx context.Context, r Runner, names []string) (map[string]string, error) {
+	workspaces, err := listWorkspaces(ctx, r)
+	if err != nil {
+		return nil, err
+	}
+	out := map[string]string{}
+	for _, w := range workspaces {
+		if slices.Contains(names, w.Label) {
+			out[w.Label] = w.ID
+		}
+	}
+	return out, nil
 }
 
 // AddRepoTab adds a review tab for repo to the workspace labelled label, if it

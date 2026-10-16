@@ -307,3 +307,80 @@ func TestOpenPicker(t *testing.T) {
 		t.Errorf("stale popup: err=%v opens=%d closed=%v", err, r.opens, c.closed)
 	}
 }
+
+// reviveRunner answers tab/pane lists for one workspace; panes in busy run
+// something, the rest sit at a bare shell. It records what gets started.
+type reviveRunner struct {
+	busy    map[string]bool
+	started []string
+}
+
+func (r *reviveRunner) Run(_ context.Context, _, _ string, args ...string) (string, error) {
+	switch strings.Join(args[:2], " ") {
+	case "tab list":
+		return `{"result":{"tabs":[
+			{"tab_id":"t1","label":"c:chat"},{"tab_id":"t2","label":"v:nvim"},
+			{"tab_id":"t3","label":"a:argocd"},{"tab_id":"t4","label":"gateway"},
+			{"tab_id":"t5","label":"p:prs"},{"tab_id":"t6","label":"t:shell"},
+			{"tab_id":"t7","label":"scratch"},{"tab_id":"t8","label":"s:infra"}]}}`, nil
+	case "pane list":
+		return `{"result":{"panes":[
+			{"pane_id":"p1","tab_id":"t1"},{"pane_id":"p2","tab_id":"t2"},
+			{"pane_id":"p3","tab_id":"t3"},{"pane_id":"p4","tab_id":"t4"},
+			{"pane_id":"p5","tab_id":"t5"},{"pane_id":"p6","tab_id":"t6"},
+			{"pane_id":"p7","tab_id":"t7"},{"pane_id":"p8","tab_id":"t8"},{"pane_id":"p9","tab_id":"t8"}]}}`, nil
+	case "pane process-info":
+		fg := "1"
+		if r.busy[args[3]] {
+			fg = "2"
+		}
+		return `{"result":{"process_info":{"shell_pid":1,"foreground_process_group_id":` + fg + `}}}`, nil
+	case "pane run":
+		r.started = append(r.started, args[2]+" "+args[3])
+	case "agent start":
+		r.started = append(r.started, args[6]+" "+strings.Join(args[8:], " "))
+	}
+	return "{}", nil
+}
+
+func TestReviveWorkspace(t *testing.T) {
+	repos := []string{"argocd", "gateway", "infra"}
+	piArgs := []string{"--name", "feat", "--continue"}
+	tests := []struct {
+		name string
+		busy []string
+		want []string
+	}{
+		{
+			name: "everything stopped: f's single-pane tabs restart, shell and unknown stay",
+			want: []string{
+				"p1 --name feat --continue",
+				"p2 nvim",
+				"p3 nvim -c 'PiReview argocd'",
+				"p4 nvim -c 'PiReview gateway'",
+				"p5 f prs --watch",
+			},
+		},
+		{
+			name: "running tabs left alone",
+			busy: []string{"p1", "p3", "p4", "p5"},
+			want: []string{"p2 nvim"},
+		},
+		{name: "all running", busy: []string{"p1", "p2", "p3", "p4", "p5"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := &reviveRunner{busy: map[string]bool{}}
+			for _, p := range tt.busy {
+				r.busy[p] = true
+			}
+			n, err := herdr.ReviveWorkspace(context.Background(), r, "w1", "feat", repos, piArgs)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if n != len(tt.want) || strings.Join(r.started, "|") != strings.Join(tt.want, "|") {
+				t.Errorf("n=%d started %q, want %q", n, r.started, tt.want)
+			}
+		})
+	}
+}

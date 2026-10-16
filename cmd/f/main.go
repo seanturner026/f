@@ -19,6 +19,7 @@ const help = `f: one pi session across several repos, each on its own worktree.
   f <name>         start a feature (pick repos), or reopen it
   f                picker: what needs you → jump there (ctrl-x remove, alt-x clean merged)
   f add [repo...]  add repos to this feature
+  f resume         after a Herdr restart: restart pi, nvim, prs in every feature workspace
   f prs [-r] [-c]  this feature's PRs (-r refresh, -c copy, -w live view)
   f ci fix         send failing checks to pi (it proposes a fix, doesn't push)
   f sync           after a PR merges: reset its repo to main (rebase newer commits)
@@ -105,6 +106,11 @@ func main() {
 						return err
 					}},
 				},
+			},
+			{
+				Name:   "resume",
+				Usage:  "after a Herdr restart: restart pi, nvim, review, prs in every feature workspace",
+				Action: func(ctx context.Context, c *cli.Command) error { return resume(ctx, d) },
 			},
 			{
 				Name:  "add",

@@ -23,7 +23,7 @@ import (
 )
 
 // Subcommand names can't be feature names, or `f <name>` would be ambiguous.
-var reserved = map[string]bool{"plan": true, "creds": true, "guard": true, "add": true, "prs": true, "goal": true, "comment": true, "checkpoint": true, "help": true, "completion": true}
+var reserved = map[string]bool{"plan": true, "creds": true, "guard": true, "add": true, "prs": true, "goal": true, "comment": true, "checkpoint": true, "resume": true, "help": true, "completion": true}
 
 // deps are what the actions need: where features live and how to run commands.
 type deps struct {
@@ -247,6 +247,61 @@ func launch(ctx context.Context, d deps, name, prompt string, reopen bool) error
 		return err
 	}
 	return syscall.Exec(pi, append([]string{"pi"}, args...), os.Environ())
+}
+
+// resume restarts pi, nvim, review, and prs in every open feature workspace
+// where they stopped (after a Herdr restart its layout is back, bare shells).
+func resume(ctx context.Context, d deps) error {
+	if d.noHerdr || !(herdr.Inside() || herdr.Available(ctx, d.run)) {
+		return herdr.ErrUnavailable
+	}
+	open, err := herdr.FeatureWorkspaces(ctx, d.run, feature.List(d.layout))
+	if err != nil {
+		return err
+	}
+	if len(open) == 0 {
+		info("no feature workspaces open")
+		return nil
+	}
+	type result struct {
+		n   int
+		err error
+	}
+	// pi takes a few seconds to start: do the workspaces concurrently.
+	results := map[string]*result{}
+	var wg sync.WaitGroup
+	for name, ws := range open {
+		res := &result{}
+		results[name] = res
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			repos, err := feature.Repos(d.layout, name)
+			if err != nil {
+				res.err = err
+				return
+			}
+			res.n, res.err = herdr.ReviveWorkspace(ctx, d.run, ws, name, repos, []string{"--name", name, "--continue"})
+		}()
+	}
+	wg.Wait()
+	names := make([]string, 0, len(results))
+	for name := range results {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	var errs []error
+	for _, name := range names {
+		switch res := results[name]; {
+		case res.err != nil:
+			errs = append(errs, fmt.Errorf("%s: %w", name, res.err))
+		case res.n > 0:
+			ok("%s: restarted %d tab(s)", name, res.n)
+		default:
+			info("%s: already running", name)
+		}
+	}
+	return errors.Join(errs...)
 }
 
 func add(ctx context.Context, d deps, explicit string, repos []string) error {
