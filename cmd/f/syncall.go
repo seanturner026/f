@@ -26,24 +26,30 @@ func syncAll(ctx context.Context, d deps) error {
 	stamp := time.Now().Format(time.DateTime)
 	_ = feature.EmptyTrash(d.layout) // leftovers of removals whose background delete was interrupted
 	for _, name := range feature.List(d.layout) {
-		switch {
-		case name == focused:
-			fmt.Printf("%s %s: skipped (you're in it)\n", stamp, name)
-			continue
-		case piWorking(ctx, d, name):
-			fmt.Printf("%s %s: skipped (pi is running)\n", stamp, name)
-			continue
-		}
+		// PRs, CI and plan refresh for every feature (the picker and pi's footer
+		// stay accurate, including the one you're looking at); only the repo
+		// resets wait while you're in it or its pi is running.
 		if err := planSyncFeature(ctx, d, name); err != nil {
 			fmt.Printf("%s %s: plan: %v\n", stamp, name, err)
 		}
 		before, _ := feature.LoadState(d.layout, name)
-		lines, err := reconcileLines(ctx, d, name, false)
+		after, _, err := feature.RefreshPRs(ctx, d.run, d.layout, name)
 		if err != nil {
 			fmt.Printf("%s %s: %v\n", stamp, name, err)
 			continue
 		}
-		after, _ := feature.LoadState(d.layout, name)
+		var lines []string
+		switch {
+		case name == focused:
+			fmt.Printf("%s %s: refreshed; no resets (you're in it)\n", stamp, name)
+		case piWorking(ctx, d, name):
+			fmt.Printf("%s %s: refreshed; no resets (pi is running)\n", stamp, name)
+		default:
+			if lines, err = reconcileWith(ctx, d, name, after.PRs, false); err != nil {
+				fmt.Printf("%s %s: %v\n", stamp, name, err)
+				continue
+			}
+		}
 		var notes []string
 		for _, p := range newlyMerged(before.PRs, after.PRs) {
 			n := fmt.Sprintf("%s #%d merged (%s): close its beads step (bd close <id> --reason %s)", p.Repo, p.Number, p.URL, p.URL)

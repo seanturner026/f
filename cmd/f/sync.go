@@ -9,6 +9,7 @@ import (
 
 	"github.com/seanturner026/pi/internal/feature"
 	"github.com/seanturner026/pi/internal/herdr"
+	"github.com/seanturner026/pi/internal/model"
 )
 
 // syncFeature refreshes PRs and reconciles repos whose PR merged (reset or
@@ -42,7 +43,12 @@ func reconcileLines(ctx context.Context, d deps, name string, stackSync bool) ([
 	if err != nil {
 		return nil, err
 	}
-	results, err := feature.Reconcile(ctx, d.run, d.layout, name, state.PRs, stackSync)
+	return reconcileWith(ctx, d, name, state.PRs, stackSync)
+}
+
+// reconcileWith reconciles against already refreshed PRs and describes the results.
+func reconcileWith(ctx context.Context, d deps, name string, prs []model.PR, stackSync bool) ([]string, error) {
+	results, err := feature.Reconcile(ctx, d.run, d.layout, name, prs, stackSync)
 	if err != nil {
 		return nil, err
 	}

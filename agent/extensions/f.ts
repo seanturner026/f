@@ -16,7 +16,7 @@
  * - Plan: after each run, `f plan sync` saves the beads issue's progress for
  *   the picker (bd is too slow to query when the picker opens).
  */
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, unwatchFile, watchFile } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { isBashToolResult, type ExtensionAPI, type ExtensionContext } from "@earendil-works/pi-coding-agent";
@@ -122,7 +122,16 @@ export default function (pi: ExtensionAPI) {
 		ctx.ui.setStatus(STATUS_KEY, parts.length ? t.fg("dim", "PRs: ") + parts.join(t.fg("dim", " · ")) : undefined);
 	}
 
+	// Redraw the footer whenever state.json changes, whoever changed it (the
+	// 30-min launchd sync, the prs tab, /sync), not just after pi's own runs.
+	let watched = "";
 	pi.on("session_start", async (_e, ctx) => {
+		const info = featureInfo(ctx.cwd);
+		if (info && ctx.mode === "tui") {
+			if (watched) unwatchFile(watched);
+			watched = join(ctx.cwd, ".context", "state.json");
+			watchFile(watched, { interval: 3000 }, () => background(renderPRs(ctx, false)));
+		}
 		background(renderPRs(ctx, false).then(() => renderPRs(ctx, true)));
 		if (featureInfo(ctx.cwd)?.issue) background(f(ctx, "plan", "sync"));
 	});
