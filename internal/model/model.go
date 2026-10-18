@@ -281,47 +281,57 @@ var (
 	planGroups      = []stepGroup{groupInProgress, groupReady, groupBlocked, groupDeferred, groupDone}
 )
 
-// PlanView renders a feature's plan for people: steps grouped by what you can
-// do about them (in progress, ready, blocked, deferred, done), each blocked
-// step with the unfinished steps it waits on.
-func PlanView(name, issue string, steps []Step) string {
+// groupSteps sorts steps into their stepGroup, each group in ID order, and
+// returns what each step waits on: its unfinished "blocks" dependencies.
+func groupSteps(steps []Step) (grouped map[stepGroup][]Step, waiting map[string][]string) {
 	byID := map[string]Step{}
 	for _, s := range steps {
 		byID[s.ID] = s
 	}
-	waiting := func(s Step) []string {
-		var ids []string
+	grouped, waiting = map[stepGroup][]Step{}, map[string][]string{}
+	for _, s := range steps {
 		for _, id := range s.BlockedBy {
 			if dep, ok := byID[id]; ok && dep.Status != StepClosed {
-				ids = append(ids, id)
+				waiting[s.ID] = append(waiting[s.ID], id)
 			}
 		}
-		return ids
-	}
-	groupOf := func(s Step) stepGroup {
+		g := groupReady
 		switch {
 		case s.Status == StepClosed:
-			return groupDone
+			g = groupDone
 		case s.Status == StepInProgress:
-			return groupInProgress
+			g = groupInProgress
 		case s.Status == StepDeferred:
-			return groupDeferred
-		case s.Status == StepBlocked || len(waiting(s)) > 0:
-			return groupBlocked
+			g = groupDeferred
+		case s.Status == StepBlocked || len(waiting[s.ID]) > 0:
+			g = groupBlocked
 		}
-		return groupReady
-	}
-	done := 0
-	grouped := map[stepGroup][]Step{}
-	for _, s := range steps {
-		g := groupOf(s)
 		grouped[g] = append(grouped[g], s)
-		if g == groupDone {
-			done++
-		}
 	}
+	for _, g := range grouped {
+		slices.SortStableFunc(g, func(a, b Step) int { return compareStepIDs(a.ID, b.ID) })
+	}
+	return grouped, waiting
+}
+
+// PlanOf summarizes a feature's steps for the picker, grouped as in PlanView:
+// Next is the first ready step.
+func PlanOf(issue string, steps []Step) Plan {
+	grouped, _ := groupSteps(steps)
+	p := Plan{Issue: issue, Total: len(steps), Done: len(grouped[groupDone])}
+	if ready := grouped[groupReady]; len(ready) > 0 {
+		p.Next = ready[0].Title
+	}
+	return p
+}
+
+// PlanView renders a feature's plan for people: steps grouped by what you can
+// do about them (in progress, ready, blocked, deferred, done), each blocked
+// step with the unfinished steps it waits on.
+func PlanView(name, issue string, steps []Step) string {
+	grouped, waiting := groupSteps(steps)
 	var b strings.Builder
-	fmt.Fprintf(&b, "%s (%s) · %d/%d done\n", name, issue, done, len(steps))
+	fmt.Fprintf(&b, "%s (%s) · %d/%d done\n", name, issue, len(grouped[groupDone]), len(steps))
 	if len(steps) == 0 {
 		b.WriteString("no steps yet (pi plans them as child issues for multi-step work)\n")
 		return b.String()
@@ -330,11 +340,10 @@ func PlanView(name, issue string, steps []Step) string {
 		if len(grouped[g]) == 0 {
 			continue
 		}
-		slices.SortStableFunc(grouped[g], func(a, b Step) int { return compareStepIDs(a.ID, b.ID) })
 		fmt.Fprintf(&b, "\n%s\n", g.title)
 		for _, s := range grouped[g] {
 			fmt.Fprintf(&b, "  %s %s  %s\n", g.mark, s.ID, s.Title)
-			if w := waiting(s); len(w) > 0 {
+			if w := waiting[s.ID]; len(w) > 0 {
 				fmt.Fprintf(&b, "      waits on %s\n", strings.Join(w, ", "))
 			}
 		}

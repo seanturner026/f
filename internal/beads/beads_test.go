@@ -58,30 +58,38 @@ func TestCreate(t *testing.T) {
 
 func TestProgress(t *testing.T) {
 	tests := []struct {
-		name string
-		out  map[string]string
-		want model.Plan
+		name    string
+		out     map[string]string
+		want    model.Plan
+		wantErr bool
 	}{
 		{name: "no children", out: map[string]string{"children": "[]"}, want: model.Plan{Issue: "f-1"}},
 		{
 			name: "some done, next ready",
 			out: map[string]string{
-				"children": `[{"id":"f-1.1","status":"closed"},{"id":"f-1.2","status":"open"},{"id":"f-1.3","status":"open"}]`,
-				"ready":    `[{"id":"f-1.2","title":"upgrade webapp"}]`,
+				"children": `[{"id":"f-1.1","status":"closed"},{"id":"f-1.2","title":"upgrade webapp","status":"open"},{"id":"f-1.3","title":"cut over","status":"open"}]`,
 			},
 			want: model.Plan{Issue: "f-1", Total: 3, Done: 1, Next: "upgrade webapp"},
 		},
 		{
-			name: "all done: no ready lookup",
+			name: "next skips a step waiting on an open one",
+			out: map[string]string{
+				"children": `[{"id":"f-1.1","title":"cut over","status":"open","dependencies":[{"depends_on_id":"f-1.2","type":"blocks"}]},{"id":"f-1.2","title":"upgrade webapp","status":"open"}]`,
+			},
+			want: model.Plan{Issue: "f-1", Total: 2, Next: "upgrade webapp"},
+		},
+		{
+			name: "all done",
 			out:  map[string]string{"children": `[{"id":"f-1.1","status":"closed"}]`},
 			want: model.Plan{Issue: "f-1", Total: 1, Done: 1},
 		},
+		{name: "bd fails", out: map[string]string{"children": "ERR"}, wantErr: true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got, err := beads.Progress(ctx, &fakeRunner{out: tt.out}, "/base", "f-1")
-			if err != nil {
-				t.Fatal(err)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("err = %v", err)
 			}
 			if got != tt.want {
 				t.Errorf("got %+v, want %+v", got, tt.want)

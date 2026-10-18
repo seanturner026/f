@@ -87,33 +87,14 @@ func Note(ctx context.Context, r Runner, dir, id, text string) error {
 	return nil
 }
 
-// Progress summarizes an issue's children: how many are closed, and the first
-// one that's ready to work on (no open blockers).
+// Progress summarizes an issue's children (model.PlanOf): how many are
+// closed, and the first that's ready to work on.
 func Progress(ctx context.Context, r Runner, dir, id string) (model.Plan, error) {
-	out, err := r.Run(ctx, dir, "bd", "children", id, "--json")
-	if err != nil {
-		return model.Plan{}, fmt.Errorf("bd children %s: %w", id, err)
-	}
-	children, err := decodeIssues(out)
+	steps, err := Steps(ctx, r, dir, id)
 	if err != nil {
 		return model.Plan{}, err
 	}
-	plan := model.Plan{Issue: id, Total: len(children)}
-	for _, c := range children {
-		if c.Status == "closed" {
-			plan.Done++
-		}
-	}
-	if plan.Done < plan.Total {
-		out, err := r.Run(ctx, dir, "bd", "ready", "--parent", id, "--json", "--limit", "1")
-		if err != nil {
-			return model.Plan{}, fmt.Errorf("bd ready %s: %w", id, err)
-		}
-		if ready, err := decodeIssues(out); err == nil && len(ready) > 0 {
-			plan.Next = ready[0].Title
-		}
-	}
-	return plan, nil
+	return model.PlanOf(id, steps), nil
 }
 
 // Steps lists the issue's child steps with what each is blocked by (its
