@@ -48,16 +48,6 @@ func closeIssue(ctx context.Context, d deps, name string) string {
 	return ""
 }
 
-// keepIssueOpen notes on the issue that the feature was removed with
-// unmerged work, and leaves it open to come back to.
-func keepIssueOpen(ctx context.Context, d deps, name string, problems []string) {
-	info, _ := feature.LoadInfo(d.layout, name)
-	if info.Issue == "" {
-		return
-	}
-	_ = beads.Note(ctx, d.run, d.layout.Base, info.Issue, "f feature removed with unmerged work: "+strings.Join(problems, "; "))
-}
-
 func prURLs(prs []model.PR, status model.PRStatus) []string {
 	var urls []string
 	for _, p := range prs {
