@@ -134,17 +134,27 @@ type stackView struct {
 	} `json:"branches"`
 }
 
+// viewStack runs `gh stack view` in dir. ErrNotInStack if there's no stack (or
+// gh-stack isn't installed).
+func viewStack(ctx context.Context, r Runner, dir string) (stackView, error) {
+	out, err := r.Run(ctx, dir, "gh", "stack", "view", "--json")
+	if err != nil {
+		return stackView{}, fmt.Errorf("%w: %w", ErrNotInStack, err)
+	}
+	var view stackView
+	if err := json.Unmarshal([]byte(out), &view); err != nil {
+		return stackView{}, fmt.Errorf("stack view: decode: %w", err)
+	}
+	return view, nil
+}
+
 // StackPRs returns the PRs of the gh stack checked out in dir, bottom first,
 // with Stack set to each PR's position. ErrNotInStack if there's no stack (or
 // gh-stack isn't installed).
 func StackPRs(ctx context.Context, r Runner, dir, repo string) ([]model.PR, error) {
-	out, err := r.Run(ctx, dir, "gh", "stack", "view", "--json")
+	view, err := viewStack(ctx, r, dir)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %w", ErrNotInStack, err)
-	}
-	var view stackView
-	if err := json.Unmarshal([]byte(out), &view); err != nil {
-		return nil, fmt.Errorf("stack view: decode: %w", err)
+		return nil, err
 	}
 	var urls []string
 	for _, b := range view.Branches {
@@ -204,13 +214,9 @@ func RepoPRs(ctx context.Context, r Runner, dir, repo, branch string) ([]model.P
 // StackBranches lists the branches of the gh stack checked out in dir, bottom
 // first. ErrNotInStack if there's no stack.
 func StackBranches(ctx context.Context, r Runner, dir string) ([]string, error) {
-	out, err := r.Run(ctx, dir, "gh", "stack", "view", "--json")
+	view, err := viewStack(ctx, r, dir)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %w", ErrNotInStack, err)
-	}
-	var view stackView
-	if err := json.Unmarshal([]byte(out), &view); err != nil {
-		return nil, fmt.Errorf("stack view: decode: %w", err)
+		return nil, err
 	}
 	var names []string
 	for _, b := range view.Branches {
