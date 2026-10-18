@@ -22,9 +22,6 @@ import (
 	"github.com/seanturner026/pi/internal/shell"
 )
 
-// Subcommand names can't be feature names, or `f <name>` would be ambiguous.
-var reserved = map[string]bool{"plan": true, "creds": true, "guard": true, "add": true, "prs": true, "goal": true, "comment": true, "checkpoint": true, "resume": true, "help": true, "completion": true}
-
 // deps are what the actions need: where features live and how to run commands.
 type deps struct {
 	layout  feature.Layout
@@ -42,7 +39,8 @@ func newDeps() (deps, error) {
 }
 
 func checkName(name string) error {
-	if reserved[name] {
+	// The CLI routes other subcommand names before start; the hidden help command doesn't.
+	if name == "help" {
 		return fmt.Errorf("%q is a subcommand; pick another name", name)
 	}
 	return feature.CheckName(name)
