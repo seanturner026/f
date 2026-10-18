@@ -1,5 +1,5 @@
 // Package shell runs external commands. Exec satisfies the Runner interfaces
-// declared by the packages that shell out (git, github, herdr, feature).
+// declared by the packages that shell out (git, github, herdr, beads, feature).
 package shell
 
 import (
