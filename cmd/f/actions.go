@@ -508,12 +508,9 @@ func removeFinished(ctx context.Context, d deps, done []string, ask bool) []stri
 		if note := closeIssue(ctx, d, name); note != "" {
 			fmt.Println(dim(name + ": " + note))
 		}
-		if err := feature.Remove(ctx, d.run, d.layout, name); err != nil {
+		if err := removeWithWorkspace(ctx, d, name); err != nil {
 			fmt.Printf("%s %v\n", red("cleanup:"), err)
 			continue
-		}
-		if !d.noHerdr {
-			_ = herdr.CloseWorkspace(ctx, d.run, name)
 		}
 		removed = append(removed, name)
 		if ask {
@@ -524,4 +521,16 @@ func removeFinished(ctx context.Context, d deps, done []string, ask bool) []stri
 		startDetached("empty-trash")
 	}
 	return removed
+}
+
+// removeWithWorkspace removes the feature and closes its Herdr workspace. Its
+// files stay in the trash until `f empty-trash`.
+func removeWithWorkspace(ctx context.Context, d deps, name string) error {
+	if err := feature.Remove(ctx, d.run, d.layout, name); err != nil {
+		return err
+	}
+	if !d.noHerdr {
+		_ = herdr.CloseWorkspace(ctx, d.run, name)
+	}
+	return nil
 }
