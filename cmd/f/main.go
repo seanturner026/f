@@ -188,7 +188,7 @@ func main() {
 				Flags: []cli.Flag{
 					featureFlag,
 					&cli.BoolFlag{Name: "background", Hidden: true},
-					&cli.BoolFlag{Name: "all", Usage: "every feature (launchd, every 30 min): skips the one you're in and busy pis, never pushes"},
+					&cli.BoolFlag{Name: "all", Usage: "every feature (launchd, every 30 min): refreshes all; resets wait for the one you're in and busy pis; never pushes"},
 				},
 				Action: func(ctx context.Context, c *cli.Command) error {
 					if c.Bool("all") {

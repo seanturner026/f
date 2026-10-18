@@ -14,10 +14,9 @@ import (
 var ansiCodes = regexp.MustCompile(`\x1b\[[0-9;]*m`)
 
 // syncAll is the periodic sync (launchd, every 30 min): for every feature,
-// refresh PRs/CI and beads progress (the picker stays accurate) and reconcile repos whose PR
-// merged, without pushing. It skips the workspace you're in and features
-// whose pi is running, and leaves pi a note about anything it changed. Logs
-// one line per change to stdout (the launchd log).
+// refresh PRs/CI and beads progress, and reconcile repos whose PR merged
+// (never pushing) unless you're in it or its pi is running. pi gets a note
+// about anything it changed. Logs one line per change to stdout (launchd log).
 func syncAll(ctx context.Context, d deps) error {
 	focused := ""
 	if !d.noHerdr {
@@ -26,9 +25,6 @@ func syncAll(ctx context.Context, d deps) error {
 	stamp := time.Now().Format(time.DateTime)
 	_ = feature.EmptyTrash(d.layout) // leftovers of removals whose background delete was interrupted
 	for _, name := range feature.List(d.layout) {
-		// PRs, CI and plan refresh for every feature (the picker and pi's footer
-		// stay accurate, including the one you're looking at); only the repo
-		// resets wait while you're in it or its pi is running.
 		if err := planSyncFeature(ctx, d, name); err != nil {
 			fmt.Printf("%s %s: plan: %v\n", stamp, name, err)
 		}
