@@ -6,15 +6,17 @@
  * - Goal: the first prompt becomes the feature's goal (`f goal`).
  * - Checkpoints: around each run, `f checkpoint begin/end` marks the code
  *   before pi's last code change (nvim: <leader>pr in a repo tab).
- * - PRs: footer from `f prs --json` (instant), refreshed after each run;
- *   `gh pr create` output is recorded at once (`f prs --add`); /prs opens them.
+ * - PRs: footer from `f prs --json`, refreshed after each run and redrawn
+ *   whenever state.json changes; `gh pr create` output is recorded at once
+ *   (`f prs --add`); /prs opens them, /prc copies them (`f prs -c`).
  * - CI: /ci sends failing checks with their failed-job logs (`f ci fix --print`)
  *   as a prompt: find the cause, propose a fix, don't push.
  * - Sync: /sync runs `f sync` (after a merge: reset that repo to main). Notes
  *   from the background sync (launchd: f sync --all) come with the next prompt.
  * - /f <name> [repo...]: open or start a feature without leaving chat.
  * - Plan: after each run, `f plan sync` saves the beads issue's progress for
- *   the picker (bd is too slow to query when the picker opens).
+ *   the picker (bd is too slow to query when the picker opens); /plan toggles
+ *   a widget with the steps (`f plan show`).
  */
 import { existsSync, readdirSync, readFileSync, unwatchFile, watchFile } from "node:fs";
 import { homedir } from "node:os";
