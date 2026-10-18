@@ -37,25 +37,33 @@ func closeIssue(ctx context.Context, d deps, name string) string {
 		return ""
 	}
 	state, _ := feature.LoadState(d.layout, name)
-	reason := "feature removed (no changes)"
-	if urls := prURLs(state.PRs, model.PRStatusMerged); len(urls) > 0 {
-		reason = "merged: " + strings.Join(urls, " ")
-	}
-	if err := beads.Close(ctx, d.run, d.layout.Base, info.Issue, reason); err != nil {
-		_ = beads.Note(ctx, d.run, d.layout.Base, info.Issue, "f feature "+name+" removed; issue left open: "+err.Error())
+	if closed, _ := closeOrNote(ctx, d, info.Issue, name, closeReason(state.PRs)); !closed {
 		return fmt.Sprintf("issue %s left open (plan steps still open?)", info.Issue)
 	}
 	return ""
 }
 
-func prURLs(prs []model.PR, status model.PRStatus) []string {
+// closeReason is a removed feature's close reason: its merged PRs, if any.
+func closeReason(prs []model.PR) string {
 	var urls []string
 	for _, p := range prs {
-		if p.Status == status {
+		if p.Status == model.PRStatusMerged {
 			urls = append(urls, p.URL)
 		}
 	}
-	return urls
+	if len(urls) == 0 {
+		return "feature removed (no changes)"
+	}
+	return "merged: " + strings.Join(urls, " ")
+}
+
+// closeOrNote closes the issue; if bd won't (e.g. plan steps still open), it
+// notes why on the issue and leaves it open.
+func closeOrNote(ctx context.Context, d deps, issue, name, reason string) (closed bool, err error) {
+	if err := beads.Close(ctx, d.run, d.layout.Base, issue, reason); err != nil {
+		return false, beads.Note(ctx, d.run, d.layout.Base, issue, "f feature "+name+" removed; issue left open: "+err.Error())
+	}
+	return true, nil
 }
 
 // planSync saves the feature's beads progress for the picker (pi runs it
@@ -116,11 +124,7 @@ func issueUpdateInBackground(d deps, name string, force bool, problems []string)
 		args = append(args, "--note", "f feature removed with unmerged work: "+strings.Join(problems, "; "))
 	} else {
 		state, _ := feature.LoadState(d.layout, name)
-		reason := "feature removed (no changes)"
-		if urls := prURLs(state.PRs, model.PRStatusMerged); len(urls) > 0 {
-			reason = "merged: " + strings.Join(urls, " ")
-		}
-		args = append(args, "--reason", reason)
+		args = append(args, "--reason", closeReason(state.PRs))
 	}
 	return func() { startDetached(args...) }
 }
@@ -131,8 +135,6 @@ func closeIssueCmd(ctx context.Context, d deps, issue, name, reason, note string
 	if note != "" {
 		return beads.Note(ctx, d.run, d.layout.Base, issue, note)
 	}
-	if err := beads.Close(ctx, d.run, d.layout.Base, issue, reason); err != nil {
-		return beads.Note(ctx, d.run, d.layout.Base, issue, "f feature "+name+" removed; issue left open: "+err.Error())
-	}
-	return nil
+	_, err := closeOrNote(ctx, d, issue, name, reason)
+	return err
 }
