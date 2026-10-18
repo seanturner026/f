@@ -205,7 +205,7 @@ func TestRemoveRenamesThenPrunes(t *testing.T) {
 	f.commit("b.txt", "work\n")
 	write(t, filepath.Join(f.wt, "dirty.txt"), "uncommitted\n") // Remove doesn't refuse: callers check Unmerged
 	base := filepath.Join(f.l.Base, "app")
-	if err := feature.Remove(context.Background(), shell.Exec{}, f.l, "feat", true); err != nil {
+	if err := feature.Remove(context.Background(), shell.Exec{}, f.l, "feat"); err != nil {
 		t.Fatal(err)
 	}
 	if feature.Exists(f.l, "feat") {

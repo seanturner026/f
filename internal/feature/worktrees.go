@@ -227,9 +227,8 @@ func unmergedIn(ctx context.Context, r Runner, l Layout, name, repo string, know
 // directory is renamed into .features/.trash (instant, whatever its size),
 // git forgets the worktrees (worktree prune) and drops the branch, and
 // EmptyTrash deletes the files later (in the background). Check Unmerged
-// first: Remove doesn't refuse dirty worktrees. force is kept for callers'
-// intent (removing unmerged work); the outcome is the same.
-func Remove(ctx context.Context, r Runner, l Layout, name string, force bool) error {
+// first: Remove doesn't refuse dirty worktrees.
+func Remove(ctx context.Context, r Runner, l Layout, name string) error {
 	repos, err := Repos(l, name)
 	if err != nil {
 		return err

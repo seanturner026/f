@@ -508,7 +508,7 @@ func removeFinished(ctx context.Context, d deps, done []string, ask bool) []stri
 		if note := closeIssue(ctx, d, name); note != "" {
 			fmt.Println(dim(name + ": " + note))
 		}
-		if err := feature.Remove(ctx, d.run, d.layout, name, false); err != nil {
+		if err := feature.Remove(ctx, d.run, d.layout, name); err != nil {
 			fmt.Printf("%s %v\n", red("cleanup:"), err)
 			continue
 		}

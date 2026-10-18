@@ -372,7 +372,7 @@ func TestRemoveWithDeletedBaseClone(t *testing.T) {
 	if err != nil || len(problems) != 0 {
 		t.Fatalf("Unmerged = %v, %v; want nothing (no history left to lose)", problems, err)
 	}
-	if err := feature.Remove(ctx, fakeRunner{}, l, "feat", false); err != nil {
+	if err := feature.Remove(ctx, fakeRunner{}, l, "feat"); err != nil {
 		t.Fatal(err)
 	}
 	if feature.Exists(l, "feat") {

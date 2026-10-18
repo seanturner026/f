@@ -285,7 +285,7 @@ func removeFeature(ctx context.Context, d deps, name string) string {
 	// The beads issue is closed (or noted) in the background: bd takes ~0.5s.
 	// Read what it needs now, before the feature's files are gone.
 	issue := issueUpdateInBackground(d, name, force, problems)
-	if err := feature.Remove(ctx, d.run, d.layout, name, force); err != nil {
+	if err := feature.Remove(ctx, d.run, d.layout, name); err != nil {
 		return red(err.Error())
 	}
 	if !d.noHerdr {
