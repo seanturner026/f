@@ -30,7 +30,7 @@ local function buf_path(buf)
 end
 
 -- feature_info finds the feature containing path (or the cwd) by walking up
--- to its .context/feature.json, which f writes: { name, root, repos, goal }.
+-- to its .context/feature.json, which f writes (feature.Info).
 local function feature_info(path)
   local start = path and vim.fs.dirname(path) or vim.fn.getcwd()
   local ctx = vim.fs.find(".context", { upward = true, type = "directory", path = start })[1]
@@ -207,13 +207,9 @@ function M.tabline()
   return table.concat(parts) .. "%#TabLineFill#%T"
 end
 
--- One CodeDiff tab per repo (feature changes vs origin's default branch),
--- labelled with the repo name; the empty starting tab is closed once they're up.
--- :PiReview [repo]: with a repo (as in f's Herdr repo tabs), just that repo;
--- without, every repo in the feature, one nvim tab each.
 -- What a review tab compares against.
 local FEATURE = "origin/HEAD..." -- everything since the branch left origin's default branch
-local LAST_RUN = "refs/worktree/pi-last" -- the code before pi's last run (feature-checkpoint.ts)
+local LAST_RUN = "refs/worktree/pi-last" -- the code before pi's last run (f checkpoint)
 
 -- open_codediff opens CodeDiff for each repo against rev, one at a time
 -- (CodeDiff opens its tab asynchronously, and concurrent launches get mixed
