@@ -171,11 +171,9 @@ func StackPrefix(prs []PR, i int) string {
 	}
 }
 
-// PRClipboard formats PRs one per line as "url: title", stacks as a tree
-// (see StackPrefix).
-//
-// Stacked PRs are labelled with their position ("1/3 " bottom first) rather
-// than a tree: box-drawing characters don't line up in Slack's proportional font.
+// PRClipboard formats PRs one per line as "url: title", stacked PRs prefixed
+// with their position ("1/3 " bottom first): a StackPrefix tree doesn't line
+// up in Slack's proportional font.
 func PRClipboard(prs []PR) string {
 	var b strings.Builder
 	for i, p := range prs {
