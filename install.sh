@@ -29,6 +29,8 @@ command -v herdr >/dev/null && herdr plugin link "$repo/herdr-plugin" >/dev/null
 
 # launchd: f sync --all every 30 min (PR/CI refresh for the picker; repos reset
 # after their PR merged; never pushes). Log: ~/Library/Logs/f-sync.log
+# Run via /bin/sh: macOS tracks a background item by its program's signature,
+# and go install re-signs f each build ("Background Items Added" every time).
 label=com.seanturner026.f-sync
 plist="$HOME/Library/LaunchAgents/$label.plist"
 mkdir -p "$(dirname "$plist")"
@@ -39,7 +41,7 @@ cat > "$plist" <<PLIST
 <dict>
   <key>Label</key><string>$label</string>
   <key>ProgramArguments</key>
-  <array><string>$(go env GOPATH)/bin/f</string><string>sync</string><string>--all</string></array>
+  <array><string>/bin/sh</string><string>-c</string><string>exec f sync --all</string></array>
   <key>EnvironmentVariables</key>
   <dict><key>PATH</key><string>$(go env GOPATH)/bin:$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string></dict>
   <key>StartInterval</key><integer>1800</integer>
