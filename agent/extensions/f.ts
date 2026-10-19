@@ -193,7 +193,7 @@ export default function (pi: ExtensionAPI) {
 			}
 			ctx.ui.notify(`f ${name}\u2026`, "info");
 			const res = await pi.exec("f", [name, ...repos.flatMap((r) => ["-r", r])], { cwd: ctx.cwd, timeout: 180_000 });
-			const out = (res.stdout + res.stderr).replace(/\x1b\[[\d;]*m/g, "").trim();
+			const out = (res.stdout + res.stderr).trim();
 			if (res.code !== 0) return ctx.ui.notify(out || `f ${name} failed`, "error");
 			ctx.ui.notify(out.split("\n").pop() || `opened ${name}`, "info");
 		},
@@ -251,7 +251,7 @@ export default function (pi: ExtensionAPI) {
 			if (!featureInfo(ctx.cwd)) return ctx.ui.notify("not in an f feature", "warning");
 			const res = await pi.exec("f", ["sync"], { cwd: ctx.cwd, timeout: 120_000 });
 			await renderPRs(ctx, false);
-			const out = (res.stdout + res.stderr).replace(/\x1b\[[\d;]*m/g, "").trim();
+			const out = (res.stdout + res.stderr).trim();
 			ctx.ui.notify(out || "nothing to sync", res.code !== 0 || out.includes("\u2717") ? "warning" : "info");
 		},
 	});
