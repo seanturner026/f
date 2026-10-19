@@ -6,8 +6,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
-	"strings"
 
 	"github.com/seanturner026/pi/internal/feature"
 	"github.com/seanturner026/pi/internal/herdr"
@@ -79,10 +77,7 @@ func commentSend(ctx context.Context, d deps, explicit string) error {
 		return nil
 	}
 	msg := model.CommentsMessage(cs)
-	if err := herdr.PromptPi(ctx, d.run, feature.Dir(d.layout, name), msg); err != nil {
-		cmd := exec.Command("pbcopy")
-		cmd.Stdin = strings.NewReader(msg)
-		_ = cmd.Run()
+	if err := promptPiOrCopy(ctx, d, name, msg); err != nil {
 		return fmt.Errorf("%w (comments kept; message copied to clipboard)", err)
 	}
 	if err := feature.ClearComments(d.layout, name); err != nil {
@@ -90,4 +85,14 @@ func commentSend(ctx context.Context, d deps, explicit string) error {
 	}
 	ok("sent %d comment(s) to pi", len(cs))
 	return nil
+}
+
+// promptPiOrCopy sends msg to the feature's pi (via Herdr); if that fails,
+// msg goes on the clipboard so it isn't lost.
+func promptPiOrCopy(ctx context.Context, d deps, name, msg string) error {
+	err := herdr.PromptPi(ctx, d.run, feature.Dir(d.layout, name), msg)
+	if err != nil {
+		_ = copyToClipboard(msg)
+	}
+	return err
 }

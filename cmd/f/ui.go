@@ -32,6 +32,15 @@ func isTerminal(f *os.File) bool {
 	return err == nil && fi.Mode()&os.ModeCharDevice != 0
 }
 
+func copyToClipboard(text string) error {
+	cmd := exec.Command("pbcopy")
+	cmd.Stdin = strings.NewReader(text)
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("copy to clipboard: %w", err)
+	}
+	return nil
+}
+
 // interactive reports whether a person is at the terminal.
 func interactive() bool { return isTerminal(os.Stdin) && isTerminal(os.Stdout) }
 

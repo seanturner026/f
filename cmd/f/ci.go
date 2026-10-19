@@ -3,14 +3,12 @@ package main
 import (
 	"context"
 	"fmt"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
 
 	"github.com/seanturner026/pi/internal/feature"
 	"github.com/seanturner026/pi/internal/github"
-	"github.com/seanturner026/pi/internal/herdr"
 	"github.com/seanturner026/pi/internal/model"
 )
 
@@ -74,10 +72,7 @@ func sendCIFix(ctx context.Context, d deps, name string) (int, error) {
 	if err != nil || n == 0 {
 		return 0, err
 	}
-	if err := herdr.PromptPi(ctx, d.run, feature.Dir(d.layout, name), msg); err != nil {
-		cmd := exec.Command("pbcopy")
-		cmd.Stdin = strings.NewReader(msg)
-		_ = cmd.Run()
+	if err := promptPiOrCopy(ctx, d, name, msg); err != nil {
 		return n, fmt.Errorf("%w (prompt copied to clipboard)", err)
 	}
 	return n, nil

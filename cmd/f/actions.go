@@ -434,10 +434,8 @@ func copyPRs(prs []model.PR) error {
 		return nil
 	}
 	text := model.PRClipboard(active)
-	cmd := exec.Command("pbcopy")
-	cmd.Stdin = strings.NewReader(text)
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("copy to clipboard: %w", err)
+	if err := copyToClipboard(text); err != nil {
+		return err
 	}
 	fmt.Print(text)
 	ok("copied %d PR(s)", len(active))
