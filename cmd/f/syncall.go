@@ -3,15 +3,12 @@ package main
 import (
 	"context"
 	"fmt"
-	"regexp"
 	"time"
 
 	"github.com/seanturner026/pi/internal/feature"
 	"github.com/seanturner026/pi/internal/herdr"
 	"github.com/seanturner026/pi/internal/model"
 )
-
-var ansiCodes = regexp.MustCompile(`\x1b\[[0-9;]*m`)
 
 // syncAll is the periodic sync (launchd, every 30 min): for every feature,
 // refresh PRs/CI and beads progress, and reconcile repos whose PR merged
@@ -41,10 +38,12 @@ func syncAll(ctx context.Context, d deps) error {
 		case piWorking(ctx, d, name):
 			fmt.Printf("%s %s: refreshed; no resets (pi is running)\n", stamp, name)
 		default:
-			if lines, err = reconcileWith(ctx, d, name, after.PRs, false); err != nil {
+			results, err := feature.Reconcile(ctx, d.run, d.layout, name, after.PRs, false)
+			if err != nil {
 				fmt.Printf("%s %s: %v\n", stamp, name, err)
 				continue
 			}
+			lines = syncLines(results, false)
 		}
 		var notes []string
 		for _, p := range newlyMerged(before.PRs, after.PRs) {
@@ -53,7 +52,6 @@ func syncAll(ctx context.Context, d deps) error {
 			notes = append(notes, n)
 		}
 		for _, l := range lines {
-			l = ansiCodes.ReplaceAllString(l, "")
 			fmt.Printf("%s %s: %s\n", stamp, name, l)
 			notes = append(notes, l)
 		}
