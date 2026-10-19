@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
@@ -132,14 +131,6 @@ func start(ctx context.Context, d deps, name string, repos []string, prompt stri
 		return launch(ctx, d, name, "", true)
 	}
 
-	// Starting something new: offer to clean up finished features. Find them
-	// while you pick repos (git checks on big repos take a moment), ask after.
-	var finished chan []string
-	if len(repos) == 0 && interactive() {
-		finished = make(chan []string, 1)
-		go func() { finished <- findFinished(ctx, d) }()
-	}
-
 	if len(repos) == 0 && !interactive() {
 		// fzf would wait forever for a terminal that isn't there (pi's !f).
 		return fmt.Errorf("new feature %q needs repos: f %s -r <repo> [-r <repo>...], or /f %s in pi (it asks)", name, name, name)
@@ -155,9 +146,6 @@ func start(ctx context.Context, d deps, name string, repos []string, prompt stri
 	}
 	if len(repos) == 0 {
 		return errors.New("no repos selected; aborted")
-	}
-	if finished != nil {
-		removeFinished(ctx, d, <-finished, true)
 	}
 	if err := feature.CheckRepos(d.layout, repos); err != nil {
 		return err
@@ -465,9 +453,9 @@ func printPRs(d deps, name string, list []model.PR, errs map[string]error) {
 }
 
 // cleanMerged finds finished features and removes them: worktrees, branches,
-// and Herdr workspace. With ask, it confirms first.
-func cleanMerged(ctx context.Context, d deps, ask bool) []string {
-	return removeFinished(ctx, d, findFinished(ctx, d), ask)
+// and Herdr workspace (the picker's alt-x).
+func cleanMerged(ctx context.Context, d deps) []string {
+	return removeFinished(ctx, d, findFinished(ctx, d))
 }
 
 // findFinished lists features whose work has all landed (checked in parallel).
@@ -489,18 +477,8 @@ func findFinished(ctx context.Context, d deps) []string {
 	return done
 }
 
-// removeFinished removes the given finished features; with ask, it confirms first.
-func removeFinished(ctx context.Context, d deps, done []string, ask bool) []string {
-	if len(done) == 0 {
-		return nil
-	}
-	if ask {
-		fmt.Printf("merged: %s. clean up? [Y/n] ", strings.Join(done, ", "))
-		line, _ := bufio.NewReader(os.Stdin).ReadString('\n')
-		if a := strings.ToLower(strings.TrimSpace(line)); a != "" && a != "y" && a != "yes" {
-			return nil
-		}
-	}
+// removeFinished removes the given finished features.
+func removeFinished(ctx context.Context, d deps, done []string) []string {
 	var removed []string
 	for _, name := range done {
 		if note := closeIssue(ctx, d, name); note != "" {
@@ -511,9 +489,6 @@ func removeFinished(ctx context.Context, d deps, done []string, ask bool) []stri
 			continue
 		}
 		removed = append(removed, name)
-		if ask {
-			ok("removed %s", name)
-		}
 	}
 	if len(removed) > 0 {
 		startDetached("empty-trash")

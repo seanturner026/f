@@ -123,10 +123,10 @@ func pickFeature(ctx context.Context, d deps) (string, error) {
 			header = append([]string{msg}, header...)
 		}
 		// Full-screen (fast in Herdr's popup); ctrl-space closes it, like it opened.
-		// The cursor starts on the first feature you're not already in.
+		// The cursor starts on the top row: the feature you're in.
 		out, err := runFzf(lines, "--ansi", "--delimiter=\t", "--with-nth=2..",
 			"--expect=ctrl-x,alt-x", "--bind=ctrl-space:abort", "--prompt=feature> ",
-			"--header="+strings.Join(header, "\n"), fmt.Sprintf("--bind=load:pos(%d)", firstOther(rows)))
+			"--header="+strings.Join(header, "\n"))
 		if err != nil || len(out) == 0 {
 			return "", err
 		}
@@ -142,24 +142,13 @@ func pickFeature(ctx context.Context, d deps) (string, error) {
 				msg = removeFeature(ctx, d, name)
 			}
 		case "alt-x":
-			removed := cleanMerged(ctx, d, false)
+			removed := cleanMerged(ctx, d)
 			msg = "nothing merged to clean up"
 			if len(removed) > 0 {
 				msg = "removed " + strings.Join(removed, ", ")
 			}
 		}
 	}
-}
-
-// firstOther is the 1-based fzf position of the first row that isn't the
-// current workspace.
-func firstOther(rows []pickerRow) int {
-	for i, r := range rows {
-		if !r.current {
-			return i + 1
-		}
-	}
-	return 1
 }
 
 // pickerColumn is a column of the picker table, in display order.

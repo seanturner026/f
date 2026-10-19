@@ -34,8 +34,8 @@ by `f`).
 5. **Switch**: `ctrl+space` → picker, ordered by what needs you.
 6. **Merged**: the repo resets to main by itself (on open, `r` in prs, `/sync`, or tell
    pi "merged"), so more work in the feature starts a fresh PR.
-7. **Done**: when PRs merge, the next `f <new>` offers cleanup, or `alt-x` in
-   the picker. The beads issue closes with the PR links.
+7. **Done**: when PRs merge, `alt-x` in the picker cleans up every merged
+   feature (or `ctrl-x` one). The beads issue closes with the PR links.
 
 Big multi-step work (e.g. ACK across tf/argocd/prod/ops): start one
 feature with all the repos, ask pi to **plan it in beads** (child issues +
@@ -80,7 +80,7 @@ learns shows in the picker too.
 | `alt-x` | Clean up every merged feature |
 | `esc` / `ctrl-space` | Close |
 
-Columns: `●` marks the workspace you're in (listed first; the cursor starts on the next one) ·
+Columns: `●` marks the workspace you're in (listed first, with the cursor on it) ·
 FEATURE · PI status · CI of open PRs (`✓`, `⋯ running`, `✗ <repos>`) · PRS ·
 PLAN (beads steps).
 

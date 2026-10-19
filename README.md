@@ -28,7 +28,7 @@ worktree (`f -h` for commands).
   each repo tab a live CodeDiff (`<leader>pr` toggles whole feature ↔ pi's last
   run); `prs` is `f prs --watch` (PRs + checks, polls GitHub only while checks
   run or just after a push). Outside Herdr, pi starts in the current terminal.
-- Starting a feature offers to clean up merged ones.
+- Merged features are cleaned up from the picker (`alt-x`).
 - Plumbing used by pi (`agent/extensions/f.ts`) and nvim (`nvim/f.lua`):
   `f goal`, `f comment`, `f checkpoint`, `f prs --json/--add`.
 

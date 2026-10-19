@@ -39,26 +39,3 @@ func TestAttention(t *testing.T) {
 		t.Errorf("idle: attention = %d, want %d", got, want)
 	}
 }
-
-func TestFirstOther(t *testing.T) {
-	tests := []struct {
-		name    string
-		current []bool
-		want    int
-	}{
-		{name: "current first", current: []bool{true, false}, want: 2},
-		{name: "current later", current: []bool{false, true}, want: 1},
-		{name: "only current", current: []bool{true}, want: 1},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			var rows []pickerRow
-			for _, c := range tt.current {
-				rows = append(rows, pickerRow{current: c})
-			}
-			if got := firstOther(rows); got != tt.want {
-				t.Errorf("firstOther(%v) = %d, want %d", tt.current, got, tt.want)
-			}
-		})
-	}
-}
