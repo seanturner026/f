@@ -3,7 +3,6 @@ package feature
 import (
 	"context"
 	"fmt"
-	"path/filepath"
 	"sync"
 
 	"github.com/seanturner026/pi/internal/git"
@@ -60,7 +59,7 @@ func Reconcile(ctx context.Context, r Runner, l Layout, name string, prs []model
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			wt := filepath.Join(Dir(l, name), repo)
+			wt := RepoDir(l, name, repo)
 			if branches, err := github.StackBranches(ctx, r, wt); err == nil && len(branches) > 1 {
 				if stackSync {
 					found[i] = SyncResult{Repo: repo, Action: SyncStack, Detail: "gh stack sync: rebased onto main and pushed"}
@@ -84,7 +83,7 @@ func Reconcile(ctx context.Context, r Runner, l Layout, name string, prs []model
 }
 
 func reconcileRepo(ctx context.Context, r Runner, l Layout, name, repo string, prs []model.PR) SyncResult {
-	wt := filepath.Join(Dir(l, name), repo)
+	wt := RepoDir(l, name, repo)
 	res := SyncResult{Repo: repo}
 	head, err := git.Head(ctx, r, wt)
 	if err != nil {
@@ -112,7 +111,7 @@ func reconcileRepo(ctx context.Context, r Runner, l Layout, name, repo string, p
 		res.Action, res.Detail = SyncNeeded, err.Error()
 		return res
 	}
-	base := "origin/" + git.DefaultBranch(ctx, r, filepath.Join(l.Base, repo))
+	base := baseRef(ctx, r, l, repo)
 	baseSHA := git.RevParse(ctx, r, wt, base)
 	if baseSHA == "" || head == baseSHA {
 		return res

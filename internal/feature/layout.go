@@ -60,6 +60,15 @@ func DefaultLayout() (Layout, error) {
 // Dir is the directory of feature name.
 func Dir(l Layout, name string) string { return filepath.Join(l.Features, name) }
 
+// RepoDir is repo's worktree in feature name.
+func RepoDir(l Layout, name, repo string) string { return filepath.Join(Dir(l, name), repo) }
+
+// baseRef is where repo's feature branches start: origin's default branch, as
+// its base clone knows it.
+func baseRef(ctx context.Context, r Runner, l Layout, repo string) string {
+	return "origin/" + git.DefaultBranch(ctx, r, filepath.Join(l.Base, repo))
+}
+
 // Exists reports whether feature name exists.
 func Exists(l Layout, name string) bool {
 	_, err := os.Stat(Dir(l, name))

@@ -61,7 +61,7 @@ func writeAgentsMD(l Layout, info Info) error {
 	for _, r := range info.Repos {
 		ar := agentsRepo{Dir: r}
 		for _, c := range []string{"AGENTS.md", "CLAUDE.md"} {
-			if _, err := os.Stat(filepath.Join(Dir(l, info.Name), r, c)); err == nil {
+			if _, err := os.Stat(filepath.Join(RepoDir(l, info.Name, r), c)); err == nil {
 				ar.Instructions = r + "/" + c
 				break
 			}

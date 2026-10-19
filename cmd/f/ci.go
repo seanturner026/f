@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"path/filepath"
 	"strings"
 	"sync"
 
@@ -105,7 +104,7 @@ func fetchLogs(ctx context.Context, d deps, name string, failures []*ciFailure) 
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			raw, err := github.FailedJobLog(ctx, d.run, filepath.Join(feature.Dir(d.layout, name), f.pr.Repo), f.check.URL)
+			raw, err := github.FailedJobLog(ctx, d.run, feature.RepoDir(d.layout, name, f.pr.Repo), f.check.URL)
 			if err != nil {
 				f.logErr = err
 				return

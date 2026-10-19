@@ -3,7 +3,6 @@ package feature
 import (
 	"context"
 	"fmt"
-	"path/filepath"
 
 	"github.com/seanturner026/pi/internal/git"
 )
@@ -23,7 +22,7 @@ func CheckpointBegin(ctx context.Context, r Runner, l Layout, name string) error
 		return err
 	}
 	for _, repo := range repos {
-		wt := filepath.Join(Dir(l, name), repo)
+		wt := RepoDir(l, name, repo)
 		commit, err := git.SnapshotCommit(ctx, r, wt)
 		if err != nil {
 			return fmt.Errorf("checkpoint %s: %w", repo, err)
@@ -45,7 +44,7 @@ func CheckpointEnd(ctx context.Context, r Runner, l Layout, name string) ([]stri
 	}
 	var changed []string
 	for _, repo := range repos {
-		wt := filepath.Join(Dir(l, name), repo)
+		wt := RepoDir(l, name, repo)
 		before := git.TreeOf(ctx, r, wt, pendingRef)
 		if before == "" {
 			continue // no run started here

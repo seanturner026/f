@@ -27,7 +27,7 @@ const (
 // branch starts from the latest origin default branch, which is returned as base.
 func AddRepo(ctx context.Context, r Runner, l Layout, name, repo string) (result AddResult, base string, err error) {
 	src := filepath.Join(l.Base, repo)
-	dst := filepath.Join(Dir(l, name), repo)
+	dst := RepoDir(l, name, repo)
 	if !git.IsRepo(src) {
 		return "", "", fmt.Errorf("%q: %w", repo, ErrNoBaseClone)
 	}
@@ -47,7 +47,7 @@ func AddRepo(ctx context.Context, r Runner, l Layout, name, repo string) (result
 		_ = github.StackInit(ctx, r, dst, name) // PRs are always a stack (AGENTS.md)
 		return AddedExistingBranch, "", nil
 	}
-	base = "origin/" + git.DefaultBranch(ctx, r, src)
+	base = baseRef(ctx, r, l, repo)
 	if err := git.AddWorktree(ctx, r, src, dst, name, base); err != nil {
 		return "", "", fmt.Errorf("add %s: %w", repo, err)
 	}
@@ -70,7 +70,7 @@ func PRs(ctx context.Context, r Runner, l Layout, name string) (prs []model.PR, 
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			results[i], failures[i] = github.RepoPRs(ctx, r, filepath.Join(Dir(l, name), repo), repo, name)
+			results[i], failures[i] = github.RepoPRs(ctx, r, RepoDir(l, name, repo), repo, name)
 		}()
 	}
 	wg.Wait()
@@ -105,11 +105,11 @@ func Finished(ctx context.Context, r Runner, l Layout, name string) bool {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			wt := filepath.Join(Dir(l, name), repo)
+			wt := RepoDir(l, name, repo)
 			if n, err := git.ChangedFiles(ctx, r, wt); err != nil || n > 0 {
 				return // dirty: not done
 			}
-			base := "origin/" + git.DefaultBranch(ctx, r, filepath.Join(l.Base, repo))
+			base := baseRef(ctx, r, l, repo)
 			if ahead, err := git.CommitsAhead(ctx, r, wt, base); err == nil && ahead == 0 {
 				// untouched, or synced after its PR merged (f sync)
 				results[i] = result{done: true, merged: hasMergedPR(state.PRs, repo)}
@@ -193,7 +193,7 @@ func Unmerged(ctx context.Context, r Runner, l Layout, name string, known []mode
 
 func unmergedIn(ctx context.Context, r Runner, l Layout, name, repo string, known []model.PR) []string {
 	var problems []string
-	wt := filepath.Join(Dir(l, name), repo)
+	wt := RepoDir(l, name, repo)
 	if !git.IsRepo(filepath.Join(l.Base, repo)) {
 		return nil // base clone deleted: the worktree's history is gone with it
 	}
@@ -202,7 +202,7 @@ func unmergedIn(ctx context.Context, r Runner, l Layout, name, repo string, know
 	} else if n > 0 {
 		problems = append(problems, fmt.Sprintf("%s: %d uncommitted change(s)", repo, n))
 	}
-	base := "origin/" + git.DefaultBranch(ctx, r, filepath.Join(l.Base, repo))
+	base := baseRef(ctx, r, l, repo)
 	ahead, err := git.CommitsAhead(ctx, r, wt, base)
 	if err != nil || ahead == 0 {
 		return problems

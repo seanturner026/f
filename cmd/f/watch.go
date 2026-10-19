@@ -6,7 +6,6 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
-	"path/filepath"
 	"slices"
 	"strings"
 	"syscall"
@@ -90,7 +89,7 @@ func watchedRefs(name string, repos []string, prs []model.PR) map[string][]strin
 func remoteHeads(ctx context.Context, d deps, name string, repos []string, prs []model.PR) map[string]string {
 	heads := map[string]string{}
 	for repo, refs := range watchedRefs(name, repos, prs) {
-		wt := filepath.Join(feature.Dir(d.layout, name), repo)
+		wt := feature.RepoDir(d.layout, name, repo)
 		for _, ref := range refs {
 			sha, _ := d.run.Run(ctx, wt, "git", "rev-parse", "-q", "--verify", ref)
 			heads[repo+" "+ref] = sha
