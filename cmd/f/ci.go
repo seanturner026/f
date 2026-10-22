@@ -136,7 +136,7 @@ func ciPrompt(failures []*ciFailure) string {
 		case f.logErr != nil:
 			fmt.Fprintf(&b, "Couldn't get the log: %v\n", f.logErr)
 		default:
-			b.WriteString("Not a GitHub Actions job: no log here; open the link.\n")
+			b.WriteString("Not a GitHub Actions job: no log here. If it's Depot CI, use `depot ci diagnose --run <id>` or `depot ci logs <run-or-job-id>` (IDs are in the link).\n")
 		}
 	}
 	return b.String()

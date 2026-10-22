@@ -2,6 +2,8 @@ package feature_test
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -105,8 +107,43 @@ func (f *syncFixture) mainMoves(file, content string) {
 	git(f.t, g, "push", "-q", "origin", "main")
 }
 
+// ghFake answers gh calls (a stack of branches, bottom first; none: not a
+// stack) and records them; git runs for real.
+type ghFake struct {
+	stack []string
+	calls []string
+}
+
+func (g *ghFake) Run(ctx context.Context, dir, name string, args ...string) (string, error) {
+	if name != "gh" {
+		return shell.Exec{}.Run(ctx, dir, name, args...)
+	}
+	call := strings.Join(args, " ")
+	g.calls = append(g.calls, call)
+	if call == "stack view --json" {
+		if g.stack == nil {
+			return "", errors.New("not a stack")
+		}
+		var b strings.Builder
+		b.WriteString(`{"branches":[`)
+		for i, n := range g.stack {
+			if i > 0 {
+				b.WriteString(",")
+			}
+			fmt.Fprintf(&b, `{"name":%q}`, n)
+		}
+		b.WriteString("]}")
+		return b.String(), nil
+	}
+	return "", nil
+}
+
 func (f *syncFixture) reconcile(prs ...model.PR) []feature.SyncResult {
-	res, err := feature.Reconcile(context.Background(), shell.Exec{}, f.l, "feat", prs, false)
+	return f.reconcileWith(&ghFake{}, false, prs...)
+}
+
+func (f *syncFixture) reconcileWith(gh *ghFake, push bool, prs ...model.PR) []feature.SyncResult {
+	res, err := feature.Reconcile(context.Background(), gh, f.l, "feat", prs, push)
 	if err != nil {
 		f.t.Fatal(err)
 	}
@@ -117,16 +154,46 @@ func merged(head string) model.PR {
 	return model.PR{Repo: "app", Number: 1, Status: model.PRStatusMerged, HeadOID: head, Head: "feat"}
 }
 
-func onlyAction(t *testing.T, res []feature.SyncResult, want feature.SyncAction) {
-	t.Helper()
-	if want == feature.SyncNothing {
-		if len(res) != 0 {
-			t.Fatalf("results = %+v, want none", res)
+// branch starts branch at the worktree's HEAD and checks it out (gh stack add).
+func (f *syncFixture) branch(name string) {
+	git(f.t, f.wt, "checkout", "-q", "-b", name)
+}
+
+// squash pushes branch and squash-merges it into main the way GitHub does:
+// one new commit on main, remote branch deleted. Returns the merge commit.
+func (f *syncFixture) squash(branch string) string {
+	git(f.t, f.wt, "push", "-q", "-f", "origin", branch)
+	g := f.github
+	git(f.t, g, "fetch", "-q", "origin")
+	git(f.t, g, "checkout", "-q", "main")
+	git(f.t, g, "reset", "-q", "--hard", "origin/main")
+	git(f.t, g, "merge", "-q", "--squash", "origin/"+branch)
+	git(f.t, g, "commit", "-q", "-m", "squashed "+branch)
+	git(f.t, g, "push", "-q", "origin", "main")
+	git(f.t, g, "push", "-q", "origin", "--delete", branch)
+	return git(f.t, g, "rev-parse", "HEAD")
+}
+
+// summary is "repo action: branch action, ..." for comparing results.
+func summary(res []feature.SyncResult) string {
+	var parts []string
+	for _, r := range res {
+		s := fmt.Sprintf("%s %s:", r.Repo, r.Action)
+		for _, b := range r.Branches {
+			s += fmt.Sprintf(" %s=%s", b.Branch, b.Action)
+			if b.New > 0 {
+				s += fmt.Sprintf("(%d)", b.New)
+			}
 		}
-		return
+		parts = append(parts, s)
 	}
-	if len(res) != 1 || res[0].Action != want {
-		t.Fatalf("results = %+v, want one %q", res, want)
+	return strings.Join(parts, "; ")
+}
+
+func wantSummary(t *testing.T, res []feature.SyncResult, want string) {
+	t.Helper()
+	if got := summary(res); got != want {
+		t.Fatalf("results = %q, want %q (%+v)", got, want, res)
 	}
 }
 
@@ -137,24 +204,32 @@ func TestReconcileMergeMethods(t *testing.T) {
 			head := f.commit("b.txt", "pr\n")
 			f.mainMoves("m.txt", "meanwhile\n") // main moved while the PR was open
 			f.merge(method)
-			onlyAction(t, f.reconcile(merged(head)), feature.SyncReset)
+			wantSummary(t, f.reconcile(merged(head)), "app synced: feat=reset")
 			if got, want := git(t, f.wt, "rev-parse", "HEAD"), git(t, f.wt, "rev-parse", "origin/main"); got != want {
 				t.Errorf("HEAD = %s, want origin/main %s", got, want)
 			}
 			// Again: nothing to do, even after main moves on.
-			onlyAction(t, f.reconcile(merged(head)), feature.SyncNothing)
+			wantSummary(t, f.reconcile(merged(head)), "")
 			f.mainMoves("c.txt", "other\n")
-			onlyAction(t, f.reconcile(merged(head)), feature.SyncNothing)
+			wantSummary(t, f.reconcile(merged(head)), "")
 		})
 	}
 }
 
-func TestReconcileNewCommitsRebased(t *testing.T) {
+func TestReconcileRewrittenHead(t *testing.T) {
+	// GitHub rewrote the branch when it merged: the saved head isn't local.
+	f := newSyncFixture(t)
+	f.commit("b.txt", "pr\n")
+	f.squash("feat")
+	wantSummary(t, f.reconcile(merged("bff7b50bff7b50bff7b50bff7b50bff7b50bff7b")), "app synced: feat=reset")
+}
+
+func TestReconcileNewCommitsKept(t *testing.T) {
 	f := newSyncFixture(t)
 	head := f.commit("b.txt", "pr\n")
-	f.merge("squash")
+	f.squash("feat")
 	f.commit("next.txt", "next pr\n")
-	onlyAction(t, f.reconcile(merged(head)), feature.SyncRebased)
+	wantSummary(t, f.reconcile(merged(head)), "app synced: feat=kept(1)")
 	if n := git(t, f.wt, "rev-list", "--count", "origin/main..HEAD"); n != "1" {
 		t.Errorf("commits ahead of main = %s, want 1 (just the new one)", n)
 	}
@@ -167,9 +242,9 @@ func TestReconcileLeavesUnsafeRepos(t *testing.T) {
 	t.Run("uncommitted changes", func(t *testing.T) {
 		f := newSyncFixture(t)
 		head := f.commit("b.txt", "pr\n")
-		f.merge("squash")
+		f.squash("feat")
 		write(t, filepath.Join(f.wt, "wip.txt"), "wip\n")
-		onlyAction(t, f.reconcile(merged(head)), feature.SyncNeeded)
+		wantSummary(t, f.reconcile(merged(head)), "app needs sync:")
 		if got := git(t, f.wt, "rev-parse", "HEAD"); got != head {
 			t.Errorf("HEAD moved to %s", got)
 		}
@@ -177,15 +252,18 @@ func TestReconcileLeavesUnsafeRepos(t *testing.T) {
 	t.Run("conflicting new commit", func(t *testing.T) {
 		f := newSyncFixture(t)
 		head := f.commit("b.txt", "pr\n")
-		f.merge("squash")
+		f.squash("feat")
 		f.mainMoves("a.txt", "theirs\n")
 		mine := f.commit("a.txt", "mine\n")
-		onlyAction(t, f.reconcile(merged(head)), feature.SyncNeeded)
+		wantSummary(t, f.reconcile(merged(head)), "app needs sync:")
 		if got := git(t, f.wt, "rev-parse", "HEAD"); got != mine {
 			t.Errorf("HEAD moved to %s, want untouched %s", got, mine)
 		}
-		if _, err := os.Stat(filepath.Join(git(t, f.wt, "rev-parse", "--git-dir"), "rebase-merge")); err == nil {
-			t.Error("rebase left in progress")
+		if got := git(t, f.wt, "symbolic-ref", "--short", "HEAD"); got != "feat" {
+			t.Errorf("checked out %q, want feat", got)
+		}
+		if _, err := os.Stat(filepath.Join(git(t, f.wt, "rev-parse", "--git-dir"), "CHERRY_PICK_HEAD")); err == nil {
+			t.Error("cherry-pick left in progress")
 		}
 	})
 }
@@ -197,7 +275,182 @@ func TestReconcileIgnoresUnmergedAndOtherBranches(t *testing.T) {
 	open.Status = model.PRStatusOpen
 	other := merged(head)
 	other.Head = "someone-else"
-	onlyAction(t, f.reconcile(open, other), feature.SyncNothing)
+	wantSummary(t, f.reconcile(open, other), "")
+}
+
+func stackPR(n int, head, base string, status model.PRStatus, mergeOID string) model.PR {
+	return model.PR{Repo: "app", Number: n, Status: status, Head: head, Base: base, HeadOID: "rewritten-by-github", MergeOID: mergeOID}
+}
+
+func TestReconcileStack(t *testing.T) {
+	stack := []string{"feat", "feat-staging", "feat-production"}
+
+	t.Run("all merged", func(t *testing.T) {
+		f := newSyncFixture(t)
+		f.commit("b.txt", "bottom\n")
+		f.branch("feat-staging")
+		f.commit("c.txt", "staging\n")
+		f.branch("feat-production")
+		f.commit("d.txt", "production\n")
+		m1, m2, m3 := f.squash("feat"), f.squash("feat-staging"), f.squash("feat-production")
+		f.mainMoves("d.txt", "changed again on main\n") // content check must use the merge commit
+		gh := &ghFake{stack: stack}
+		wantSummary(t, f.reconcileWith(gh, true,
+			stackPR(1, "feat", "main", model.PRStatusMerged, m1),
+			stackPR(2, "feat-staging", "feat", model.PRStatusMerged, m2),
+			stackPR(3, "feat-production", "feat-staging", model.PRStatusMerged, m3),
+		), "app synced: feat=reset feat-staging=deleted feat-production=deleted")
+		if got, want := git(t, f.wt, "rev-parse", "HEAD"), git(t, f.wt, "rev-parse", "origin/main"); got != want {
+			t.Errorf("HEAD = %s, want origin/main %s", got, want)
+		}
+		if got := git(t, f.wt, "symbolic-ref", "--short", "HEAD"); got != "feat" {
+			t.Errorf("checked out %q, want feat", got)
+		}
+		if out := git(t, f.wt, "branch", "--list", "feat-*"); out != "" {
+			t.Errorf("merged branches still there: %q", out)
+		}
+		if got := strings.Join(gh.calls, "|"); !strings.Contains(got, "stack unstack --local|stack init feat") {
+			t.Errorf("gh calls = %q, want the stack re-initialized at feat", got)
+		}
+	})
+
+	t.Run("bottom merged", func(t *testing.T) {
+		f := newSyncFixture(t)
+		f.commit("b.txt", "bottom\n")
+		f.branch("feat-staging")
+		f.commit("c.txt", "staging\n")
+		git(t, f.wt, "push", "-q", "origin", "feat-staging")
+		m1 := f.squash("feat")
+		gh := &ghFake{stack: stack[:2]}
+		wantSummary(t, f.reconcileWith(gh, true,
+			stackPR(1, "feat", "main", model.PRStatusMerged, m1),
+			stackPR(2, "feat-staging", "feat", model.PRStatusOpen, ""),
+		), "app synced: feat=reset feat-staging=rebased")
+		if n := git(t, f.wt, "rev-list", "--count", "origin/main..feat-staging"); n != "1" {
+			t.Errorf("feat-staging is %s commits ahead of main, want 1 (its own)", n)
+		}
+		if got, want := git(t, f.wt, "rev-parse", "origin/feat-staging"), git(t, f.wt, "rev-parse", "feat-staging"); got != want {
+			t.Errorf("origin/feat-staging = %s, want pushed %s", got, want)
+		}
+		if got := git(t, f.wt, "symbolic-ref", "--short", "HEAD"); got != "feat-staging" {
+			t.Errorf("checked out %q, want feat-staging (as before)", got)
+		}
+		if got := strings.Join(gh.calls, "|"); !strings.Contains(got, "pr edit 2 --base main") {
+			t.Errorf("gh calls = %q, want #2 retargeted to main", got)
+		}
+		if got := strings.Join(gh.calls, "|"); strings.Contains(got, "stack init") {
+			t.Errorf("gh calls = %q: nothing deleted, the stack needs no re-init", got)
+		}
+	})
+
+	t.Run("background leaves stacks alone", func(t *testing.T) {
+		f := newSyncFixture(t)
+		f.commit("b.txt", "bottom\n")
+		f.branch("feat-staging")
+		top := f.commit("c.txt", "staging\n")
+		m1 := f.squash("feat")
+		wantSummary(t, f.reconcileWith(&ghFake{stack: stack[:2]}, false,
+			stackPR(1, "feat", "main", model.PRStatusMerged, m1)), "")
+		if got := git(t, f.wt, "rev-parse", "HEAD"); got != top {
+			t.Errorf("HEAD moved to %s", got)
+		}
+	})
+}
+
+func TestUnmergedSquashMerged(t *testing.T) {
+	tests := []struct {
+		name  string
+		setup func(f *syncFixture) []model.PR
+		want  string
+	}{
+		{
+			name: "squash-merged, remote branch deleted",
+			setup: func(f *syncFixture) []model.PR {
+				f.commit("b.txt", "pr\n")
+				return []model.PR{stackPR(1, "feat", "main", model.PRStatusMerged, f.squash("feat"))}
+			},
+		},
+		{
+			name: "squash-merged stack, checked out at the top",
+			setup: func(f *syncFixture) []model.PR {
+				f.commit("b.txt", "bottom\n")
+				f.branch("feat-staging")
+				f.commit("c.txt", "staging\n")
+				m1, m2 := f.squash("feat"), f.squash("feat-staging")
+				f.mainMoves("c.txt", "changed again\n")
+				return []model.PR{stackPR(1, "feat", "main", model.PRStatusMerged, m1), stackPR(2, "feat-staging", "feat", model.PRStatusMerged, m2)}
+			},
+		},
+		{
+			name: "commit after the merge",
+			setup: func(f *syncFixture) []model.PR {
+				f.commit("b.txt", "pr\n")
+				m := f.squash("feat")
+				f.commit("c.txt", "new\n")
+				return []model.PR{stackPR(1, "feat", "main", model.PRStatusMerged, m)}
+			},
+			want: "app: 1 commit(s) not pushed or merged",
+		},
+		{
+			name: "unmerged, pushed",
+			setup: func(f *syncFixture) []model.PR {
+				f.commit("b.txt", "pr\n")
+				git(f.t, f.wt, "push", "-q", "origin", "feat")
+				return []model.PR{stackPR(1, "feat", "main", model.PRStatusOpen, "")}
+			},
+		},
+		{
+			name: "unmerged, not pushed",
+			setup: func(f *syncFixture) []model.PR {
+				f.commit("b.txt", "pr\n")
+				f.commit("c.txt", "pr\n")
+				return []model.PR{}
+			},
+			want: "app: 2 commit(s) not pushed or merged",
+		},
+		{
+			name: "dirty",
+			setup: func(f *syncFixture) []model.PR {
+				f.commit("b.txt", "pr\n")
+				m := f.squash("feat")
+				write(f.t, filepath.Join(f.wt, "wip.txt"), "wip\n")
+				return []model.PR{stackPR(1, "feat", "main", model.PRStatusMerged, m)}
+			},
+			want: "app: 1 uncommitted change(s)",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			f := newSyncFixture(t)
+			prs := tt.setup(f)
+			git(t, f.wt, "fetch", "-q", "--prune", "origin")
+			got, err := feature.Unmerged(context.Background(), &ghFake{}, f.l, "feat", prs)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if s := strings.Join(got, "|"); s != tt.want {
+				t.Errorf("Unmerged = %q, want %q", s, tt.want)
+			}
+		})
+	}
+}
+
+func TestFinishedSquashMerged(t *testing.T) {
+	f := newSyncFixture(t)
+	f.commit("b.txt", "pr\n")
+	m := f.squash("feat")
+	git(t, f.wt, "fetch", "-q", "--prune", "origin")
+	pr := stackPR(1, "feat", "main", model.PRStatusMerged, m)
+	if _, err := feature.UpdateState(f.l, "feat", func(s *feature.State) { s.PRs = []model.PR{pr} }); err != nil {
+		t.Fatal(err)
+	}
+	if !feature.Finished(context.Background(), &ghFake{}, f.l, "feat") {
+		t.Error("squash-merged feature not finished")
+	}
+	f.commit("c.txt", "more\n")
+	if feature.Finished(context.Background(), &ghFake{}, f.l, "feat") {
+		t.Error("finished with a commit after the merge")
+	}
 }
 
 func TestRemoveRenamesThenPrunes(t *testing.T) {

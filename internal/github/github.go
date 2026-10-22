@@ -21,18 +21,21 @@ type Runner interface {
 // ErrNotInStack means the checkout isn't on a gh stack branch.
 var ErrNotInStack = errors.New("not in a gh stack")
 
-const prFields = "number,state,title,url,isDraft,headRefOid,headRefName,baseRefName,statusCheckRollup"
+const prFields = "number,state,title,url,isDraft,headRefOid,headRefName,baseRefName,mergeCommit,statusCheckRollup"
 
 type ghPR struct {
-	Number      int       `json:"number"`
-	State       string    `json:"state"`
-	Title       string    `json:"title"`
-	URL         string    `json:"url"`
-	IsDraft     bool      `json:"isDraft"`
-	HeadRefOid  string    `json:"headRefOid"`
-	HeadRefName string    `json:"headRefName"`
-	BaseRefName string    `json:"baseRefName"`
-	Checks      []ghCheck `json:"statusCheckRollup"`
+	Number      int    `json:"number"`
+	State       string `json:"state"`
+	Title       string `json:"title"`
+	URL         string `json:"url"`
+	IsDraft     bool   `json:"isDraft"`
+	HeadRefOid  string `json:"headRefOid"`
+	HeadRefName string `json:"headRefName"`
+	BaseRefName string `json:"baseRefName"`
+	MergeCommit *struct {
+		OID string `json:"oid"`
+	} `json:"mergeCommit"`
+	Checks []ghCheck `json:"statusCheckRollup"`
 }
 
 // ghCheck is one entry of statusCheckRollup: a CheckRun (GitHub Actions job,
@@ -93,17 +96,22 @@ func (p ghPR) toModel(repo string, stackPos int) model.PR {
 			checks = append(checks, c.toModel())
 		}
 	}
+	merge := ""
+	if p.MergeCommit != nil {
+		merge = p.MergeCommit.OID
+	}
 	return model.PR{
-		Checks:  checks,
-		Repo:    repo,
-		Number:  p.Number,
-		Title:   p.Title,
-		URL:     p.URL,
-		Status:  status,
-		HeadOID: p.HeadRefOid,
-		Head:    p.HeadRefName,
-		Base:    p.BaseRefName,
-		Stack:   stackPos,
+		MergeOID: merge,
+		Checks:   checks,
+		Repo:     repo,
+		Number:   p.Number,
+		Title:    p.Title,
+		URL:      p.URL,
+		Status:   status,
+		HeadOID:  p.HeadRefOid,
+		Head:     p.HeadRefName,
+		Base:     p.BaseRefName,
+		Stack:    stackPos,
 	}
 }
 
@@ -232,12 +240,20 @@ func StackInit(ctx context.Context, r Runner, dir, branch string) error {
 	return err
 }
 
-// StackSync runs `gh stack sync` in dir: fetch, rebase the stack onto its
-// updated parents, push (--force-with-lease), and sync PR state. On a rebase
-// conflict gh-stack restores the branches and fails.
-func StackSync(ctx context.Context, r Runner, dir string) error {
-	if _, err := r.Run(ctx, dir, "gh", "stack", "sync"); err != nil {
-		return fmt.Errorf("gh stack sync: %w", err)
+// StackReinit replaces the local stack tracking with branches (bottom first),
+// e.g. after merged branches were dropped. GitHub's side is left alone.
+func StackReinit(ctx context.Context, r Runner, dir string, branches []string) error {
+	_, _ = r.Run(ctx, dir, "gh", "stack", "unstack", "--local") // no stack: nothing to drop
+	if _, err := r.Run(ctx, dir, "gh", append([]string{"stack", "init"}, branches...)...); err != nil {
+		return fmt.Errorf("gh stack init: %w", err)
+	}
+	return nil
+}
+
+// RetargetPR changes PR number's base branch.
+func RetargetPR(ctx context.Context, r Runner, dir string, number int, base string) error {
+	if _, err := r.Run(ctx, dir, "gh", "pr", "edit", fmt.Sprint(number), "--base", base); err != nil {
+		return fmt.Errorf("retarget #%d: %w", number, err)
 	}
 	return nil
 }

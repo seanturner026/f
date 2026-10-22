@@ -37,16 +37,17 @@ func (s PRStatus) IsActive() bool { return s == PRStatusOpen || s == PRStatusDra
 
 // PR is a pull request for a feature branch in one repo.
 type PR struct {
-	Repo    string   `json:"repo"`
-	Number  int      `json:"number"`
-	Title   string   `json:"title,omitempty"`
-	URL     string   `json:"url"`
-	Status  PRStatus `json:"status"`
-	HeadOID string   `json:"head_oid,omitempty"`
-	Head    string   `json:"head,omitempty"`      // head branch
-	Base    string   `json:"base,omitempty"`      // base branch
-	Stack   int      `json:"stack_pos,omitempty"` // 1 = bottom of a gh stack; 0 = not stacked
-	Checks  []Check  `json:"checks,omitempty"`    // CI checks on the head commit
+	Repo     string   `json:"repo"`
+	Number   int      `json:"number"`
+	Title    string   `json:"title,omitempty"`
+	URL      string   `json:"url"`
+	Status   PRStatus `json:"status"`
+	HeadOID  string   `json:"head_oid,omitempty"`
+	MergeOID string   `json:"merge_oid,omitempty"` // the commit a merge put on the base branch (a squash: its only trace there)
+	Head     string   `json:"head,omitempty"`      // head branch
+	Base     string   `json:"base,omitempty"`      // base branch
+	Stack    int      `json:"stack_pos,omitempty"` // 1 = bottom of a gh stack; 0 = not stacked
+	Checks   []Check  `json:"checks,omitempty"`    // CI checks on the head commit
 }
 
 // CheckState is a CI check's outcome.

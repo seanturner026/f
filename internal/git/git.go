@@ -3,6 +3,7 @@ package git
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -200,4 +201,139 @@ func RevParse(ctx context.Context, r Runner, wt, rev string) string {
 		return ""
 	}
 	return out
+}
+
+// CurrentBranch returns the checked-out branch ("" if HEAD is detached).
+func CurrentBranch(ctx context.Context, r Runner, wt string) string {
+	out, err := r.Run(ctx, wt, "git", "symbolic-ref", "-q", "--short", "HEAD")
+	if err != nil {
+		return ""
+	}
+	return out
+}
+
+// Checkout checks out rev: a branch, or with detach any commit (detached HEAD).
+func Checkout(ctx context.Context, r Runner, wt, rev string, detach bool) error {
+	args := []string{"checkout", "-q", rev}
+	if detach {
+		args = []string{"checkout", "-q", "--detach", rev}
+	}
+	if _, err := r.Run(ctx, wt, "git", args...); err != nil {
+		return fmt.Errorf("checkout %s: %w", rev, err)
+	}
+	return nil
+}
+
+// Commits lists the commits reachable from tip but not from any of exclude,
+// oldest first.
+func Commits(ctx context.Context, r Runner, wt, tip string, exclude ...string) ([]string, error) {
+	args := []string{"rev-list", "--reverse", tip}
+	for _, e := range exclude {
+		args = append(args, "^"+e)
+	}
+	out, err := r.Run(ctx, wt, "git", args...)
+	if err != nil {
+		return nil, fmt.Errorf("rev-list: %w", err)
+	}
+	if out == "" {
+		return nil, nil
+	}
+	return strings.Split(out, "\n"), nil
+}
+
+// CountUnpushed counts commits on rev that are neither on base nor on any
+// remote-tracking branch.
+func CountUnpushed(ctx context.Context, r Runner, wt, rev, base string) (int, error) {
+	out, err := r.Run(ctx, wt, "git", "rev-list", "--count", rev, "--not", base, "--remotes")
+	if err != nil {
+		return 0, fmt.Errorf("rev-list: %w", err)
+	}
+	n, err := strconv.Atoi(out)
+	if err != nil {
+		return 0, fmt.Errorf("rev-list: %w", err)
+	}
+	return n, nil
+}
+
+// InBase reports whether everything rev changed since it forked from base is
+// already in base's history: each file it touched has the same content at rev
+// as at one of refs (base itself, or a squash-merge commit in base's history,
+// which also covers files that main changed again later). This is how a
+// squash-merged branch is recognized: its commits never become ancestors of base.
+func InBase(ctx context.Context, r Runner, wt, base, rev string, refs []string) bool {
+	mb, err := r.Run(ctx, wt, "git", "merge-base", base, rev)
+	if err != nil {
+		return false
+	}
+	files, err := r.Run(ctx, wt, "git", "diff", "--no-renames", "--name-only", mb, rev)
+	if err != nil {
+		return false
+	}
+	if files == "" {
+		return true
+	}
+	for _, ref := range refs {
+		args := append([]string{"diff", "--quiet", "--no-renames", ref, rev, "--"}, strings.Split(files, "\n")...)
+		if _, err := r.Run(ctx, wt, "git", args...); err == nil {
+			return true
+		}
+	}
+	return false
+}
+
+// MergedPrefix returns how many of commits (oldest first, on top of base's
+// history) are already in base by content (see InBase): the commits after
+// them were added since the merge.
+func MergedPrefix(ctx context.Context, r Runner, wt, base string, refs, commits []string) int {
+	for k := len(commits); k > 0; k-- {
+		if InBase(ctx, r, wt, base, commits[k-1], refs) {
+			return k
+		}
+	}
+	return 0
+}
+
+// CherryPick replays commits onto HEAD. On a conflict it aborts (HEAD is left
+// as it was) and returns the error.
+func CherryPick(ctx context.Context, r Runner, wt string, commits ...string) error {
+	args := append([]string{"cherry-pick", "--allow-empty"}, commits...)
+	if _, err := r.Run(ctx, wt, "git", args...); err != nil {
+		_, _ = r.Run(ctx, wt, "git", "cherry-pick", "--abort")
+		return fmt.Errorf("cherry-pick: %w", err)
+	}
+	return nil
+}
+
+// SetBranch moves local branch to commit, only if it's still at old.
+func SetBranch(ctx context.Context, r Runner, wt, branch, commit, old string) error {
+	if _, err := r.Run(ctx, wt, "git", "update-ref", "refs/heads/"+branch, commit, old); err != nil {
+		return fmt.Errorf("move %s: %w", branch, err)
+	}
+	return nil
+}
+
+// DeleteLocalBranch deletes local branch, only if it's still at old.
+func DeleteLocalBranch(ctx context.Context, r Runner, wt, branch, old string) error {
+	if _, err := r.Run(ctx, wt, "git", "update-ref", "-d", "refs/heads/"+branch, old); err != nil {
+		return fmt.Errorf("delete %s: %w", branch, err)
+	}
+	return nil
+}
+
+// ErrProtectedBranch means a force push was refused: the branch is the
+// default branch, or not one of the feature's.
+var ErrProtectedBranch = errors.New("refusing to force-push")
+
+// ForcePushBranch pushes local branch to the same name on origin with
+// --force-with-lease (it fails if origin moved since the last fetch). It only
+// pushes branches named prefix or prefix-*, and never the default branch.
+func ForcePushBranch(ctx context.Context, r Runner, wt, branch, prefix string) error {
+	if branch == "" || branch == DefaultBranch(ctx, r, wt) || (branch != prefix && !strings.HasPrefix(branch, prefix+"-")) {
+		return fmt.Errorf("%w %q", ErrProtectedBranch, branch)
+	}
+	ref := "refs/heads/" + branch
+	if _, err := r.Run(ctx, wt, "git", "push", "-q", "--force-with-lease="+ref, "origin", ref+":"+ref); err != nil {
+		return fmt.Errorf("push %s: %w", branch, err)
+	}
+	return nil
 }

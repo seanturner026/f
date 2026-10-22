@@ -85,7 +85,8 @@ func PRs(ctx context.Context, r Runner, l Layout, name string) (prs []model.PR, 
 }
 
 // Finished reports whether a feature's work has all landed: every repo is
-// clean, and every repo with commits has them in a merged PR (by its saved
+// clean, and every repo with commits has them in the default branch, by
+// ancestry or by content (squash merges), and some PR merged (by its saved
 // PRs: no network, so it's instant; a merge the saved state hasn't seen just
 // means the feature isn't offered for cleanup yet). Repos are checked
 // concurrently.
@@ -121,8 +122,8 @@ func Finished(ctx context.Context, r Runner, l Layout, name string) bool {
 					prs = append(prs, p)
 				}
 			}
-			if mergedAtHead(ctx, r, wt, prs) {
-				results[i] = result{done: true, merged: true}
+			if head, err := git.Head(ctx, r, wt); err == nil && notInBase(ctx, r, wt, base, head, prs, false) == 0 {
+				results[i] = result{done: true, merged: hasMergedPR(prs, repo)}
 			}
 		}()
 	}
@@ -148,11 +149,8 @@ func hasMergedPR(prs []model.PR, repo string) bool {
 	return false
 }
 
-func mergedAtHead(ctx context.Context, r Runner, wt string, prs []model.PR) bool {
-	head, err := git.Head(ctx, r, wt)
-	if err != nil {
-		return false
-	}
+// mergedAt reports whether rev is (in) the head of a merged PR, by ancestry.
+func mergedAt(ctx context.Context, r Runner, wt, head string, prs []model.PR) bool {
 	for _, p := range prs {
 		if p.Status != model.PRStatusMerged || p.HeadOID == "" {
 			continue
@@ -165,12 +163,12 @@ func mergedAtHead(ctx context.Context, r Runner, wt string, prs []model.PR) bool
 }
 
 // Unmerged describes work in the feature that removing it would lose:
-// uncommitted changes, and commits not contained in a merged PR. Empty means
-// it's safe to remove.
+// uncommitted changes, and commits that are neither pushed nor merged (merged
+// by content counts: squash merges). Empty means it's safe to remove.
 //
 // known are PRs to check against (e.g. from state.json, no network); nil looks
-// them up live with gh. Known PRs can only be stale in the safe direction: a
-// merge they haven't seen makes work look unmerged, never the reverse.
+// them up live with gh (and fetches). Known PRs can only be stale in the safe
+// direction: a merge they haven't seen makes work look unmerged, never the reverse.
 func Unmerged(ctx context.Context, r Runner, l Layout, name string, known []model.PR) ([]string, error) {
 	repos, err := Repos(l, name)
 	if err != nil {
@@ -202,11 +200,6 @@ func unmergedIn(ctx context.Context, r Runner, l Layout, name, repo string, know
 	} else if n > 0 {
 		problems = append(problems, fmt.Sprintf("%s: %d uncommitted change(s)", repo, n))
 	}
-	base := baseRef(ctx, r, l, repo)
-	ahead, err := git.CommitsAhead(ctx, r, wt, base)
-	if err != nil || ahead == 0 {
-		return problems
-	}
 	var prs []model.PR
 	if known != nil {
 		for _, p := range known {
@@ -214,13 +207,76 @@ func unmergedIn(ctx context.Context, r Runner, l Layout, name, repo string, know
 				prs = append(prs, p)
 			}
 		}
-	} else if prs, err = github.RepoPRs(ctx, r, wt, repo, name); err != nil {
-		prs = nil
+	} else {
+		_ = git.Fetch(ctx, r, wt) // live: a merge only shows up in a fresh origin/main
+		prs, _ = github.RepoPRs(ctx, r, wt, repo, name)
 	}
-	if !mergedAtHead(ctx, r, wt, prs) {
-		problems = append(problems, fmt.Sprintf("%s: %d commit(s) not in a merged PR", repo, ahead))
+	// Remove loses the worktree's HEAD and the feature branch; other stack
+	// branches stay in the base clone.
+	base := baseRef(ctx, r, l, repo)
+	head, _ := git.Head(ctx, r, wt)
+	revs := []string{head}
+	if b := git.RevParse(ctx, r, wt, "refs/heads/"+name); b != "" && b != head {
+		revs = append(revs, b)
+	}
+	for _, rev := range revs {
+		if n := notInBase(ctx, r, wt, base, rev, prs, true); n > 0 {
+			problems = append(problems, fmt.Sprintf("%s: %d commit(s) not pushed or merged", repo, n))
+			break
+		}
 	}
 	return problems
+}
+
+// notInBase counts rev's commits that aren't in base: by ancestry, or by
+// content after a squash merge. With pushedOK, commits on a remote branch
+// don't count (removing the feature doesn't lose them).
+func notInBase(ctx context.Context, r Runner, wt, base, rev string, prs []model.PR, pushedOK bool) int {
+	if rev == "" {
+		return 0
+	}
+	count := func(after string) int {
+		if pushedOK {
+			n, err := git.CountUnpushed(ctx, r, wt, rev, after)
+			if err != nil {
+				return 1
+			}
+			return n
+		}
+		c, err := git.Commits(ctx, r, wt, rev, after)
+		if err != nil {
+			return 1
+		}
+		return len(c)
+	}
+	n := count(base)
+	if n == 0 || mergedAt(ctx, r, wt, rev, prs) {
+		return 0
+	}
+	commits, err := git.Commits(ctx, r, wt, rev, base)
+	if err != nil {
+		return n
+	}
+	k := git.MergedPrefix(ctx, r, wt, base, mainRefs(ctx, r, wt, base, prs), commits)
+	switch k {
+	case 0:
+		return n
+	case len(commits):
+		return 0
+	}
+	return count(commits[k-1]) // just the ones after the merge
+}
+
+// mainRefs are the revisions that show what's in base: base itself and the
+// merge commits of prs that are in its history (see git.InBase).
+func mainRefs(ctx context.Context, r Runner, wt, base string, prs []model.PR) []string {
+	refs := []string{base}
+	for _, p := range prs {
+		if p.Status == model.PRStatusMerged && p.MergeOID != "" && git.IsAncestor(ctx, r, wt, p.MergeOID, base) {
+			refs = append(refs, p.MergeOID)
+		}
+	}
+	return refs
 }
 
 // Remove deletes a feature's worktrees, branches, and directory, fast: the

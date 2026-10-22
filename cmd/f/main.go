@@ -22,7 +22,7 @@ const help = `f: one pi session across several repos, each on its own worktree.
   f resume         after a Herdr restart: restart pi, nvim, prs in every feature workspace
   f prs [-r] [-c]  this feature's PRs (-r refresh, -c copy, -w live view)
   f ci fix         send failing checks to pi (it proposes a fix, doesn't push)
-  f sync           after a PR merges: reset its repo to main (rebase newer commits)
+  f sync           after a PR merges: reset/drop merged branches, rebase the rest onto main
 
 f <cmd> -h for flags. Plumbing used by pi/nvim: f goal, f comment.
 `

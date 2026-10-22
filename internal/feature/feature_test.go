@@ -284,7 +284,7 @@ func TestUnmerged(t *testing.T) {
 		{
 			name:   "commits without merged PR",
 			runner: fakeRunner{"git status": "", "git rev-list": "3", "gh pr list": "[]", "git rev-parse HEAD": "abc"},
-			want:   []string{"argocd: 3 commit(s) not in a merged PR"},
+			want:   []string{"argocd: 3 commit(s) not pushed or merged"},
 		},
 		{
 			name:   "saved PR merged at head: no gh call",
@@ -296,13 +296,13 @@ func TestUnmerged(t *testing.T) {
 			name:   "saved PR still open: unmerged",
 			runner: fakeRunner{"git status": "", "git rev-list": "2", "git rev-parse HEAD": "abc"},
 			known:  []model.PR{{Repo: "argocd", Status: model.PRStatusOpen, HeadOID: "abc"}},
-			want:   []string{"argocd: 2 commit(s) not in a merged PR"},
+			want:   []string{"argocd: 2 commit(s) not pushed or merged"},
 		},
 		{
 			name:   "saved PR merged but commits after it",
 			runner: fakeRunner{"git status": "", "git rev-list": "3", "git rev-parse HEAD": "def", "git merge-base": "ERR"},
 			known:  []model.PR{{Repo: "argocd", Status: model.PRStatusMerged, HeadOID: "abc"}},
-			want:   []string{"argocd: 3 commit(s) not in a merged PR"},
+			want:   []string{"argocd: 3 commit(s) not pushed or merged"},
 		},
 	}
 	for _, tt := range tests {

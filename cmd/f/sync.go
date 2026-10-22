@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strings"
 	"syscall"
 
 	"github.com/seanturner026/pi/internal/feature"
@@ -49,8 +50,9 @@ func reconcileLines(ctx context.Context, d deps, name string, stackSync bool) ([
 	return syncLines(results, true), nil
 }
 
-// syncLines describes Reconcile's results, one line per repo marked ✓ or ✗
-// (needs you). Colored marks are for display; notes stored for pi stay plain.
+// syncLines describes Reconcile's results, one line per branch marked ✓, and
+// one per repo marked ✗ for what needs you. Colored marks are for display;
+// notes stored for pi stay plain.
 func syncLines(results []feature.SyncResult, colored bool) []string {
 	done, needed := "✓", "✗"
 	if colored {
@@ -58,17 +60,49 @@ func syncLines(results []feature.SyncResult, colored bool) []string {
 	}
 	var lines []string
 	for _, r := range results {
-		pr := fmt.Sprintf("#%d merged", r.PR.Number)
-		switch r.Action {
-		case feature.SyncNeeded:
-			lines = append(lines, fmt.Sprintf("%s %s: %s: %s", needed, r.Repo, pr, r.Detail))
-		case feature.SyncStack:
-			lines = append(lines, fmt.Sprintf("%s %s: %s", done, r.Repo, r.Detail))
-		default:
-			lines = append(lines, fmt.Sprintf("%s %s: %s, %s (next push: --force-with-lease)", done, r.Repo, pr, r.Detail))
+		for _, b := range r.Branches {
+			lines = append(lines, fmt.Sprintf("%s %s: %s", done, r.Repo, branchLine(b, r.Base)))
+		}
+		if r.Detail != "" {
+			lines = append(lines, fmt.Sprintf("%s %s: %s", needed, r.Repo, r.Detail))
 		}
 	}
 	return lines
+}
+
+// branchLine is e.g. "app-ui (#12 merged): kept (2 new commits), replayed onto origin/main".
+func branchLine(b feature.BranchSync, base string) string {
+	s := b.Branch
+	if b.PR != 0 {
+		s += fmt.Sprintf(" (#%d merged)", b.PR)
+	}
+	switch b.Action {
+	case feature.BranchReset:
+		s += ": reset to " + base
+	case feature.BranchDeleted:
+		s += ": deleted"
+	case feature.BranchKept:
+		s += fmt.Sprintf(": kept (%d new commit%s), replayed onto %s", b.New, plural(b.New), base)
+	case feature.BranchRebased:
+		s += ": rebased"
+		if b.Pushed {
+			s += " and pushed"
+		}
+		if b.Retargeted != 0 {
+			s += fmt.Sprintf(", #%d now based on %s", b.Retargeted, strings.TrimPrefix(base, "origin/"))
+		}
+	}
+	if b.Action == feature.BranchRebased && !b.Pushed {
+		s += " (next push: --force-with-lease)"
+	}
+	return s
+}
+
+func plural(n int) string {
+	if n == 1 {
+		return ""
+	}
+	return "s"
 }
 
 func piWorking(ctx context.Context, d deps, name string) bool {

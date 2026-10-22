@@ -84,3 +84,28 @@ func TestCommitsAhead(t *testing.T) {
 		})
 	}
 }
+
+func TestForcePushBranch(t *testing.T) {
+	r := fakeRunner{out: "origin/main"} // default branch main; every command succeeds
+	tests := []struct {
+		name, branch string
+		wantErr      bool
+	}{
+		{name: "feature branch", branch: "feat"},
+		{name: "stack branch", branch: "feat-staging"},
+		{name: "default branch", branch: "main", wantErr: true},
+		{name: "another feature's branch", branch: "featx", wantErr: true},
+		{name: "empty", branch: "", wantErr: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := git.ForcePushBranch(ctx, r, "/wt", tt.branch, "feat")
+			if gotErr := errors.Is(err, git.ErrProtectedBranch); gotErr != tt.wantErr {
+				t.Errorf("err = %v, want protected: %v", err, tt.wantErr)
+			}
+		})
+	}
+	if err := git.ForcePushBranch(ctx, r, "/wt", "main", "main"); !errors.Is(err, git.ErrProtectedBranch) {
+		t.Errorf("feature named like the default branch: err = %v, want refused", err)
+	}
+}

@@ -33,9 +33,12 @@ by `f`).
    `url: title` lines (stacks numbered 1/3, 2/3, …).
 5. **Switch**: `ctrl+space` → picker, ordered by what needs you.
 6. **Merged**: the repo resets to main by itself (on open, `r` in prs, `/sync`, or tell
-   pi "merged"), so more work in the feature starts a fresh PR.
+   pi "merged"), so more work in the feature starts a fresh PR. Squash merges are
+   recognized by content: merged stack branches are reset or deleted, the rest rebased
+   onto main and pushed.
 7. **Done**: when PRs merge, `alt-x` in the picker cleans up every merged
-   feature (or `ctrl-x` one). The beads issue closes with the PR links.
+   feature (or `ctrl-x` one). The beads issue closes with the PR links. It only
+   asks first about uncommitted files or commits that are neither pushed nor merged.
 
 Big multi-step work (e.g. ACK across tf/argocd/prod/ops): start one
 feature with all the repos, ask pi to **plan it in beads** (child issues +
@@ -98,7 +101,7 @@ unseen) → **working** → **idle** → **closed** (no pi running).
 | `/code [n]` | Copy code block(s) from the last reply exactly as written (no wrap/indent); several: pick one or all. `/copy` (ctrl+x) copies the whole reply |
 | `/slack` | Copy the last reply formatted for Slack: `*bold*`, headings as bold lines, `•` bullets, links as `text (url)`; code untouched |
 | `/f <name> [repo…]` | Open a feature or start one without leaving chat (tab completes names and repos; asks for repos if new and none given) |
-| `/sync` | After a PR merges: reset its repo to main (rebase newer commits onto it); also runs when you open the feature and on `r` in the prs tab |
+| `/sync` | After a PR merges: merged branches are reset to main (the feature branch) or deleted (stack branches), commits added after a merge are kept, the rest of the stack is rebased onto main, force-pushed (with lease) and its PRs moved to base `main`; one line per branch. Also runs (without pushing; stacks wait) when you open the feature and on `r` in the prs tab |
 | `/plan` | Show/hide the feature's beads plan above the input: in progress, ready, blocked (← waits on), done count. Full list: `f plan show` |
 | `/prc` | Copy the feature's open PRs as `url: title` lines (same as `!!f prs -c`) |
 | `/ci` | Send failing checks + failed-job logs to pi: it finds the cause and proposes a fix, no push until you OK |
@@ -137,7 +140,7 @@ Comment on the **right** side of a diff (the real file). Comments are saved in
 | `f add [repo…]` | Add repos to this feature (+ Herdr tabs, before shell) |
 | `f prs [-r] [-c] [-n] [-w]` | PRs: from saved state; `-r` refresh live, `-c` copy, `-n` don't open browser, `-w` live view (the prs tab) |
 | `f sync --all` | What launchd runs every 30 min: PR/CI and plan refresh for every feature; post-merge resets wait for the one you're in or a busy pi; never pushes; pi gets a note with its next prompt. Log: `~/Library/Logs/f-sync.log` |
-| `f sync` | Same as `/sync`. Leaves repos with uncommitted changes or conflicts alone (says so) |
+| `f sync` | Same as `/sync`. Leaves repos with uncommitted changes or conflicts alone (says so). Never pushes the default branch or branches outside the feature |
 | `f ci fix` | Send failing checks + failed-job logs to the feature's pi (clipboard if pi isn't reachable) |
 | `f goal [text]` | Show / set the goal |
 | `f comment list\|send\|clear` | Review comments (nvim uses these) |

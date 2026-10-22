@@ -1,8 +1,11 @@
 package feature
 
 import (
+	"cmp"
 	"context"
 	"fmt"
+	"slices"
+	"strings"
 	"sync"
 
 	"github.com/seanturner026/pi/internal/git"
@@ -10,41 +13,63 @@ import (
 	"github.com/seanturner026/pi/internal/model"
 )
 
-// SyncAction is what Reconcile did to a repo after its PR merged.
+// SyncAction is what Reconcile did to a repo after a PR merged.
 type SyncAction string
 
 const (
-	SyncNothing SyncAction = ""             // no merged PR in this branch's history, or already synced
-	SyncReset   SyncAction = "reset"        // nothing new since the merged PR: branch reset to the default branch
-	SyncRebased SyncAction = "rebased"      // newer commits replayed onto the default branch
-	SyncNeeded  SyncAction = "needs sync"   // couldn't do it safely (uncommitted changes, conflicts): see Detail
-	SyncStack   SyncAction = "stack synced" // a stack of 2+ branches: gh stack sync rebased and pushed it
+	SyncNothing SyncAction = ""           // nothing merged that isn't already behind the default branch
+	SyncDone    SyncAction = "synced"     // branches reset, deleted or rebased: see Branches
+	SyncNeeded  SyncAction = "needs sync" // couldn't do it safely (uncommitted changes, conflicts): see Detail
 )
+
+// BranchAction is what Reconcile did to one branch of a repo's stack.
+type BranchAction string
+
+const (
+	BranchReset   BranchAction = "reset"   // merged, nothing new: now at the default branch
+	BranchDeleted BranchAction = "deleted" // merged, nothing new, not the feature branch: local branch deleted
+	BranchKept    BranchAction = "kept"    // merged, then committed on: just the new commits replayed onto the default branch
+	BranchRebased BranchAction = "rebased" // not merged: replayed onto what's left below it
+)
+
+// BranchSync is Reconcile's outcome for one branch.
+type BranchSync struct {
+	Branch     string
+	Action     BranchAction
+	PR         int  // its merged PR (0 if not merged)
+	New        int  // BranchKept: commits added after the merge
+	Pushed     bool // force-pushed (--force-with-lease)
+	Retargeted int  // open PR whose base was moved to the default branch (0 if none)
+}
 
 // SyncResult is Reconcile's outcome for one repo.
 type SyncResult struct {
-	Repo   string
-	Action SyncAction
-	PR     model.PR // the merged PR it acted on
-	Detail string
+	Repo     string
+	Action   SyncAction
+	Base     string // e.g. "origin/main"
+	Branches []BranchSync
+	Detail   string // SyncNeeded: why; SyncDone: what went wrong after the branches moved ("" if nothing)
 }
 
-// Reconcile brings each repo whose PR merged back onto its default branch, so
-// the next PR starts fresh (and the review diff stops showing merged work).
-// It works for squash, merge-commit and rebase merges: a PR counts as merged
-// into this branch when GitHub's head commit for it is in the branch's history.
+// Reconcile brings each repo's stack (or single feature branch) back onto its
+// default branch after PRs merged, so the next PR starts fresh. Merged is
+// decided by content, not ancestry: a squash merge puts a new commit on main,
+// so the branch's own commits never become its ancestors (see git.InBase).
+// Per branch, bottom first:
 //
-//   - clean, nothing after the merged head: reset to origin/<default>
-//   - commits after it: rebase just those onto origin/<default> (abort on conflict)
-//   - uncommitted changes: leave it, SyncNeeded
+//   - merged, nothing after: the feature branch is reset to origin/<default>,
+//     other branches are deleted
+//   - merged, then committed on: only the new commits are replayed (kept)
+//   - not merged: replayed onto what's left below it, if that changed (rebased)
 //
-// prs are the feature's PRs (refresh them first). The branch keeps its name, so
-// the next push needs --force-with-lease if the old remote branch still exists.
+// Uncommitted changes or a conflict leave every branch as it was (SyncNeeded).
 //
-// Stacks of two or more branches are left to `gh stack sync` (it rebases the
-// rest of the stack and pushes), and only when stackSync is set: background
-// syncs shouldn't push.
-func Reconcile(ctx context.Context, r Runner, l Layout, name string, prs []model.PR, stackSync bool) ([]SyncResult, error) {
+// prs are the feature's PRs (refresh them first). With push, rebased branches
+// that exist on origin are force-pushed (--force-with-lease), open PRs based
+// on a merged branch are moved to the default branch, and the gh stack is
+// re-initialized without the deleted branches. Without push (background
+// syncs), stacks of two or more branches are left alone.
+func Reconcile(ctx context.Context, r Runner, l Layout, name string, prs []model.PR, push bool) ([]SyncResult, error) {
 	repos, err := Repos(l, name)
 	if err != nil {
 		return nil, err
@@ -59,17 +84,7 @@ func Reconcile(ctx context.Context, r Runner, l Layout, name string, prs []model
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			wt := RepoDir(l, name, repo)
-			if branches, err := github.StackBranches(ctx, r, wt); err == nil && len(branches) > 1 {
-				if stackSync {
-					found[i] = SyncResult{Repo: repo, Action: SyncStack, Detail: "gh stack sync: rebased onto main and pushed"}
-					if err := github.StackSync(ctx, r, wt); err != nil {
-						found[i].Action, found[i].Detail = SyncNeeded, err.Error()
-					}
-				}
-				return
-			}
-			found[i] = reconcileRepo(ctx, r, l, name, repo, prs)
+			found[i] = reconcileRepo(ctx, r, l, name, repo, prs, push)
 		}()
 	}
 	wg.Wait()
@@ -82,61 +97,198 @@ func Reconcile(ctx context.Context, r Runner, l Layout, name string, prs []model
 	return results, nil
 }
 
-func reconcileRepo(ctx context.Context, r Runner, l Layout, name, repo string, prs []model.PR) SyncResult {
+// stackBranch is one branch's plan.
+type stackBranch struct {
+	name   string
+	old    string    // its commit now
+	merged *model.PR // its merged PR whose content is in main (nil if none)
+	fresh  []string  // commits to replay (not in main)
+}
+
+func reconcileRepo(ctx context.Context, r Runner, l Layout, name, repo string, prs []model.PR, push bool) SyncResult {
 	wt := RepoDir(l, name, repo)
-	res := SyncResult{Repo: repo}
-	head, err := git.Head(ctx, r, wt)
-	if err != nil {
-		return res
+	res := SyncResult{Repo: repo, Base: baseRef(ctx, r, l, repo)}
+	names, err := github.StackBranches(ctx, r, wt)
+	if err != nil || len(names) == 0 {
+		names = []string{name}
 	}
-	// The merged PR (of this branch) closest to HEAD.
-	best, bestAhead := model.PR{}, -1
-	for _, p := range prs {
-		if p.Repo != repo || p.Status != model.PRStatusMerged || p.HeadOID == "" || (p.Head != "" && p.Head != name) {
-			continue
-		}
-		if !git.IsAncestor(ctx, r, wt, p.HeadOID, head) {
-			continue // not in this branch's history (e.g. already synced past it)
-		}
-		ahead, err := git.CommitsAhead(ctx, r, wt, p.HeadOID)
-		if err == nil && (bestAhead < 0 || ahead < bestAhead) {
-			best, bestAhead = p, ahead
-		}
+	if len(names) > 1 && !push {
+		return res // background: rewriting a stack means pushing it
 	}
-	if bestAhead < 0 {
-		return res
-	}
-	res.PR = best
 	if err := git.Fetch(ctx, r, wt); err != nil {
 		res.Action, res.Detail = SyncNeeded, err.Error()
 		return res
 	}
-	base := baseRef(ctx, r, l, repo)
-	baseSHA := git.RevParse(ctx, r, wt, base)
-	if baseSHA == "" || head == baseSHA {
+	baseSHA := git.RevParse(ctx, r, wt, res.Base)
+	if baseSHA == "" {
+		return res
+	}
+	refs := []string{res.Base}
+	for _, p := range prs {
+		if p.Repo == repo && p.MergeOID != "" && git.IsAncestor(ctx, r, wt, p.MergeOID, baseSHA) {
+			refs = append(refs, p.MergeOID)
+		}
+	}
+
+	// Plan, without touching anything.
+	var stack []stackBranch
+	changes, below := false, res.Base
+	for _, b := range names {
+		sb := stackBranch{name: b, old: git.RevParse(ctx, r, wt, "refs/heads/"+b)}
+		if sb.old == "" {
+			continue // in the stack's records, not a local branch (any more)
+		}
+		own, err := git.Commits(ctx, r, wt, sb.old, res.Base, below)
+		if err != nil {
+			res.Action, res.Detail = SyncNeeded, err.Error()
+			return res
+		}
+		below = sb.old
+		sb.fresh = own
+		if merged := mergedPRs(prs, repo, name, b); len(merged) > 0 {
+			if k := git.MergedPrefix(ctx, r, wt, res.Base, refs, own); k > 0 {
+				sb.merged, sb.fresh, changes = merged[0], own[k:], true
+			} else if i := slices.IndexFunc(merged, func(p *model.PR) bool { return p.HeadOID == sb.old }); i >= 0 && len(own) == 0 && sb.old != baseSHA {
+				sb.merged, changes = merged[i], true // merged with a merge commit: behind main, catch up
+			}
+		}
+		stack = append(stack, sb)
+	}
+	if !changes {
 		return res
 	}
 	if n, err := git.ChangedFiles(ctx, r, wt); err != nil || n > 0 {
 		res.Action, res.Detail = SyncNeeded, fmt.Sprintf("%d uncommitted change(s); commit or stash, then f sync", n)
 		return res
 	}
-	inMain := git.IsAncestor(ctx, r, wt, head, baseSHA)
-	if bestAhead > 0 && inMain {
-		return res // already synced: after a merge-commit merge, HEAD is main itself
+
+	// Build the new tips on a detached HEAD; branches move only if all of it worked.
+	orig := git.CurrentBranch(ctx, r, wt)
+	origHead, _ := git.Head(ctx, r, wt)
+	restore := func() { _ = git.Checkout(ctx, r, wt, cmp.Or(orig, origHead), orig == "") }
+	if err := git.Checkout(ctx, r, wt, baseSHA, true); err != nil {
+		res.Action, res.Detail = SyncNeeded, err.Error()
+		return res
 	}
-	if bestAhead == 0 {
-		if err := git.ResetHard(ctx, r, wt, base); err != nil {
-			res.Action, res.Detail = SyncNeeded, err.Error()
-			return res
+	tips := make([]string, len(stack))
+	tip, moved := baseSHA, false // moved: something below the current branch changed
+	for i, sb := range stack {
+		switch {
+		case sb.merged == nil && !moved:
+			tip = sb.old // untouched, and nothing below it changed
+			if err := git.Checkout(ctx, r, wt, tip, true); err != nil {
+				restore()
+				res.Action, res.Detail = SyncNeeded, err.Error()
+				return res
+			}
+		case len(sb.fresh) > 0:
+			if err := git.CherryPick(ctx, r, wt, sb.fresh...); err != nil {
+				restore()
+				res.Action, res.Detail = SyncNeeded, fmt.Sprintf("replaying %d commit(s) of %s onto %s conflicts; rebase by hand", len(sb.fresh), sb.name, res.Base)
+				return res
+			}
+			tip, _ = git.Head(ctx, r, wt)
 		}
-		res.Action, res.Detail = SyncReset, "reset to "+base
-	} else {
-		if err := git.RebaseOnto(ctx, r, wt, base, best.HeadOID); err != nil {
-			res.Action, res.Detail = SyncNeeded, fmt.Sprintf("rebasing %d newer commit(s) onto %s conflicts; rebase by hand", bestAhead, base)
-			return res
+		tips[i] = tip
+		moved = moved || tip != sb.old
+	}
+
+	// Move the branches. Detached HEAD, clean tree: nothing is checked out under them.
+	var problems []string
+	var kept []string
+	for i, sb := range stack {
+		bs := BranchSync{Branch: sb.name}
+		if sb.merged != nil {
+			bs.PR = sb.merged.Number
 		}
-		res.Action, res.Detail = SyncRebased, fmt.Sprintf("%d newer commit(s) rebased onto %s", bestAhead, base)
+		switch {
+		case sb.merged != nil && len(sb.fresh) == 0 && sb.name != name:
+			bs.Action = BranchDeleted
+			if err := git.DeleteLocalBranch(ctx, r, wt, sb.name, sb.old); err != nil {
+				problems = append(problems, err.Error())
+				kept = append(kept, sb.name)
+				continue
+			}
+		case tips[i] == sb.old:
+			kept = append(kept, sb.name)
+			continue // untouched
+		default:
+			bs.Action = BranchRebased
+			if sb.merged != nil {
+				bs.Action, bs.New = BranchKept, len(sb.fresh)
+				if len(sb.fresh) == 0 {
+					bs.Action = BranchReset
+				}
+			}
+			kept = append(kept, sb.name)
+			if err := git.SetBranch(ctx, r, wt, sb.name, tips[i], sb.old); err != nil {
+				problems = append(problems, err.Error())
+				continue
+			}
+		}
+		res.Branches = append(res.Branches, bs)
+	}
+	if !slices.Contains(kept, orig) {
+		orig = name
+	}
+	if err := git.Checkout(ctx, r, wt, orig, false); err != nil {
+		problems = append(problems, err.Error())
 	}
 	git.DeleteRef(ctx, r, wt, LastRunRef) // "since pi's last run" would compare against pre-merge code
+
+	if push {
+		problems = append(problems, publish(ctx, r, wt, name, repo, prs, stack, &res, kept)...)
+	}
+	res.Action, res.Detail = SyncDone, strings.Join(problems, "; ")
 	return res
+}
+
+// publish pushes rebased branches, moves open PRs off merged bases, and
+// re-records the stack (kept: the branches left, bottom first). Returns what failed.
+func publish(ctx context.Context, r Runner, wt, name, repo string, prs []model.PR, stack []stackBranch, res *SyncResult, kept []string) []string {
+	var problems []string
+	mergedBase := map[string]bool{}
+	for _, sb := range stack {
+		if sb.merged != nil {
+			mergedBase[sb.name] = true
+		}
+	}
+	defaultBranch := strings.TrimPrefix(res.Base, "origin/")
+	for i, bs := range res.Branches {
+		if bs.Action != BranchRebased || git.RevParse(ctx, r, wt, "refs/remotes/origin/"+bs.Branch) == "" {
+			continue // kept branches' PR merged: the new commits need a new PR (gh stack submit)
+		}
+		if err := git.ForcePushBranch(ctx, r, wt, bs.Branch, name); err != nil {
+			problems = append(problems, err.Error())
+		} else {
+			res.Branches[i].Pushed = true
+		}
+		for _, p := range prs {
+			if p.Repo == repo && p.Head == bs.Branch && p.Status.IsActive() && mergedBase[p.Base] {
+				if err := github.RetargetPR(ctx, r, wt, p.Number, defaultBranch); err != nil {
+					problems = append(problems, err.Error())
+				} else {
+					res.Branches[i].Retargeted = p.Number
+				}
+			}
+		}
+	}
+	if len(stack) > 1 && len(kept) < len(stack) {
+		if err := github.StackReinit(ctx, r, wt, kept); err != nil {
+			problems = append(problems, err.Error())
+		}
+	}
+	return problems
+}
+
+// mergedPRs returns branch's merged PRs. A PR without a head name (older
+// state) belongs to the feature branch.
+func mergedPRs(prs []model.PR, repo, name, branch string) []*model.PR {
+	var out []*model.PR
+	for i, p := range prs {
+		if p.Repo == repo && p.Status == model.PRStatusMerged && (p.Head == branch || (p.Head == "" && branch == name)) {
+			out = append(out, &prs[i])
+		}
+	}
+	return out
 }
