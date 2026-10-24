@@ -23,6 +23,7 @@ const help = `f: one pi session across several repos, each on its own worktree.
   f prs [-r] [-c]  this feature's PRs (-r refresh, -c copy, -w live view)
   f ci fix         send failing checks to pi (it proposes a fix, doesn't push)
   f sync           after a PR merges: reset/drop merged branches, rebase the rest onto main
+  f restore [name] bring back a removed feature (14 days); no name lists the trash
 
 f <cmd> -h for flags. Plumbing used by pi/nvim: f goal, f comment.
 `
@@ -159,10 +160,27 @@ func main() {
 				},
 			},
 			{
-				// Started after removing features: deletes their files (renamed into .features/.trash).
+				// Deletes removed features older than feature.TrashRetention (f sync --all runs it too).
 				Name:   "empty-trash",
 				Hidden: true,
-				Action: func(ctx context.Context, c *cli.Command) error { return feature.EmptyTrash(d.layout) },
+				Action: func(ctx context.Context, c *cli.Command) error {
+					return feature.EmptyTrash(ctx, d.run, d.layout, feature.TrashRetention)
+				},
+			},
+			{
+				Name:      "restore",
+				Usage:     "bring back a removed feature (kept for 14 days); no name lists the trash",
+				ArgsUsage: "[feature]",
+				Action: func(ctx context.Context, c *cli.Command) error {
+					return restore(ctx, d, c.Args().First())
+				},
+				ShellComplete: func(ctx context.Context, c *cli.Command) {
+					var names []string
+					for _, t := range feature.Trash(d.layout) {
+						names = append(names, t.Name)
+					}
+					printLines(names)
+				},
 			},
 			{
 				// Started by the picker after removing a feature (bd is slow).

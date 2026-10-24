@@ -382,6 +382,17 @@ func TestUnmergedSquashMerged(t *testing.T) {
 			},
 		},
 		{
+			// Saved before PRs recorded merge_oid, and main changed the file
+			// since: content differs, but it's the same patch (git cherry).
+			name: "one-commit squash, no merge commit saved, main moved on",
+			setup: func(f *syncFixture) []model.PR {
+				f.commit("b.txt", "pr\n")
+				f.squash("feat")
+				f.mainMoves("b.txt", "changed again\n")
+				return []model.PR{stackPR(1, "feat", "main", model.PRStatusMerged, "")}
+			},
+		},
+		{
 			name: "commit after the merge",
 			setup: func(f *syncFixture) []model.PR {
 				f.commit("b.txt", "pr\n")
@@ -453,34 +464,65 @@ func TestFinishedSquashMerged(t *testing.T) {
 	}
 }
 
-func TestRemoveRenamesThenPrunes(t *testing.T) {
+func TestRemoveRestoreExpire(t *testing.T) {
+	ctx := context.Background()
 	f := newSyncFixture(t)
-	f.commit("b.txt", "work\n")
+	head := f.commit("b.txt", "work\n")
 	write(t, filepath.Join(f.wt, "dirty.txt"), "uncommitted\n") // Remove doesn't refuse: callers check Unmerged
 	base := filepath.Join(f.l.Base, "app")
-	if err := feature.Remove(context.Background(), shell.Exec{}, f.l, "feat"); err != nil {
+	run := shell.Exec{}
+
+	if err := feature.Remove(ctx, run, f.l, "feat"); err != nil {
 		t.Fatal(err)
 	}
-	if feature.Exists(f.l, "feat") {
-		t.Error("feature directory still there")
+	if feature.Exists(f.l, "feat") || len(feature.List(f.l)) != 0 {
+		t.Fatal("feature still listed")
 	}
-	if got := feature.List(f.l); len(got) != 0 {
-		t.Errorf("List = %v, want none (.trash isn't a feature)", got)
+	if _, ok := feature.InTrash(f.l, "feat"); !ok {
+		t.Fatal("not in the trash")
+	}
+	if out := git(t, base, "branch", "--list", "feat"); out == "" {
+		t.Error("branch deleted on remove: restore would lose it")
+	}
+	if out := git(t, base, "worktree", "list"); !strings.Contains(out, ".trash") {
+		t.Errorf("worktree not re-linked into the trash:\n%s", out)
+	}
+
+	if err := feature.Restore(ctx, run, f.l, "feat"); err != nil {
+		t.Fatal(err)
+	}
+	if got := git(t, f.wt, "rev-parse", "HEAD"); got != head {
+		t.Errorf("restored HEAD = %s, want %s", got, head)
+	}
+	if got := git(t, f.wt, "status", "--porcelain"); got != "?? dirty.txt" {
+		t.Errorf("restored status = %q, want the uncommitted file back", got)
+	}
+	if err := feature.Restore(ctx, run, f.l, "feat"); !errors.Is(err, feature.ErrExists) {
+		t.Errorf("restore over a live feature: err = %v", err)
+	}
+
+	if err := feature.Remove(ctx, run, f.l, "feat"); err != nil {
+		t.Fatal(err)
+	}
+	if err := feature.EmptyTrash(ctx, run, f.l, feature.TrashRetention); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := feature.InTrash(f.l, "feat"); !ok {
+		t.Fatal("fresh removal emptied before it expired")
+	}
+	if err := feature.EmptyTrash(ctx, run, f.l, 0); err != nil {
+		t.Fatal(err)
+	}
+	if len(feature.Trash(f.l)) != 0 {
+		t.Error("expired entry still in the trash")
 	}
 	if out := git(t, base, "worktree", "list"); strings.Contains(out, "feat") {
 		t.Errorf("worktree still registered:\n%s", out)
 	}
 	if out := git(t, base, "branch", "--list", "feat"); out != "" {
-		t.Errorf("branch still there: %q", out)
+		t.Errorf("branch still there after expiry: %q", out)
 	}
-	entries, _ := os.ReadDir(feature.TrashDir(f.l))
-	if len(entries) != 1 {
-		t.Fatalf("trash has %d entries, want 1", len(entries))
-	}
-	if err := feature.EmptyTrash(f.l); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := os.Stat(feature.TrashDir(f.l)); !os.IsNotExist(err) {
-		t.Error("trash not emptied")
+	if err := feature.Restore(ctx, run, f.l, "feat"); !errors.Is(err, feature.ErrNotInTrash) {
+		t.Errorf("restore after expiry: err = %v", err)
 	}
 }

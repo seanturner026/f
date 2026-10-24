@@ -131,6 +131,10 @@ func start(ctx context.Context, d deps, name string, repos []string, prompt stri
 		return launch(ctx, d, name, "", true)
 	}
 
+	if _, ok := feature.InTrash(d.layout, name); ok {
+		return fmt.Errorf("%q: %w (its branch too): f restore %s, or pick another name", name, feature.ErrInTrash, name)
+	}
+
 	if len(repos) == 0 && !interactive() {
 		// fzf would wait forever for a terminal that isn't there (pi's !f).
 		return fmt.Errorf("new feature %q needs repos: f %s -r <repo> [-r <repo>...], or /f %s in pi (it asks)", name, name, name)
@@ -490,14 +494,11 @@ func removeFinished(ctx context.Context, d deps, done []string) []string {
 		}
 		removed = append(removed, name)
 	}
-	if len(removed) > 0 {
-		startDetached("empty-trash")
-	}
 	return removed
 }
 
-// removeWithWorkspace removes the feature and closes its Herdr workspace. Its
-// files stay in the trash until `f empty-trash`.
+// removeWithWorkspace moves the feature to the trash (f restore brings it
+// back) and closes its Herdr workspace.
 func removeWithWorkspace(ctx context.Context, d deps, name string) error {
 	if err := feature.Remove(ctx, d.run, d.layout, name); err != nil {
 		return err
@@ -506,4 +507,27 @@ func removeWithWorkspace(ctx context.Context, d deps, name string) error {
 		_ = herdr.CloseWorkspace(ctx, d.run, name)
 	}
 	return nil
+}
+
+// restore brings back a removed feature, reopens its beads issue, and opens
+// it. With no name it lists the trash.
+func restore(ctx context.Context, d deps, name string) error {
+	if name == "" {
+		trash := feature.Trash(d.layout)
+		if len(trash) == 0 {
+			info("trash is empty")
+		}
+		for _, t := range trash {
+			fmt.Printf("%s  %s\n", t.Name, dim("removed "+feature.TrashAge(t)))
+		}
+		return nil
+	}
+	if err := feature.Restore(ctx, d.run, d.layout, name); err != nil {
+		return err
+	}
+	if info, _ := feature.LoadInfo(d.layout, name); info.Issue != "" {
+		_ = beads.Reopen(ctx, d.run, d.layout.Base, info.Issue) // fails if it was left open: fine
+	}
+	fmt.Println(green("restored " + name))
+	return start(ctx, d, name, nil, "")
 }

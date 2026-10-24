@@ -38,7 +38,9 @@ by `f`).
    onto main and pushed.
 7. **Done**: when PRs merge, `alt-x` in the picker cleans up every merged
    feature (or `ctrl-x` one). The beads issue closes with the PR links. It only
-   asks first about uncommitted files or commits that are neither pushed nor merged.
+   asks first about uncommitted files or commits that are neither pushed nor merged
+   (local check, no GitHub: about a second). Removed features go to the trash with
+   their branches and uncommitted files: `f restore <name>` within 14 days.
 
 Big multi-step work (e.g. ACK across tf/argocd/prod/ops): start one
 feature with all the repos, ask pi to **plan it in beads** (child issues +
@@ -79,7 +81,7 @@ learns shows in the picker too.
 | Key | Does |
 |---|---|
 | `enter` | Jump to the feature (recreates its workspace if closed) |
-| `ctrl-x` | Remove the feature: worktrees, branches, workspace. Asks if work would be lost |
+| `ctrl-x` | Remove the feature (to the trash for 14 days: `f restore <name>`) and close its workspace. Asks if work would be lost |
 | `alt-x` | Clean up every merged feature |
 | `esc` / `ctrl-space` | Close |
 
@@ -142,6 +144,7 @@ Comment on the **right** side of a diff (the real file). Comments are saved in
 | `f sync --all` | What launchd runs every 30 min: PR/CI and plan refresh for every feature; post-merge resets wait for the one you're in or a busy pi; never pushes; pi gets a note with its next prompt. Log: `~/Library/Logs/f-sync.log` |
 | `f sync` | Same as `/sync`. Leaves repos with uncommitted changes or conflicts alone (says so). Never pushes the default branch or branches outside the feature |
 | `f ci fix` | Send failing checks + failed-job logs to the feature's pi (clipboard if pi isn't reachable) |
+| `f restore [name]` | Bring back a removed feature (worktrees, branches, uncommitted files), reopen its beads issue and open it. No name: list the trash. Kept 14 days; `f sync --all` deletes older ones, branches included. A name in the trash can't be reused until then |
 | `f goal [text]` | Show / set the goal |
 | `f comment list\|send\|clear` | Review comments (nvim uses these) |
 

@@ -79,6 +79,14 @@ func Close(ctx context.Context, r Runner, dir, id, reason string) error {
 	return nil
 }
 
+// Reopen reopens a closed issue.
+func Reopen(ctx context.Context, r Runner, dir, id string) error {
+	if _, err := r.Run(ctx, dir, "bd", "reopen", id); err != nil {
+		return fmt.Errorf("bd reopen %s: %w", id, err)
+	}
+	return nil
+}
+
 // Note appends a note to an issue.
 func Note(ctx context.Context, r Runner, dir, id, text string) error {
 	if _, err := r.Run(ctx, dir, "bd", "note", id, text); err != nil {

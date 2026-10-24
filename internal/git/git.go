@@ -241,18 +241,17 @@ func Commits(ctx context.Context, r Runner, wt, tip string, exclude ...string) (
 	return strings.Split(out, "\n"), nil
 }
 
-// CountUnpushed counts commits on rev that are neither on base nor on any
-// remote-tracking branch.
-func CountUnpushed(ctx context.Context, r Runner, wt, rev, base string) (int, error) {
-	out, err := r.Run(ctx, wt, "git", "rev-list", "--count", rev, "--not", base, "--remotes")
+// Unpushed lists the commits on rev that are neither on base nor on any
+// remote-tracking branch, oldest first.
+func Unpushed(ctx context.Context, r Runner, wt, rev, base string) ([]string, error) {
+	out, err := r.Run(ctx, wt, "git", "rev-list", "--reverse", rev, "--not", base, "--remotes")
 	if err != nil {
-		return 0, fmt.Errorf("rev-list: %w", err)
+		return nil, fmt.Errorf("rev-list: %w", err)
 	}
-	n, err := strconv.Atoi(out)
-	if err != nil {
-		return 0, fmt.Errorf("rev-list: %w", err)
+	if out == "" {
+		return nil, nil
 	}
-	return n, nil
+	return strings.Split(out, "\n"), nil
 }
 
 // InBase reports whether everything rev changed since it forked from base is
@@ -334,6 +333,32 @@ func ForcePushBranch(ctx context.Context, r Runner, wt, branch, prefix string) e
 	ref := "refs/heads/" + branch
 	if _, err := r.Run(ctx, wt, "git", "push", "-q", "--force-with-lease="+ref, "origin", ref+":"+ref); err != nil {
 		return fmt.Errorf("push %s: %w", branch, err)
+	}
+	return nil
+}
+
+// Unpicked returns the commits on head (since it forked from upstream) whose
+// change isn't on upstream as an equivalent patch (git cherry's "+" lines).
+// A squash merge of a one-commit PR is the same patch, so it doesn't count.
+func Unpicked(ctx context.Context, r Runner, wt, upstream, head string) (map[string]bool, error) {
+	out, err := r.Run(ctx, wt, "git", "cherry", upstream, head)
+	if err != nil {
+		return nil, fmt.Errorf("cherry: %w", err)
+	}
+	plus := map[string]bool{}
+	for _, l := range strings.Split(out, "\n") {
+		if sha, ok := strings.CutPrefix(l, "+ "); ok {
+			plus[sha] = true
+		}
+	}
+	return plus, nil
+}
+
+// RepairWorktree re-links a worktree that was moved by hand to path (run in
+// its base clone), so git finds it there and its branch stays checked out.
+func RepairWorktree(ctx context.Context, r Runner, repoDir, path string) error {
+	if _, err := r.Run(ctx, repoDir, "git", "worktree", "repair", path); err != nil {
+		return fmt.Errorf("worktree repair: %w", err)
 	}
 	return nil
 }

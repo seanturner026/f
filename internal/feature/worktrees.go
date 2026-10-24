@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 	"slices"
 	"sync"
-	"time"
 
 	"github.com/seanturner026/pi/internal/git"
 	"github.com/seanturner026/pi/internal/github"
@@ -228,43 +227,55 @@ func unmergedIn(ctx context.Context, r Runner, l Layout, name, repo string, know
 	return problems
 }
 
-// notInBase counts rev's commits that aren't in base: by ancestry, or by
-// content after a squash merge. With pushedOK, commits on a remote branch
-// don't count (removing the feature doesn't lose them).
+// notInBase counts rev's commits that aren't in base: by ancestry, as an
+// equivalent patch (git cherry), or by content after a squash merge. With
+// pushedOK, commits on a remote branch don't count (removing the feature
+// doesn't lose them). Cheapest checks first: most revs need two git calls.
 func notInBase(ctx context.Context, r Runner, wt, base, rev string, prs []model.PR, pushedOK bool) int {
 	if rev == "" {
 		return 0
 	}
-	count := func(after string) int {
-		if pushedOK {
-			n, err := git.CountUnpushed(ctx, r, wt, rev, after)
-			if err != nil {
-				return 1
-			}
-			return n
-		}
-		c, err := git.Commits(ctx, r, wt, rev, after)
-		if err != nil {
-			return 1
-		}
-		return len(c)
-	}
-	n := count(base)
-	if n == 0 || mergedAt(ctx, r, wt, rev, prs) {
-		return 0
-	}
 	commits, err := git.Commits(ctx, r, wt, rev, base)
-	if err != nil {
-		return n
+	if pushedOK {
+		commits, err = git.Unpushed(ctx, r, wt, rev, base)
 	}
-	k := git.MergedPrefix(ctx, r, wt, base, mainRefs(ctx, r, wt, base, prs), commits)
-	switch k {
-	case 0:
-		return n
-	case len(commits):
+	if err != nil {
+		return 1
+	}
+	if len(commits) == 0 || mergedAt(ctx, r, wt, rev, prs) {
 		return 0
 	}
-	return count(commits[k-1]) // just the ones after the merge
+	plus, err := git.Unpicked(ctx, r, wt, base, rev)
+	if err != nil {
+		return len(commits)
+	}
+	var left []string
+	for _, c := range commits {
+		if plus[c] {
+			left = append(left, c)
+		}
+	}
+	if len(left) == 0 {
+		return 0
+	}
+	// By content, for squash merges of several commits: the merged ones are a
+	// prefix of the branch's own commits.
+	own, err := git.Commits(ctx, r, wt, rev, base)
+	if err != nil {
+		return len(left)
+	}
+	k := git.MergedPrefix(ctx, r, wt, base, mainRefs(ctx, r, wt, base, prs), own)
+	merged := map[string]bool{}
+	for _, c := range own[:k] {
+		merged[c] = true
+	}
+	n := 0
+	for _, c := range left {
+		if !merged[c] {
+			n++
+		}
+	}
+	return n
 }
 
 // mainRefs are the revisions that show what's in base: base itself and the
@@ -278,44 +289,3 @@ func mainRefs(ctx context.Context, r Runner, wt, base string, prs []model.PR) []
 	}
 	return refs
 }
-
-// Remove deletes a feature's worktrees, branches, and directory, fast: the
-// directory is renamed into .features/.trash (instant, whatever its size),
-// git forgets the worktrees (worktree prune) and drops the branch, and
-// EmptyTrash deletes the files later (in the background). Check Unmerged
-// first: Remove doesn't refuse dirty worktrees.
-func Remove(ctx context.Context, r Runner, l Layout, name string) error {
-	repos, err := Repos(l, name)
-	if err != nil {
-		return err
-	}
-	trash := TrashDir(l)
-	if err := os.MkdirAll(trash, 0o755); err != nil {
-		return fmt.Errorf("remove %s: %w", name, err)
-	}
-	dst := filepath.Join(trash, name+"-"+time.Now().Format("20060102-150405.000"))
-	if err := os.Rename(Dir(l, name), dst); err != nil {
-		return fmt.Errorf("remove %s: %w", name, err)
-	}
-	var wg sync.WaitGroup
-	for _, repo := range repos {
-		src := filepath.Join(l.Base, repo)
-		if !git.IsRepo(src) {
-			continue // base clone deleted: nothing to unregister
-		}
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			_ = git.PruneWorktrees(ctx, r, src) // the worktree's directory is gone now
-			_ = git.DeleteBranch(ctx, r, src, name)
-		}()
-	}
-	wg.Wait()
-	return nil
-}
-
-// TrashDir holds removed features until EmptyTrash deletes them.
-func TrashDir(l Layout) string { return filepath.Join(l.Features, ".trash") }
-
-// EmptyTrash deletes removed features' files.
-func EmptyTrash(l Layout) error { return os.RemoveAll(TrashDir(l)) }

@@ -244,17 +244,14 @@ func orNone(s string) string {
 // removeFeature removes a feature and its Herdr workspace. If it has unmerged
 // work, it lists it and asks first. Returns a status line for the picker.
 func removeFeature(ctx context.Context, d deps, name string) string {
-	// Saved PRs first (no network). Only if that finds unmerged work, check
-	// GitHub live before asking: maybe a merge the saved state hasn't seen.
+	// Saved PRs and local git only: no fetch, no gh (a live re-check took
+	// seconds and rarely changed the answer). Removal is restorable anyway.
 	state, _ := feature.LoadState(d.layout, name)
 	known := state.PRs
 	if known == nil {
 		known = []model.PR{}
 	}
 	problems, err := feature.Unmerged(ctx, d.run, d.layout, name, known)
-	if err == nil && len(problems) > 0 {
-		problems, err = feature.Unmerged(ctx, d.run, d.layout, name, nil)
-	}
 	if err != nil {
 		return red(fmt.Sprintf("%s: %v", name, err))
 	}
@@ -262,7 +259,7 @@ func removeFeature(ctx context.Context, d deps, name string) string {
 	if len(problems) > 0 {
 		// Confirm inside fzf: reading the terminal directly after fzf exits is
 		// unreliable in Herdr's popup.
-		const keep, remove = "keep it", "remove anyway (this work is lost)"
+		keep, remove := "keep it", fmt.Sprintf("remove anyway (f restore %s brings it back for 14 days)", name)
 		header := name + " has unmerged work:\n  " + strings.Join(problems, "\n  ")
 		choice, err := runFzf([]string{keep, remove}, "--prompt=remove? ", "--header="+header,
 			"--header-first", "--no-sort", "--bind=ctrl-space:abort")
@@ -277,7 +274,6 @@ func removeFeature(ctx context.Context, d deps, name string) string {
 	if err := removeWithWorkspace(ctx, d, name); err != nil {
 		return red(err.Error())
 	}
-	startDetached("empty-trash") // the files go in the background
 	issue()
-	return green("removed " + name)
+	return green("removed "+name) + dim(" (f restore "+name+" within 14 days)")
 }

@@ -20,7 +20,7 @@ func syncAll(ctx context.Context, d deps) error {
 		focused, _ = herdr.FocusedWorkspace(ctx, d.run) // "" if Herdr isn't running
 	}
 	stamp := time.Now().Format(time.DateTime)
-	_ = feature.EmptyTrash(d.layout) // leftovers of removals whose background delete was interrupted
+	_ = feature.EmptyTrash(ctx, d.run, d.layout, feature.TrashRetention) // removed features past restoring
 	for _, name := range feature.List(d.layout) {
 		if err := planSyncFeature(ctx, d, name); err != nil {
 			fmt.Printf("%s %s: plan: %v\n", stamp, name, err)
