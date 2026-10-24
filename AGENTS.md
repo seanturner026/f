@@ -11,7 +11,7 @@ My pi config plus `f`, the multi-repo feature workspace CLI. What each part is: 
 ## Verify
 
 - Go: `go build ./... && go vet ./... && go test ./...` (run `go fmt ./...` first).
-- Extensions: `node --test agent/extensions/repo-instructions/gate.test.ts`.
+- Extensions: `node --test agent/extensions/repo-instructions/gate.test.ts agent/extensions/idle-retry/idle-retry.test.ts`. Tests live in an extension's subdirectory: pi loads every top-level `.ts` in `extensions/` as an extension.
 
 ## Deploy
 
