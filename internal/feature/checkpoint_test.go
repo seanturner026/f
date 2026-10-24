@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/seanturner026/pi/internal/feature"
+	gitpkg "github.com/seanturner026/pi/internal/git"
 	"github.com/seanturner026/pi/internal/shell"
 )
 
@@ -137,4 +138,67 @@ func TestCheckpointDiffShowsOnlyLastRun(t *testing.T) {
 			}
 		})
 	}
+}
+
+// The snapshot starts from a copy of the real index (for speed): it must
+// record the same tree as starting from HEAD would, and leave the index alone.
+func TestSnapshotMatchesWorkingTree(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not installed")
+	}
+	for _, k := range []string{"GIT_AUTHOR_NAME", "GIT_COMMITTER_NAME", "GIT_AUTHOR_EMAIL", "GIT_COMMITTER_EMAIL"} {
+		t.Setenv(k, "t")
+	}
+	wt := t.TempDir()
+	gitRepo(t, wt)
+	run := func(env []string, args ...string) string {
+		t.Helper()
+		cmd := exec.Command("git", args...)
+		cmd.Dir, cmd.Env = wt, append(os.Environ(), env...)
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("git %v: %v %s", args, err, out)
+		}
+		return strings.TrimSpace(string(out))
+	}
+	put := func(name, content string) {
+		if err := os.WriteFile(filepath.Join(wt, name), []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, f := range []string{"edited", "deleted", "staged"} {
+		put(f, "old\n")
+	}
+	put(".gitignore", "ignored\n")
+	run(nil, "add", ".")
+	run(nil, "commit", "-q", "-m", "files")
+	put("edited", "new\n")
+	os.Remove(filepath.Join(wt, "deleted"))
+	put("untracked", "u\n")
+	put("ignored", "i\n")
+	put("staged", "staged\n")
+	run(nil, "add", "staged")
+	put("staged", "staged then edited\n")
+	run(nil, "add", "-N", "untracked") // intent-to-add, as CheckpointEnd leaves it
+	indexBefore := run(nil, "diff", "--cached", "--stat")
+
+	snap, err := gitSnapshot(t, wt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	idx := filepath.Join(t.TempDir(), "index")
+	env := []string{"GIT_INDEX_FILE=" + idx}
+	run(env, "read-tree", "HEAD")
+	run(env, "add", "-A")
+	if got, want := run(nil, "rev-parse", snap+"^{tree}"), run(env, "write-tree"); got != want {
+		t.Errorf("snapshot tree %s, want %s (from HEAD)", got, want)
+	}
+	if got := run(nil, "diff", "--cached", "--stat"); got != indexBefore {
+		t.Errorf("real index changed:\n%s\nwant\n%s", got, indexBefore)
+	}
+}
+
+func gitSnapshot(t *testing.T, wt string) (string, error) {
+	t.Helper()
+	return gitpkg.SnapshotCommit(context.Background(), shell.Exec{}, wt)
 }
