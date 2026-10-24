@@ -15,6 +15,7 @@ herdr integration install pi    # herdr agent-state extension (not tracked)
 - `agent/`: pi config (settings, AGENTS.md, prompts, extensions, skills, themes)
 - `cmd/f/`: `f`, the multi-repo feature workspace CLI (`f --help`)
 - `mockups/`: HTML layout mockups
+- `docs/separation-of-concerns.excalidraw`: who owns what (Herdr, f, beads, pi, nvim)
 
 ## f
 
