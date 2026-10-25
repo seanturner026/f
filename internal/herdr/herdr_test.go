@@ -124,7 +124,8 @@ func TestAgentStatuses(t *testing.T) {
 	list := `{"result":{"agents":[
 		{"agent":"pi","agent_status":"blocked","cwd":"/f/a"},
 		{"agent":"pi","agent_status":"working","cwd":"/f/b"},
-		{"agent":"claude","agent_status":"idle","cwd":"/f/c"}]}}`
+		{"agent":"claude","agent_status":"idle","cwd":"/f/c"},
+		{"agent":"codex","agent_status":"idle","cwd":"/f/d"}]}}`
 	got, err := herdr.AgentStatuses(context.Background(), fakeRunner{out: list})
 	if err != nil {
 		t.Fatal(err)
@@ -135,7 +136,8 @@ func TestAgentStatuses(t *testing.T) {
 	}{
 		{cwd: "/f/a", want: herdr.AgentBlocked},
 		{cwd: "/f/b", want: herdr.AgentWorking},
-		{cwd: "/f/c", want: ""}, // not pi
+		{cwd: "/f/c", want: herdr.AgentIdle}, // Claude Code counts like pi
+		{cwd: "/f/d", want: ""},              // agents f doesn't start don't
 	}
 	for _, tt := range tests {
 		t.Run(tt.cwd, func(t *testing.T) {
