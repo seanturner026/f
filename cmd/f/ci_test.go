@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/seanturner026/pi/internal/model"
+	"github.com/seanturner026/f/internal/model"
 )
 
 func TestCollectFailures(t *testing.T) {

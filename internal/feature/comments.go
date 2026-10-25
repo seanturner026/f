@@ -7,7 +7,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/seanturner026/pi/internal/model"
+	"github.com/seanturner026/f/internal/model"
 )
 
 // ErrBadComment means a comment is missing its file, lines, or note.

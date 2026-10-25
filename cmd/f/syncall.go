@@ -8,10 +8,10 @@ import (
 
 	"go.opentelemetry.io/otel/attribute"
 
-	"github.com/seanturner026/pi/internal/feature"
-	"github.com/seanturner026/pi/internal/herdr"
-	"github.com/seanturner026/pi/internal/model"
-	"github.com/seanturner026/pi/internal/tracing"
+	"github.com/seanturner026/f/internal/feature"
+	"github.com/seanturner026/f/internal/herdr"
+	"github.com/seanturner026/f/internal/model"
+	"github.com/seanturner026/f/internal/tracing"
 )
 
 // syncAll is the periodic sync (launchd, every 30 min): for every feature,

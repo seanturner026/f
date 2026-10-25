@@ -3,7 +3,7 @@ package shell_test
 import (
 	"testing"
 
-	"github.com/seanturner026/pi/internal/shell"
+	"github.com/seanturner026/f/internal/shell"
 )
 
 func TestQuote(t *testing.T) {

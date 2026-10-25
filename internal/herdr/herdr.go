@@ -11,8 +11,8 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/seanturner026/pi/internal/agent"
-	"github.com/seanturner026/pi/internal/shell"
+	"github.com/seanturner026/f/internal/agent"
+	"github.com/seanturner026/f/internal/shell"
 )
 
 // Runner runs a command in dir and returns trimmed stdout.

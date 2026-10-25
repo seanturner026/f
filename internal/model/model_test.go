@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/seanturner026/pi/internal/model"
+	"github.com/seanturner026/f/internal/model"
 )
 
 func TestPRStatusFromGitHub(t *testing.T) {

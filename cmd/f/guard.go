@@ -10,7 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/seanturner026/pi/internal/guard"
+	"github.com/seanturner026/f/internal/guard"
 )
 
 // guardPaths are where the guard reads rules and writes pi's filtered credentials.

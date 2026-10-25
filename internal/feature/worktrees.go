@@ -9,10 +9,10 @@ import (
 
 	"go.opentelemetry.io/otel/attribute"
 
-	"github.com/seanturner026/pi/internal/git"
-	"github.com/seanturner026/pi/internal/github"
-	"github.com/seanturner026/pi/internal/model"
-	"github.com/seanturner026/pi/internal/tracing"
+	"github.com/seanturner026/f/internal/git"
+	"github.com/seanturner026/f/internal/github"
+	"github.com/seanturner026/f/internal/model"
+	"github.com/seanturner026/f/internal/tracing"
 )
 
 // AddResult says what AddRepo did.

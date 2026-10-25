@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/seanturner026/pi/internal/git"
+	"github.com/seanturner026/f/internal/git"
 )
 
 type fakeRunner struct {

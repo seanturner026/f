@@ -8,9 +8,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/seanturner026/pi/internal/feature"
-	gitpkg "github.com/seanturner026/pi/internal/git"
-	"github.com/seanturner026/pi/internal/shell"
+	"github.com/seanturner026/f/internal/feature"
+	gitpkg "github.com/seanturner026/f/internal/git"
+	"github.com/seanturner026/f/internal/shell"
 )
 
 // gitRepo makes a real git repo with one commit at dir.

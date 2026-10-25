@@ -8,8 +8,8 @@ import (
 
 	"go.opentelemetry.io/otel/attribute"
 
-	"github.com/seanturner026/pi/internal/git"
-	"github.com/seanturner026/pi/internal/tracing"
+	"github.com/seanturner026/f/internal/git"
+	"github.com/seanturner026/f/internal/tracing"
 )
 
 const (

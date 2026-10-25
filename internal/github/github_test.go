@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/seanturner026/pi/internal/github"
-	"github.com/seanturner026/pi/internal/model"
+	"github.com/seanturner026/f/internal/github"
+	"github.com/seanturner026/f/internal/model"
 )
 
 type fakeRunner struct {

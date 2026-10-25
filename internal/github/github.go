@@ -10,7 +10,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/seanturner026/pi/internal/model"
+	"github.com/seanturner026/f/internal/model"
 )
 
 // Runner runs a command in dir and returns trimmed stdout.

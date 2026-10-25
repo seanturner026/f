@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/seanturner026/pi/internal/beads"
-	"github.com/seanturner026/pi/internal/model"
+	"github.com/seanturner026/f/internal/beads"
+	"github.com/seanturner026/f/internal/model"
 )
 
 // fakeRunner answers by bd subcommand; "ERR" fails. It records the last args.

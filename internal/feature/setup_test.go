@@ -4,7 +4,7 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/seanturner026/pi/internal/feature"
+	"github.com/seanturner026/f/internal/feature"
 )
 
 func TestSetup(t *testing.T) {

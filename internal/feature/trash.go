@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/seanturner026/pi/internal/git"
+	"github.com/seanturner026/f/internal/git"
 )
 
 // TrashRetention is how long a removed feature can be restored.

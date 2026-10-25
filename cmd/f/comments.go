@@ -7,9 +7,9 @@ import (
 	"io"
 	"os"
 
-	"github.com/seanturner026/pi/internal/feature"
-	"github.com/seanturner026/pi/internal/herdr"
-	"github.com/seanturner026/pi/internal/model"
+	"github.com/seanturner026/f/internal/feature"
+	"github.com/seanturner026/f/internal/herdr"
+	"github.com/seanturner026/f/internal/model"
 )
 
 // commentAdd reads a comment as JSON on stdin (as nvim/f.lua sends it) and saves it.

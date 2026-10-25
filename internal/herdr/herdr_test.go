@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/seanturner026/pi/internal/agent"
-	"github.com/seanturner026/pi/internal/herdr"
+	"github.com/seanturner026/f/internal/agent"
+	"github.com/seanturner026/f/internal/herdr"
 )
 
 func TestAgentName(t *testing.T) {

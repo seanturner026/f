@@ -8,9 +8,9 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/seanturner026/pi/internal/feature"
-	"github.com/seanturner026/pi/internal/herdr"
-	"github.com/seanturner026/pi/internal/tracing"
+	"github.com/seanturner026/f/internal/feature"
+	"github.com/seanturner026/f/internal/herdr"
+	"github.com/seanturner026/f/internal/tracing"
 )
 
 // syncFeature refreshes PRs and reconciles repos whose PR merged (reset or

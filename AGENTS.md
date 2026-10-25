@@ -1,4 +1,4 @@
-# pi repo
+# f repo
 
 My Claude Code and pi config plus `f`, the multi-repo feature workspace CLI. What each part is: README.md. How it's used day to day: GUIDE.md.
 

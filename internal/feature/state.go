@@ -13,7 +13,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/seanturner026/pi/internal/model"
+	"github.com/seanturner026/f/internal/model"
 )
 
 // ContextDir holds per-feature state managed by f. It lives in the feature

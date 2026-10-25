@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/seanturner026/pi/internal/feature"
-	"github.com/seanturner026/pi/internal/model"
+	"github.com/seanturner026/f/internal/feature"
+	"github.com/seanturner026/f/internal/model"
 )
 
 // fakeRunner answers commands by their joined text ("git status --porcelain").

@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/seanturner026/pi/internal/beads"
-	"github.com/seanturner026/pi/internal/feature"
-	"github.com/seanturner026/pi/internal/github"
-	"github.com/seanturner026/pi/internal/model"
+	"github.com/seanturner026/f/internal/beads"
+	"github.com/seanturner026/f/internal/feature"
+	"github.com/seanturner026/f/internal/github"
+	"github.com/seanturner026/f/internal/model"
 )
 
 // ensureIssue gives the feature a beads issue if it has none yet (new

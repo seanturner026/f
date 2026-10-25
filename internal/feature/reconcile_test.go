@@ -10,9 +10,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/seanturner026/pi/internal/feature"
-	"github.com/seanturner026/pi/internal/model"
-	"github.com/seanturner026/pi/internal/shell"
+	"github.com/seanturner026/f/internal/feature"
+	"github.com/seanturner026/f/internal/model"
+	"github.com/seanturner026/f/internal/shell"
 )
 
 // syncFixture is a repo "app" with an origin, a base clone, feature "feat"'s

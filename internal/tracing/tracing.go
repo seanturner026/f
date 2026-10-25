@@ -24,7 +24,7 @@ import (
 	"go.opentelemetry.io/otel/trace/noop"
 )
 
-const scopeName = "github.com/seanturner026/pi/f"
+const scopeName = "github.com/seanturner026/f/f"
 
 var (
 	tracer   trace.Tracer = noop.NewTracerProvider().Tracer(scopeName)

@@ -1,4 +1,4 @@
-# pi
+# f
 
 My config for Claude Code and [pi](https://pi.dev), and the feature-workspace setup
 around them (Herdr + nvim + beads). Claude Code is the default agent; `F_AGENT=pi` picks pi.

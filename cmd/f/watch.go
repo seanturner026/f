@@ -11,8 +11,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/seanturner026/pi/internal/feature"
-	"github.com/seanturner026/pi/internal/model"
+	"github.com/seanturner026/f/internal/feature"
+	"github.com/seanturner026/f/internal/model"
 )
 
 // The PRs tab (`f prs --watch`) shows each repo's PRs and their checks, and

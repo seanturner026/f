@@ -16,13 +16,13 @@ import (
 
 	"go.opentelemetry.io/otel/attribute"
 
-	"github.com/seanturner026/pi/internal/agent"
-	"github.com/seanturner026/pi/internal/beads"
-	"github.com/seanturner026/pi/internal/feature"
-	"github.com/seanturner026/pi/internal/herdr"
-	"github.com/seanturner026/pi/internal/model"
-	"github.com/seanturner026/pi/internal/shell"
-	"github.com/seanturner026/pi/internal/tracing"
+	"github.com/seanturner026/f/internal/agent"
+	"github.com/seanturner026/f/internal/beads"
+	"github.com/seanturner026/f/internal/feature"
+	"github.com/seanturner026/f/internal/herdr"
+	"github.com/seanturner026/f/internal/model"
+	"github.com/seanturner026/f/internal/shell"
+	"github.com/seanturner026/f/internal/tracing"
 )
 
 // deps are what the actions need: where features live and how to run commands.

@@ -15,7 +15,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/seanturner026/pi/internal/git"
+	"github.com/seanturner026/f/internal/git"
 )
 
 // Runner runs a command in dir and returns trimmed stdout.

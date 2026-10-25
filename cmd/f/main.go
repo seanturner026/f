@@ -12,9 +12,9 @@ import (
 	"github.com/urfave/cli/v3"
 	"go.opentelemetry.io/otel/attribute"
 
-	"github.com/seanturner026/pi/internal/feature"
-	"github.com/seanturner026/pi/internal/herdr"
-	"github.com/seanturner026/pi/internal/tracing"
+	"github.com/seanturner026/f/internal/feature"
+	"github.com/seanturner026/f/internal/herdr"
+	"github.com/seanturner026/f/internal/tracing"
 )
 
 const help = `f: one agent session (Claude Code, or pi with F_AGENT=pi) across several repos, each on its own worktree.

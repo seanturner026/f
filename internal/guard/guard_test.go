@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/seanturner026/pi/internal/guard"
+	"github.com/seanturner026/f/internal/guard"
 )
 
 // rules mirror a typical local setup: generic defaults plus one allowed admin

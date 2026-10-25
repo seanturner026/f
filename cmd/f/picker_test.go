@@ -4,7 +4,7 @@ import (
 	"regexp"
 	"testing"
 
-	"github.com/seanturner026/pi/internal/model"
+	"github.com/seanturner026/f/internal/model"
 )
 
 var ansi = regexp.MustCompile(`\x1b\[[0-9;]*m`)
