@@ -381,28 +381,28 @@ export const register: Register = on => {
     const text = await read($, plan)
     if (!text) return <Text dimColor>no plan</Text>
     // Tree lines dim, the mark colored by status, the title wrapping in its own column.
-    // Gaps are margins: a Text's trailing spaces get collapsed.
+    // Fixed-width columns that never shrink: a Text's trailing spaces get
+    // collapsed, and a squeezed column wraps (tree lines split across rows).
     const rows = text.split('\n').filter(l => l.trim())
     return (
       <Box flexDirection="column" width={e.props.bodyColumns}>
         {rows.map((l, i) => {
           if (i === 0) return <Text bold>{l}</Text>
-          const [, rawTree = '', rest = l] = /^([ │├└─]*)(.*)$/.exec(l) ?? []
-          const tree = rawTree.trimEnd()
+          const [, tree = '', rest = l] = /^([ │├└─]*)(.*)$/.exec(l) ?? []
           const step = /^([○●◐❄✓]) (\S+)\s+(.*)$/.exec(rest)
           return (
             <Box flexDirection="row">
               {tree && (
-                <Box marginRight={1}>
-                  <Text dimColor>{tree}</Text>
+                <Box width={tree.length} flexShrink={0}>
+                  <Text dimColor>{tree.trimEnd()}</Text>
                 </Box>
               )}
               {step ? (
                 <Box flexDirection="row" flexShrink={1}>
-                  <Box marginRight={1}>
+                  <Box width={2} flexShrink={0}>
                     <Text color={MARK_COLORS[step[1] ?? '']}>{step[1]}</Text>
                   </Box>
-                  <Box marginRight={2}>
+                  <Box width={(step[2] ?? '').length + 2} flexShrink={0}>
                     <Text dimColor>{step[2]}</Text>
                   </Box>
                   <Box flexShrink={1}>
