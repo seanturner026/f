@@ -7,9 +7,12 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"go.opentelemetry.io/otel/attribute"
+
 	"github.com/seanturner026/pi/internal/feature"
 	"github.com/seanturner026/pi/internal/herdr"
 	"github.com/seanturner026/pi/internal/model"
+	"github.com/seanturner026/pi/internal/tracing"
 )
 
 // featureStatus is what the picker shows for a feature's pi.
@@ -124,9 +127,11 @@ func pickFeature(ctx context.Context, d deps) (string, error) {
 		}
 		// Full-screen (fast in Herdr's popup); ctrl-space closes it, like it opened.
 		// The cursor starts on the top row: the feature you're in.
+		_, wait := tracing.Start(ctx, "picker wait") // you choosing, not f working
 		out, err := runFzf(lines, "--ansi", "--delimiter=\t", "--with-nth=2..",
 			"--expect=ctrl-x", "--bind=ctrl-space:abort", "--prompt=feature> ",
 			"--header="+strings.Join(header, "\n"))
+		wait.End()
 		if err != nil || len(out) == 0 {
 			return "", err
 		}
@@ -245,7 +250,9 @@ func removeFeature(ctx context.Context, d deps, name string) string {
 	if known == nil {
 		known = []model.PR{}
 	}
-	problems, err := feature.Unmerged(ctx, d.run, d.layout, name, known)
+	checkCtx, span := tracing.Start(ctx, "picker close check", attribute.String("feature", name))
+	problems, err := feature.Unmerged(checkCtx, d.run, d.layout, name, known)
+	tracing.End(span, err)
 	if err != nil {
 		return red(fmt.Sprintf("%s: %v", name, err))
 	}
@@ -264,7 +271,7 @@ func removeFeature(ctx context.Context, d deps, name string) string {
 	}
 	// The beads issue is closed (or noted) in the background: bd takes ~0.5s.
 	// Read what it needs now, before the feature's files are gone.
-	issue := issueUpdateInBackground(d, name, force, problems)
+	issue := issueUpdateInBackground(ctx, d, name, force, problems)
 	if err := removeWithWorkspace(ctx, d, name); err != nil {
 		return red(err.Error())
 	}

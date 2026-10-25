@@ -7,11 +7,14 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/urfave/cli/v3"
+	"go.opentelemetry.io/otel/attribute"
 
 	"github.com/seanturner026/pi/internal/feature"
 	"github.com/seanturner026/pi/internal/herdr"
+	"github.com/seanturner026/pi/internal/tracing"
 )
 
 const help = `f: one agent session (Claude Code, or pi with F_AGENT=pi) across several repos, each on its own worktree.
@@ -24,14 +27,19 @@ const help = `f: one agent session (Claude Code, or pi with F_AGENT=pi) across s
   f ci fix         send failing checks to the agent (it proposes a fix, doesn't push)
   f sync           after a PR merges: reset/drop merged branches, rebase the rest onto main
   f restore [name] bring back a removed feature (14 days); no name lists the trash
+  f trace [stats]  where f spends time: Jaeger (Docker), or stats as text
 
 f <cmd> -h for flags. Plumbing used by the agent/nvim: f goal, f comment.
 `
+
+// sinceFlag bounds f trace to recent spans.
+var sinceFlag = &cli.DurationFlag{Name: "since", Value: 24 * time.Hour, Usage: "spans that ended this recently"}
 
 // featureFlag picks a feature explicitly; otherwise it's inferred from the cwd.
 var featureFlag = &cli.StringFlag{Name: "feature", Aliases: []string{"f"}, Usage: "feature (default: from cwd)"}
 
 func main() {
+	tracing.Init()
 	d, err := newDeps()
 	if err != nil {
 		fail(err)
@@ -168,6 +176,27 @@ func main() {
 				},
 			},
 			{
+				Name:  "trace",
+				Usage: "where f spends time: open its traces in Jaeger (Docker)",
+				Flags: []cli.Flag{sinceFlag},
+				Action: func(ctx context.Context, c *cli.Command) error {
+					return traceOpen(ctx, d, c.Duration("since"))
+				},
+				Commands: []*cli.Command{
+					{
+						Name:   "stop",
+						Usage:  "stop the Jaeger container",
+						Action: func(ctx context.Context, c *cli.Command) error { return traceStop(ctx, d) },
+					},
+					{
+						Name:   "stats",
+						Usage:  "per span: count, p50, p95, max; then the slowest runs (no Docker)",
+						Flags:  []cli.Flag{sinceFlag},
+						Action: func(ctx context.Context, c *cli.Command) error { return traceStats(c.Duration("since")) },
+					},
+				},
+			},
+			{
 				Name:      "restore",
 				Usage:     "bring back a removed feature (kept for 14 days); no name lists the trash",
 				ArgsUsage: "[feature]",
@@ -291,13 +320,40 @@ func main() {
 			},
 		},
 	}
+	traceActions(app)
 	if err := app.Run(context.Background(), os.Args); err != nil {
 		fail(err)
+	}
+	tracing.Shutdown()
+}
+
+// traceActions gives every command's run a root span named after it ("f sync",
+// "f checkpoint begin"); f sync --all keeps its flag, a different job.
+func traceActions(cmd *cli.Command) {
+	if cmd.Name == "trace" {
+		return // f trace itself would only add noise to what it shows
+	}
+	if action := cmd.Action; action != nil {
+		cmd.Action = func(ctx context.Context, c *cli.Command) error {
+			name := c.FullName()
+			if c.Name == "sync" && c.Bool("all") {
+				name += " --all"
+			}
+			ctx, span := tracing.Root(ctx, name)
+			span.SetAttributes(attribute.StringSlice("f.flags", c.LocalFlagNames()))
+			err := action(ctx, c)
+			tracing.End(span, err)
+			return err
+		}
+	}
+	for _, sub := range cmd.Commands {
+		traceActions(sub)
 	}
 }
 
 func fail(err error) {
 	fmt.Fprintf(os.Stderr, "%s %v\n", red("error:"), err)
+	tracing.Shutdown()
 	os.Exit(1)
 }
 

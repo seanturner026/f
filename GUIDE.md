@@ -165,6 +165,8 @@ Comment on the **right** side of a diff (the real file). Comments are saved in
 | `f sync` | Same as `/sync`. Leaves repos with uncommitted changes or conflicts alone (says so). Never pushes the default branch or branches outside the feature |
 | `f ci fix` | Send failing checks + failed-job logs to the feature's agent (clipboard if it isn't reachable) |
 | `f restore [name]` | Bring back a removed feature (worktrees, branches, uncommitted files), reopen its beads issue and open it. No name: list the trash. Kept 14 days; `f sync --all` deletes older ones, branches included. A name in the trash can't be reused until then |
+| `f trace [--since 24h]` | Where `f` spends time: starts Jaeger in Docker (`f-jaeger`) if needed, sends it the traces, opens http://localhost:16686. Jaeger keeps nothing on disk, so each run re-sends. `f trace stop` stops it |
+| `f trace stats [--since 24h]` | The same as text, no Docker (agents can run it): count, p50, p95, max per span, then the 10 slowest runs with their slowest steps |
 | `f goal [text]` | Show / set the goal |
 | `f comment list\|send\|clear` | Review comments (nvim uses these) |
 

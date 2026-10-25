@@ -105,7 +105,7 @@ func planSyncFeature(ctx context.Context, d deps, name string) error {
 // removed (reading its info and PRs now, while they exist) and returns a func
 // that runs it detached (`f close-issue`): close it with its merged PRs, or,
 // with force, note the unmerged work and leave it open.
-func issueUpdateInBackground(d deps, name string, force bool, problems []string) func() {
+func issueUpdateInBackground(ctx context.Context, d deps, name string, force bool, problems []string) func() {
 	info, _ := feature.LoadInfo(d.layout, name)
 	if info.Issue == "" {
 		return func() {}
@@ -117,7 +117,7 @@ func issueUpdateInBackground(d deps, name string, force bool, problems []string)
 		state, _ := feature.LoadState(d.layout, name)
 		args = append(args, "--reason", closeReason(state.PRs))
 	}
-	return func() { startDetached(args...) }
+	return func() { startDetached(ctx, args...) }
 }
 
 // closeIssueCmd is `f close-issue`: close the issue with reason (if bd won't,

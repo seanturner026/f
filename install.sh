@@ -46,7 +46,7 @@ cat > "$plist" <<PLIST
   <key>ProgramArguments</key>
   <array><string>/bin/sh</string><string>-c</string><string>exec f sync --all</string></array>
   <key>EnvironmentVariables</key>
-  <dict><key>PATH</key><string>$(go env GOPATH)/bin:$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string></dict>
+  <dict><key>PATH</key><string>$(go env GOPATH)/bin:$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string><key>F_CALLER</key><string>launchd</string></dict>
   <key>StartInterval</key><integer>1800</integer>
   <key>StandardOutPath</key><string>$HOME/Library/Logs/f-sync.log</string>
   <key>StandardErrorPath</key><string>$HOME/Library/Logs/f-sync.log</string>

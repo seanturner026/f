@@ -11,6 +11,9 @@
 -- Works inside an `f` feature: <base>/.features/<feature>/<repo>/...
 -- pi is found via `herdr agent list`: the pi agent whose cwd is the feature root.
 
+-- f records who called it in its traces (f trace stats).
+local F_ENV = { F_CALLER = "nvim" }
+
 local M = {}
 
 local ns = vim.api.nvim_create_namespace("f_comment")
@@ -54,7 +57,7 @@ end
 
 -- f_cli runs `f args...` in the feature root (stdin optional).
 local function f_cli(root, args, stdin)
-  local res = vim.system(vim.list_extend({ "f" }, args), { cwd = root, stdin = stdin, text = true }):wait()
+  local res = vim.system(vim.list_extend({ "f" }, args), { cwd = root, stdin = stdin, text = true, env = F_ENV }):wait()
   return res.code == 0, res.stdout or "", vim.trim(res.stderr or "")
 end
 
@@ -156,7 +159,7 @@ local function send()
   if not root then
     return vim.notify("PiComment: not inside an f feature", vim.log.levels.WARN)
   end
-  vim.system({ "f", "comment", "send" }, { cwd = root, text = true }, function(res)
+  vim.system({ "f", "comment", "send" }, { cwd = root, text = true, env = F_ENV }, function(res)
     vim.schedule(function()
       local out = vim.trim((res.stdout or "") .. (res.stderr or ""))
       vim.notify("PiComment: " .. out, res.code == 0 and vim.log.levels.INFO or vim.log.levels.ERROR)

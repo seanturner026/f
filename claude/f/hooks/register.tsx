@@ -34,7 +34,8 @@ const pick = atom({ plugin: 'f', key: 'pick' } as const, null, { shape: 'pick-1'
 
 async function f($: $, args: string[], timeoutMs = 30_000) {
   try {
-    const res = await $.process.run(['f', ...args], { cwd: await $.session.root(), timeoutMs })
+    // F_CALLER: f's traces record who called it (f trace stats).
+    const res = await $.process.run(['f', ...args], { cwd: await $.session.root(), env: { F_CALLER: 'claude' }, timeoutMs })
     return { code: res.exitCode, stdout: res.stdout, stderr: res.stderr }
   } catch (err) {
     return { code: 1, stdout: '', stderr: String(err) }

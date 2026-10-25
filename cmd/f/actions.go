@@ -14,12 +14,15 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"go.opentelemetry.io/otel/attribute"
+
 	"github.com/seanturner026/pi/internal/agent"
 	"github.com/seanturner026/pi/internal/beads"
 	"github.com/seanturner026/pi/internal/feature"
 	"github.com/seanturner026/pi/internal/herdr"
 	"github.com/seanturner026/pi/internal/model"
 	"github.com/seanturner026/pi/internal/shell"
+	"github.com/seanturner026/pi/internal/tracing"
 )
 
 // deps are what the actions need: where features live and how to run commands.
@@ -35,7 +38,7 @@ func newDeps() (deps, error) {
 	if err != nil {
 		return deps{}, err
 	}
-	return deps{layout: l, run: shell.Exec{}, socket: herdr.DefaultSocket(), noHerdr: os.Getenv("F_NO_HERDR") != ""}, nil
+	return deps{layout: l, run: tracing.Traced{Runner: shell.Exec{}, Base: l.Base}, socket: herdr.DefaultSocket(), noHerdr: os.Getenv("F_NO_HERDR") != ""}, nil
 }
 
 func checkName(name string) error {
@@ -109,6 +112,7 @@ func start(ctx context.Context, d deps, name string, repos []string) error {
 			fmt.Print(help)
 			return nil
 		}
+		tracing.Rename(ctx, "f picker")
 		picked, err := pickFeature(ctx, d)
 		if err != nil || picked == "" {
 			return err
@@ -117,18 +121,19 @@ func start(ctx context.Context, d deps, name string, repos []string) error {
 			return err
 		}
 		ensureIssue(ctx, d, picked)
-		syncInBackground(picked)
+		syncInBackground(ctx, picked)
 		return launch(ctx, d, picked, true)
 	}
 	if err := checkName(name); err != nil {
 		return err
 	}
 	if feature.Exists(d.layout, name) {
+		tracing.Rename(ctx, "f open")
 		if err := refreshInfo(d, name); err != nil {
 			return err
 		}
 		ensureIssue(ctx, d, name)
-		syncInBackground(name)
+		syncInBackground(ctx, name)
 		return launch(ctx, d, name, true)
 	}
 
@@ -136,6 +141,7 @@ func start(ctx context.Context, d deps, name string, repos []string) error {
 		return fmt.Errorf("%q: %w (its branch too): f restore %s, or pick another name", name, feature.ErrInTrash, name)
 	}
 
+	tracing.Rename(ctx, "f start")
 	if len(repos) == 0 && !interactive() {
 		// fzf would wait forever for a terminal that isn't there (pi's !f).
 		return fmt.Errorf("new feature %q needs repos: f %s -r <repo> [-r <repo>...], or /f %s in chat (it asks)", name, name, name)
@@ -160,7 +166,7 @@ func start(ctx context.Context, d deps, name string, repos []string) error {
 	if !d.noHerdr && herdr.Inside() {
 		// Open the workspace now; worktrees and the beads issue come in the
 		// background (fetching takes seconds) while you write the first prompt.
-		if err := setupInBackground(d, name, repos); err != nil {
+		if err := setupInBackground(ctx, d, name, repos); err != nil {
 			return err
 		}
 		return launch(ctx, d, name, false)
@@ -177,14 +183,14 @@ func start(ctx context.Context, d deps, name string, repos []string) error {
 
 // setupInBackground records repos as pending (so AGENTS.md, nvim and pi know
 // them already) and starts `f setup` to add their worktrees.
-func setupInBackground(d deps, name string, repos []string) error {
+func setupInBackground(ctx context.Context, d deps, name string, repos []string) error {
 	if err := feature.BeginSetup(d.layout, name, repos); err != nil {
 		return err
 	}
 	if _, err := feature.Sync(d.layout, name, ""); err != nil {
 		return err
 	}
-	startDetached(append([]string{"setup", "-f", name}, repos...)...)
+	startDetached(ctx, append([]string{"setup", "-f", name}, repos...)...)
 	return nil
 }
 
@@ -199,6 +205,8 @@ func setup(ctx context.Context, d deps, name string, repos []string) error {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
+			ctx, span := tracing.Start(ctx, "setup repo", attribute.String("repo", repo))
+			defer func() { tracing.End(span, errs[i]) }()
 			_, _, errs[i] = feature.AddRepo(ctx, d.run, d.layout, name, repo)
 			if errs[i] == nil {
 				agentsMD.Lock()
@@ -324,6 +332,7 @@ func launch(ctx context.Context, d deps, name string, reopen bool) error {
 	if err != nil {
 		return err
 	}
+	tracing.Finish(ctx) // Exec replaces this process: write the spans first
 	return syscall.Exec(bin, append([]string{chat.Bin}, chat.Args...), os.Environ())
 }
 
@@ -410,7 +419,7 @@ func add(ctx context.Context, d deps, explicit string, repos []string) error {
 	// f add (not a terminal) uses the repo right after, so it waits.
 	lazy := interactive() && !d.noHerdr && herdr.Inside()
 	if lazy {
-		if err := setupInBackground(d, name, repos); err != nil {
+		if err := setupInBackground(ctx, d, name, repos); err != nil {
 			return err
 		}
 		info("setting up %s in the background; the agent gets it with your next prompt", strings.Join(repos, ", "))

@@ -10,6 +10,7 @@ import (
 
 	"github.com/seanturner026/pi/internal/feature"
 	"github.com/seanturner026/pi/internal/herdr"
+	"github.com/seanturner026/pi/internal/tracing"
 )
 
 // syncFeature refreshes PRs and reconciles repos whose PR merged (reset or
@@ -115,16 +116,19 @@ func piWorking(ctx context.Context, d deps, name string) bool {
 }
 
 // syncInBackground starts `f sync --background` for name.
-func syncInBackground(name string) { startDetached("sync", "-f", name, "--background") }
+func syncInBackground(ctx context.Context, name string) {
+	startDetached(ctx, "sync", "-f", name, "--background")
+}
 
 // startDetached runs f with args in its own session, so it outlives the
 // picker's popup.
-func startDetached(args ...string) {
+func startDetached(ctx context.Context, args ...string) {
 	self, err := os.Executable()
 	if err != nil {
 		return
 	}
 	cmd := exec.Command(self, args...)
+	cmd.Env = tracing.ChildEnv(ctx) // its spans join this trace
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 	_ = cmd.Start()
 }

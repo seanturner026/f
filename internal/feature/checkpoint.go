@@ -6,7 +6,10 @@ import (
 	"fmt"
 	"sync"
 
+	"go.opentelemetry.io/otel/attribute"
+
 	"github.com/seanturner026/pi/internal/git"
+	"github.com/seanturner026/pi/internal/tracing"
 )
 
 const (
@@ -30,6 +33,8 @@ func CheckpointBegin(ctx context.Context, r Runner, l Layout, name string) error
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
+			ctx, span := tracing.Start(ctx, "checkpoint begin repo", attribute.String("repo", repo))
+			defer func() { tracing.End(span, errs[i]) }()
 			wt := RepoDir(l, name, repo)
 			commit, err := git.SnapshotCommit(ctx, r, wt)
 			if err == nil {

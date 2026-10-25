@@ -7,9 +7,12 @@ import (
 	"path/filepath"
 	"sync"
 
+	"go.opentelemetry.io/otel/attribute"
+
 	"github.com/seanturner026/pi/internal/git"
 	"github.com/seanturner026/pi/internal/github"
 	"github.com/seanturner026/pi/internal/model"
+	"github.com/seanturner026/pi/internal/tracing"
 )
 
 // AddResult says what AddRepo did.
@@ -24,6 +27,8 @@ const (
 // AddRepo adds a worktree for repo to feature name, on branch name. A new
 // branch starts from the latest origin default branch, which is returned as base.
 func AddRepo(ctx context.Context, r Runner, l Layout, name, repo string) (result AddResult, base string, err error) {
+	ctx, span := tracing.Start(ctx, "add repo", attribute.String("repo", repo))
+	defer func() { span.SetAttributes(attribute.String("add.result", string(result))); tracing.End(span, err) }()
 	src := filepath.Join(l.Base, repo)
 	dst := RepoDir(l, name, repo)
 	if !git.IsRepo(src) {

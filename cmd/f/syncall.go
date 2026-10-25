@@ -6,9 +6,12 @@ import (
 	"strings"
 	"time"
 
+	"go.opentelemetry.io/otel/attribute"
+
 	"github.com/seanturner026/pi/internal/feature"
 	"github.com/seanturner026/pi/internal/herdr"
 	"github.com/seanturner026/pi/internal/model"
+	"github.com/seanturner026/pi/internal/tracing"
 )
 
 // syncAll is the periodic sync (launchd, every 30 min): for every feature,
@@ -22,52 +25,60 @@ func syncAll(ctx context.Context, d deps) error {
 	}
 	stamp := time.Now().Format(time.DateTime)
 	_ = feature.EmptyTrash(ctx, d.run, d.layout, feature.TrashRetention) // removed features past restoring
+	_ = tracing.Trim(tracing.Path(), time.Now().Add(-tracing.Retention))
 	for _, name := range feature.List(d.layout) {
-		if err := planSyncFeature(ctx, d, name); err != nil {
-			fmt.Printf("%s %s: plan: %v\n", stamp, name, err)
-		}
-		before, _ := feature.LoadState(d.layout, name)
-		after, _, err := feature.RefreshPRs(ctx, d.run, d.layout, name)
-		if err != nil {
-			fmt.Printf("%s %s: %v\n", stamp, name, err)
-			continue
-		}
-		var lines []string
-		switch {
-		case name == focused:
-			fmt.Printf("%s %s: refreshed; no resets (you're in it)\n", stamp, name)
-		case piWorking(ctx, d, name):
-			fmt.Printf("%s %s: refreshed; no resets (the agent is running)\n", stamp, name)
-		default:
-			results, err := feature.Reconcile(ctx, d.run, d.layout, name, after.PRs, false)
-			if err != nil {
-				fmt.Printf("%s %s: %v\n", stamp, name, err)
-				continue
-			}
-			lines = syncLines(results, false)
-		}
-		closed, linked := closeMergedSteps(ctx, d, name, after.PRs)
-		notes := closed
-		for _, l := range closed {
-			fmt.Printf("%s %s: %s\n", stamp, name, l)
-		}
-		for _, p := range newlyMerged(before.PRs, after.PRs) {
-			if linked[strings.TrimSuffix(p.URL, "/")] {
-				continue // its step closes itself (above)
-			}
-			n := fmt.Sprintf("%s #%d merged (%s): close its beads step (bd close <id> --reason %s)", p.Repo, p.Number, p.URL, p.URL)
-			fmt.Printf("%s %s: %s\n", stamp, name, n)
-			notes = append(notes, n)
-		}
-		for _, l := range lines {
-			fmt.Printf("%s %s: %s\n", stamp, name, l)
-			notes = append(notes, l)
-		}
-		if len(notes) > 0 {
-			_ = feature.AddSyncNotes(d.layout, name, notes...)
-		}
+		syncAllFeature(ctx, d, name, focused, stamp)
 	}
 	return nil
+}
+
+// syncAllFeature is syncAll's work for one feature, as its own span.
+func syncAllFeature(ctx context.Context, d deps, name, focused, stamp string) {
+	ctx, span := tracing.Start(ctx, "sync feature", attribute.String("feature", name))
+	defer span.End()
+	if err := planSyncFeature(ctx, d, name); err != nil {
+		fmt.Printf("%s %s: plan: %v\n", stamp, name, err)
+	}
+	before, _ := feature.LoadState(d.layout, name)
+	after, _, err := feature.RefreshPRs(ctx, d.run, d.layout, name)
+	if err != nil {
+		fmt.Printf("%s %s: %v\n", stamp, name, err)
+		return
+	}
+	var lines []string
+	switch {
+	case name == focused:
+		fmt.Printf("%s %s: refreshed; no resets (you're in it)\n", stamp, name)
+	case piWorking(ctx, d, name):
+		fmt.Printf("%s %s: refreshed; no resets (the agent is running)\n", stamp, name)
+	default:
+		results, err := feature.Reconcile(ctx, d.run, d.layout, name, after.PRs, false)
+		if err != nil {
+			fmt.Printf("%s %s: %v\n", stamp, name, err)
+			return
+		}
+		lines = syncLines(results, false)
+	}
+	closed, linked := closeMergedSteps(ctx, d, name, after.PRs)
+	notes := closed
+	for _, l := range closed {
+		fmt.Printf("%s %s: %s\n", stamp, name, l)
+	}
+	for _, p := range newlyMerged(before.PRs, after.PRs) {
+		if linked[strings.TrimSuffix(p.URL, "/")] {
+			continue // its step closes itself (above)
+		}
+		n := fmt.Sprintf("%s #%d merged (%s): close its beads step (bd close <id> --reason %s)", p.Repo, p.Number, p.URL, p.URL)
+		fmt.Printf("%s %s: %s\n", stamp, name, n)
+		notes = append(notes, n)
+	}
+	for _, l := range lines {
+		fmt.Printf("%s %s: %s\n", stamp, name, l)
+		notes = append(notes, l)
+	}
+	if len(notes) > 0 {
+		_ = feature.AddSyncNotes(d.layout, name, notes...)
+	}
 }
 
 // newlyMerged lists PRs merged in after that weren't merged in before.

@@ -8,9 +8,12 @@ import (
 	"strings"
 	"sync"
 
+	"go.opentelemetry.io/otel/attribute"
+
 	"github.com/seanturner026/pi/internal/git"
 	"github.com/seanturner026/pi/internal/github"
 	"github.com/seanturner026/pi/internal/model"
+	"github.com/seanturner026/pi/internal/tracing"
 )
 
 // SyncAction is what Reconcile did to a repo after a PR merged.
@@ -84,7 +87,10 @@ func Reconcile(ctx context.Context, r Runner, l Layout, name string, prs []model
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
+			ctx, span := tracing.Start(ctx, "reconcile repo", attribute.String("repo", repo))
 			found[i] = reconcileRepo(ctx, r, l, name, repo, prs, push)
+			span.SetAttributes(attribute.String("sync.action", string(found[i].Action)))
+			span.End()
 		}()
 	}
 	wg.Wait()
