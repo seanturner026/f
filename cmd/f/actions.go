@@ -303,6 +303,15 @@ func addRepos(ctx context.Context, d deps, name string, repos []string) error {
 	return errors.Join(errs...)
 }
 
+// featureRepos is the feature's repos for its Herdr tabs: feature.json's list,
+// which has repos f setup is still adding (their review tabs wait for them).
+func featureRepos(d deps, name string) ([]string, error) {
+	if info, err := feature.LoadInfo(d.layout, name); err == nil && len(info.Repos) > 0 {
+		return info.Repos, nil
+	}
+	return feature.Repos(d.layout, name)
+}
+
 // launch runs the agent for the feature: in its own Herdr workspace when
 // called from inside Herdr, otherwise right here in this terminal.
 func launch(ctx context.Context, d deps, name string, reopen bool) error {
@@ -310,7 +319,7 @@ func launch(ctx context.Context, d deps, name string, reopen bool) error {
 	chat := agent.For(name, dir, reopen)
 	// Inside Herdr, its server is up by definition: skip the status round trip.
 	if !d.noHerdr && herdr.Inside() {
-		repos, err := feature.Repos(d.layout, name)
+		repos, err := featureRepos(d, name)
 		if err != nil {
 			return err
 		}
@@ -363,7 +372,7 @@ func resume(ctx context.Context, d deps) error {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			repos, err := feature.Repos(d.layout, name)
+			repos, err := featureRepos(d, name)
 			if err != nil {
 				res.err = err
 				return
