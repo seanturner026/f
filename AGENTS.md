@@ -1,6 +1,6 @@
 # pi repo
 
-My pi config plus `f`, the multi-repo feature workspace CLI. What each part is: README.md. How it's used day to day: GUIDE.md.
+My Claude Code and pi config plus `f`, the multi-repo feature workspace CLI. What each part is: README.md. How it's used day to day: GUIDE.md.
 
 ## Workflow
 
@@ -24,7 +24,8 @@ My pi config plus `f`, the multi-repo feature workspace CLI. What each part is: 
 - One owner per fact; copies are for display only, never for decisions: plan steps → beads (`state.json` `plan` is a cache), PRs merged or not → GitHub (`state.json` `prs` is a cache), code → the worktrees. A beads step linked to PRs (`external_ref`, space-separated URLs) is closed by `f` when GitHub says they all merged (`closeMergedSteps`).
 - `f` is the only writer of a feature's `.context/`; pi (`agent/extensions/`) and nvim (`nvim/f.lua`) read it or call `f`.
 - Change `state.json` with `feature.UpdateState` (it locks), never `SaveState` alone.
-- `feature.json` (`feature.Info`), `state.json`, and `f prs --json` (`model.PR`) are mirrored by hand in `agent/extensions/f.ts`, `agent/extensions/repo-instructions/index.ts`, and `nvim/f.lua`: change them together.
+- `feature.json` (`feature.Info`), `state.json`, and `f prs --json` (`model.PR`) are mirrored by hand in `agent/extensions/f.ts`, `agent/extensions/repo-instructions/index.ts`, `claude/` (the Claude Code mod and statusline), and `nvim/f.lua`: change them together.
+- `f` starts Claude Code by default, pi with `F_AGENT=pi` (`internal/agent`). `claude/` (the `f` mod, statusline, settings) is linked to `~/.claude/f`; keep the mod and pi's extensions in step. Check the mod with `claude plugin validate claude/f`.
 - Packages that shell out declare their own small `Runner` interface; `shell.Exec` implements it, tests use fakes.
 - `state.json` `setup` (`feature.Setup`): repos `f setup` is still adding in the background; `feature.json` already lists them, `f.ts` holds a run until it's gone, nvim review tabs wait for the worktree. `f setup` queues sync notes before `EndSetup`, so pi gets them with the run it was holding.
 - `feature.Remove` moves a feature into `.features/.trash/<name>-<stamp>` and re-links its worktrees there (`git worktree repair`), keeping branches; only `EmptyTrash` (after `TrashRetention`) prunes worktrees and deletes branches.

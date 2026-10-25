@@ -61,7 +61,7 @@ func checkAssign(name, value string, r Rules) Verdict {
 	case scopedEnv[name]:
 		return Verdict{Block: true, Reason: fmt.Sprintf("%s is managed by the guard; don't override it", name)}
 	case name == "AWS_PROFILE" && value != "" && !ProfileAllowed(r, value):
-		return Verdict{Block: true, Reason: fmt.Sprintf("AWS profile %q is not allowed for pi", value)}
+		return Verdict{Block: true, Reason: fmt.Sprintf("AWS profile %q is not allowed for the agent", value)}
 	}
 	return Verdict{}
 }
@@ -70,7 +70,7 @@ func checkCall(args []string, r Rules, depth int) Verdict {
 	for _, a := range args {
 		for _, p := range realCredentialPaths {
 			if strings.Contains(a, p) {
-				return Verdict{Block: true, Reason: fmt.Sprintf("%s holds unfiltered credentials; pi uses filtered copies", p)}
+				return Verdict{Block: true, Reason: fmt.Sprintf("%s holds unfiltered credentials; the agent uses filtered copies", p)}
 			}
 		}
 	}
@@ -107,7 +107,7 @@ func flagValue(args []string, name string) (string, bool) {
 
 func checkAWS(args []string, r Rules) Verdict {
 	if p, ok := flagValue(args, "--profile"); ok && !ProfileAllowed(r, p) {
-		return Verdict{Block: true, Reason: fmt.Sprintf("AWS profile %q is not allowed for pi", p)}
+		return Verdict{Block: true, Reason: fmt.Sprintf("AWS profile %q is not allowed for the agent", p)}
 	}
 	if len(args) >= 2 && args[0] == "eks" {
 		var cluster string
@@ -118,7 +118,7 @@ func checkAWS(args []string, r Rules) Verdict {
 			cluster, _ = flagValue(args, "--cluster-name")
 		}
 		if cluster != "" && !ContextAllowed(r, cluster) {
-			return Verdict{Block: true, Reason: fmt.Sprintf("EKS cluster %q is not allowed for pi", cluster)}
+			return Verdict{Block: true, Reason: fmt.Sprintf("EKS cluster %q is not allowed for the agent", cluster)}
 		}
 	}
 	return Verdict{}
@@ -129,10 +129,10 @@ func checkKubectl(args []string, r Rules) Verdict {
 		return Verdict{Block: true, Reason: "--kubeconfig bypasses the guard's filtered kubeconfig"}
 	}
 	if c, ok := flagValue(args, "--context"); ok && !ContextAllowed(r, c) {
-		return Verdict{Block: true, Reason: fmt.Sprintf("kube context %q is not allowed for pi", c)}
+		return Verdict{Block: true, Reason: fmt.Sprintf("kube context %q is not allowed for the agent", c)}
 	}
 	if len(args) >= 3 && args[0] == "config" && (args[1] == "use-context" || args[1] == "set-context") && !ContextAllowed(r, args[2]) {
-		return Verdict{Block: true, Reason: fmt.Sprintf("kube context %q is not allowed for pi", args[2])}
+		return Verdict{Block: true, Reason: fmt.Sprintf("kube context %q is not allowed for the agent", args[2])}
 	}
 	return Verdict{}
 }

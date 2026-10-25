@@ -62,8 +62,9 @@ func planSync(ctx context.Context, d deps) error {
 	return planSyncFeature(ctx, d, name)
 }
 
-// planShow prints the current feature's plan (/plan in pi).
-func planShow(ctx context.Context, d deps) error {
+// planShow prints the current feature's plan (/plan in pi), or with tree as
+// a dependency tree (/plan in Claude Code).
+func planShow(ctx context.Context, d deps, tree bool) error {
 	name, err := resolve(d, "")
 	if err != nil {
 		return err
@@ -80,7 +81,11 @@ func planShow(ctx context.Context, d deps) error {
 	if err != nil {
 		return err
 	}
-	fmt.Print(model.PlanView(name, info.Issue, steps))
+	if tree {
+		fmt.Print(model.PlanTree(name, info.Issue, steps))
+	} else {
+		fmt.Print(model.PlanView(name, info.Issue, steps))
+	}
 	return nil
 }
 

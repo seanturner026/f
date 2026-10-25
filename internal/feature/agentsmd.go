@@ -10,7 +10,7 @@ import (
 
 // GoalPlaceholder is shown until a goal is set (`f goal`; pi's f extension
 // sets it from the first prompt).
-const GoalPlaceholder = "_Not set yet: the first prompt to pi becomes the goal._"
+const GoalPlaceholder = "_Not set yet: the first chat prompt becomes the goal._"
 
 // legacyPlaceholder is what older AGENTS.md files used.
 const legacyPlaceholder = "_TBD: set from the first prompt._"
@@ -70,6 +70,21 @@ func writeAgentsMD(l Layout, info Info) error {
 	defer f.Close()
 	if err := agentsTmpl.Execute(f, map[string]any{"Name": info.Name, "Goal": goal, "Repos": repos, "Issue": info.Issue}); err != nil {
 		return fmt.Errorf("write AGENTS.md: %w", err)
+	}
+	return writeClaudeMD(l, info.Name, repos)
+}
+
+// writeClaudeMD points Claude Code, which reads only CLAUDE.md, at the
+// feature's AGENTS.md and every repo's instructions (loaded up front).
+func writeClaudeMD(l Layout, name string, repos []agentsRepo) error {
+	lines := []string{"@AGENTS.md"}
+	for _, r := range repos {
+		if r.Instructions != "" {
+			lines = append(lines, "@"+r.Instructions)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(Dir(l, name), "CLAUDE.md"), []byte(strings.Join(lines, "\n")+"\n"), 0o644); err != nil {
+		return fmt.Errorf("write CLAUDE.md: %w", err)
 	}
 	return nil
 }

@@ -18,6 +18,9 @@ for item in "$repo"/agent/* "$repo"/agent/.[!.]*; do
   link "$item" "$pi_dir/$(basename "$item")"
 done
 
+# Claude Code (F_AGENT=claude): settings, statusline and the f mod → ~/.claude/f
+link "$repo/claude" "$HOME/.claude/f"
+
 # nvim: f (require("f").setup() in init.lua)
 link "$repo/nvim/f.lua" "$HOME/.config/nvim/lua/f.lua"
 

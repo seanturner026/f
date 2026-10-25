@@ -1,5 +1,5 @@
 // Command f creates and manages multi-repo feature workspaces:
-// git worktrees + a generated AGENTS.md + pi (in a Herdr workspace when inside Herdr).
+// git worktrees + a generated AGENTS.md + the agent (in a Herdr workspace when inside Herdr).
 package main
 
 import (
@@ -14,18 +14,18 @@ import (
 	"github.com/seanturner026/pi/internal/herdr"
 )
 
-const help = `f: one pi session across several repos, each on its own worktree.
+const help = `f: one agent session (Claude Code, or pi with F_AGENT=pi) across several repos, each on its own worktree.
 
   f <name>         start a feature (pick repos), or reopen it
   f                picker: what needs you → jump there (ctrl-x remove)
   f add [repo...]  add repos to this feature
-  f resume         after a Herdr restart: restart pi, nvim, prs in every feature workspace
+  f resume         after a Herdr restart: restart the agent, nvim, prs in every feature workspace
   f prs [-r] [-c]  this feature's PRs (-r refresh, -c copy, -w live view)
-  f ci fix         send failing checks to pi (it proposes a fix, doesn't push)
+  f ci fix         send failing checks to the agent (it proposes a fix, doesn't push)
   f sync           after a PR merges: reset/drop merged branches, rebase the rest onto main
   f restore [name] bring back a removed feature (14 days); no name lists the trash
 
-f <cmd> -h for flags. Plumbing used by pi/nvim: f goal, f comment.
+f <cmd> -h for flags. Plumbing used by the agent/nvim: f goal, f comment.
 `
 
 // featureFlag picks a feature explicitly; otherwise it's inferred from the cwd.
@@ -64,7 +64,8 @@ func main() {
 					{
 						// /plan in pi: steps grouped by in progress / ready / blocked / done.
 						Name:   "show",
-						Action: func(ctx context.Context, c *cli.Command) error { return planShow(ctx, d) },
+						Flags:  []cli.Flag{&cli.BoolFlag{Name: "tree", Usage: "dependency tree (/plan in Claude Code)"}},
+						Action: func(ctx context.Context, c *cli.Command) error { return planShow(ctx, d, c.Bool("tree")) },
 					},
 				},
 			},
@@ -109,7 +110,7 @@ func main() {
 			},
 			{
 				Name:   "resume",
-				Usage:  "after a Herdr restart: restart pi, nvim, review, prs in every feature workspace",
+				Usage:  "after a Herdr restart: restart the agent, nvim, review, prs in every feature workspace",
 				Action: func(ctx context.Context, c *cli.Command) error { return resume(ctx, d) },
 			},
 			{
@@ -127,7 +128,7 @@ func main() {
 			{
 				Name:   "comment",
 				Hidden: true,
-				Usage:  "review comments for pi (nvim: <leader>pc / <leader>ps)",
+				Usage:  "review comments for the agent (nvim: <leader>pc / <leader>ps)",
 				Flags:  []cli.Flag{featureFlag},
 				Commands: []*cli.Command{
 					{Name: "add", Usage: "add a comment (JSON on stdin)", Flags: []cli.Flag{featureFlag},
@@ -138,7 +139,7 @@ func main() {
 						Action: func(ctx context.Context, c *cli.Command) error {
 							return commentList(d, c.String("feature"), c.Bool("json"))
 						}},
-					{Name: "send", Usage: "send them to pi and clear", Flags: []cli.Flag{featureFlag},
+					{Name: "send", Usage: "send them to the agent and clear", Flags: []cli.Flag{featureFlag},
 						Action: func(ctx context.Context, c *cli.Command) error {
 							return commentSend(ctx, d, c.String("feature"))
 						}},
@@ -191,6 +192,12 @@ func main() {
 				Action: func(ctx context.Context, c *cli.Command) error {
 					return setup(ctx, d, c.String("feature"), c.Args().Slice())
 				},
+			},
+			{
+				// Called by the Claude Code mod (claude/f) before a turn: wait for f setup.
+				Name:   "setup-wait",
+				Hidden: true,
+				Action: func(ctx context.Context, c *cli.Command) error { return setupWait(ctx, d) },
 			},
 			{
 				// Started by the picker after removing a feature (bd is slow).
@@ -246,7 +253,7 @@ func main() {
 				Usage: "CI on this feature's PRs",
 				Commands: []*cli.Command{{
 					Name:  "fix",
-					Usage: "send failing checks (with failed job logs) to pi: find the cause, propose a fix, don't push",
+					Usage: "send failing checks (with failed job logs) to the agent: find the cause, propose a fix, don't push",
 					Flags: []cli.Flag{featureFlag, &cli.BoolFlag{Name: "print", Usage: "print the prompt instead (for /ci)"}},
 					Action: func(ctx context.Context, c *cli.Command) error {
 						return ciFix(ctx, d, c.String("feature"), c.Bool("print"))

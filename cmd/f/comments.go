@@ -83,7 +83,7 @@ func commentSend(ctx context.Context, d deps, explicit string) error {
 	if err := feature.ClearComments(d.layout, name); err != nil {
 		return err
 	}
-	ok("sent %d comment(s) to pi", len(cs))
+	ok("sent %d comment(s) to the agent", len(cs))
 	return nil
 }
 

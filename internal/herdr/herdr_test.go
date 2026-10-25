@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/seanturner026/pi/internal/agent"
 	"github.com/seanturner026/pi/internal/herdr"
 )
 
@@ -99,7 +100,7 @@ func TestOpenWorkspaceTabOrder(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			r := &recordingRunner{}
-			res, err := herdr.OpenWorkspace(context.Background(), r, "feat", "/f/feat", tt.repos, []string{"--name", "feat"})
+			res, err := herdr.OpenWorkspace(context.Background(), r, "feat", "/f/feat", tt.repos, agent.Command{Bin: agent.Pi, Args: []string{"--name", "feat"}})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -345,7 +346,7 @@ func (r *reviveRunner) Run(_ context.Context, _, _ string, args ...string) (stri
 
 func TestReviveWorkspace(t *testing.T) {
 	repos := []string{"argocd", "gateway", "infra"}
-	piArgs := []string{"--name", "feat", "--continue"}
+	chat := agent.Command{Bin: agent.Pi, Args: []string{"--name", "feat", "--continue"}}
 	tests := []struct {
 		name string
 		busy []string
@@ -374,7 +375,7 @@ func TestReviveWorkspace(t *testing.T) {
 			for _, p := range tt.busy {
 				r.busy[p] = true
 			}
-			n, err := herdr.ReviveWorkspace(context.Background(), r, "w1", "feat", repos, piArgs)
+			n, err := herdr.ReviveWorkspace(context.Background(), r, "w1", "feat", repos, chat)
 			if err != nil {
 				t.Fatal(err)
 			}

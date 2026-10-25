@@ -37,7 +37,7 @@ func syncAll(ctx context.Context, d deps) error {
 		case name == focused:
 			fmt.Printf("%s %s: refreshed; no resets (you're in it)\n", stamp, name)
 		case piWorking(ctx, d, name):
-			fmt.Printf("%s %s: refreshed; no resets (pi is running)\n", stamp, name)
+			fmt.Printf("%s %s: refreshed; no resets (the agent is running)\n", stamp, name)
 		default:
 			results, err := feature.Reconcile(ctx, d.run, d.layout, name, after.PRs, false)
 			if err != nil {

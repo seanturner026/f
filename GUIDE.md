@@ -1,6 +1,6 @@
 # Operator guide
 
-How to run the pi + Herdr + nvim + beads setup day to day. The README covers
+How to run the Claude Code (or pi) + Herdr + nvim + beads setup day to day. The README covers
 what each part is; this covers how to use it.
 
 ## The pieces
@@ -9,8 +9,9 @@ what each part is; this covers how to use it.
 |---|---|
 | `f` | Creates and owns features: worktrees, branches, `AGENTS.md`, `.context/`, Herdr layout, cleanup, beads issue |
 | Herdr | Terminals: one workspace per feature, agent status |
-| pi | The agent. Extensions: `f.ts` (goal, checkpoints, PRs, plan), `guard.ts` (credentials), `repo-instructions/` (must read a repo's CLAUDE.md/AGENTS.md in full before touching it), `compact-read.ts` (one-line reads), `copy-code.ts` (`/code`) |
-| nvim | Review: one live CodeDiff tab per repo, comments for pi (`nvim/f.lua`) |
+| Claude Code | The agent (default). The `f` mod in `claude/f/`: guard, goal, checkpoints, PRs, plan, `/code` |
+| pi | The agent with `F_AGENT=pi`. Extensions: `f.ts` (goal, checkpoints, PRs, plan), `guard.ts` (credentials), `repo-instructions/` (must read a repo's CLAUDE.md/AGENTS.md in full before touching it), `compact-read.ts` (one-line reads), `copy-code.ts` (`/code`) |
+| nvim | Review: one live CodeDiff tab per repo, comments for the agent (`nvim/f.lua`) |
 | beads (`bd`) | The plan: one issue per feature, child issues for steps |
 
 A feature is `~/code/features/.features/<name>/`: one worktree per
@@ -21,22 +22,22 @@ by `f`).
 
 1. **Start**: from any Herdr shell (`ctrl+b t` popup, or a shell tab):
    `f <name>` → pick repos (TAB selects, filter clears) → Herdr opens the
-   workspace at once, pi waiting, while worktrees are fetched in the background
+   workspace at once, the agent waiting, while worktrees are fetched in the background
    (repo tabs say "setting up"). Type your first prompt; if you send it before
-   they're ready, pi shows "setting up worktrees… (n/m)" and starts when they
+   they're ready, the agent shows "setting up worktrees… (n/m)" and starts when they
    are. It becomes the goal and the beads issue description. Use `@` to
    reference files across repos.
-2. **Direction**: pi asks questions, then proposes. Approve or steer.
+2. **Direction**: the agent asks questions, then proposes. Approve or steer.
 3. **Review**: `opt+3…` repo tabs show a live CodeDiff of the whole feature.
-   `<leader>pr` toggles to *just pi's last run*. Comment with `<leader>pc`,
+   `<leader>pr` toggles to *just the agent's last run*. Comment with `<leader>pc`,
    send them all with `<leader>ps`. Small fixes: edit the right-hand side
-   directly and tell pi ("I edited X").
-4. **PRs**: pi opens them; they show in pi's footer with CI (`✓` `⋯` `✗`), and the
+   directly and tell the agent ("I edited X").
+4. **PRs**: the agent opens them; they show in the statusline (pi: footer) with CI (`✓` `⋯` `✗`), and the
    `prs` tab lists each PR's failing/running checks. `!!f prs -c` copies
    `url: title` lines (stacks numbered 1/3, 2/3, …).
 5. **Switch**: `ctrl+space` → picker, ordered by what needs you.
 6. **Merged**: the repo resets to main by itself (on open, `r` in prs, `/sync`, or tell
-   pi "merged"), so more work in the feature starts a fresh PR. Squash merges are
+   the agent "merged"), so more work in the feature starts a fresh PR. Squash merges are
    recognized by content: merged stack branches are reset or deleted, the rest rebased
    onto main and pushed.
 7. **Done**: when PRs merge, `ctrl-x` the feature in the picker. The beads
@@ -46,7 +47,7 @@ by `f`).
    their branches and uncommitted files: `f restore <name>` within 14 days.
 
 Big multi-step work (e.g. ACK across tf/argocd/prod/ops): start one
-feature with all the repos, ask pi to **plan it in beads** (child issues +
+feature with all the repos, ask the agent to **plan it in beads** (child issues +
 dependencies), then let it work through `bd ready`. Progress shows in the
 picker (`3/5 done · next: …`).
 
@@ -63,7 +64,7 @@ picker (`3/5 done · next: …`).
 | `ctrl+b t` | Popup shell (`exit` / `ctrl+d` closes it) |
 | `ctrl+b w` | Herdr's own workspace list |
 | `ctrl+b b` | Toggle the sidebar (hidden by default) |
-| `ctrl+b shift+d` | Close this workspace (pi's session is kept) |
+| `ctrl+b shift+d` | Close this workspace (the agent's session is kept) |
 | `ctrl+b q` | Detach (everything keeps running; `herdr` reattaches) |
 
 ### PRs tab (`f prs --watch`)
@@ -71,7 +72,7 @@ picker (`3/5 done · next: …`).
 | Key | Does |
 |---|---|
 | `r` | Refresh now (a re-run on GitHub, a merge) |
-| `f` | Fix CI: send failing checks + logs to this feature's pi (same as `/ci`) |
+| `f` | Fix CI: send failing checks + logs to this feature's agent (same as `/ci`) |
 | `q` | Quit (back to a shell; `f prs -w` restarts it) |
 
 Each open PR lists its failing (with link) and running checks; passed and
@@ -91,10 +92,27 @@ Columns: `●` marks the workspace you're in (listed first, with the cursor on i
 FEATURE · PI status · CI of open PRs (`✓`, `⋯ running`, `✗ <repos>`) · PRS ·
 PLAN (beads steps).
 
-Order: **needs you** (pi asked something, or CI failing) → **done** (finished,
-unseen) → **working** → **idle** → **closed** (no pi running).
+Order: **needs you** (the agent asked something, or CI failing) → **done** (finished,
+unseen) → **working** → **idle** → **closed** (no agent running).
 
-### pi
+### Claude Code (the default agent)
+
+`f` starts Claude Code with the `f` mod, statusline and settings from `claude/`
+(`F_CLAUDE_DIR` overrides `~/.claude/f`). It starts in auto mode, and the
+feature's `CLAUDE.md` imports its AGENTS.md and each repo's instructions.
+The statusline shows the feature's PRs with CI, like pi's footer.
+
+| Command | Does |
+|---|---|
+| `/prs`, `/prc`, `/sync`, `/ci`, `/code [n]`, `/slack` | As in pi; none of them reach the model except `/ci` |
+| `/f [name] [repo…]` | As in pi; no tab completion: a bare `/f` picks a feature, a new name picks repos |
+| `/plan` | As in pi, but in a sidebar that updates as the plan changes; replaces Claude Code's `/plan` (shift+tab still reaches plan mode) |
+
+The guard, goal, checkpoints and PR recording work as in pi. Herdr's busy/idle
+marks need `herdr integration install claude`. Mouse selection copies when
+**Copy on select** is on in `/config`; hold Shift for Herdr's own selection.
+
+### pi (`F_AGENT=pi`)
 
 | Key / command | Does |
 |---|---|
@@ -124,10 +142,10 @@ unseen) → **working** → **idle** → **closed** (no pi running).
 | `t` | Side-by-side ↔ inline |
 | `gf` | Open the file in a normal tab |
 | `g?` | All CodeDiff keys |
-| `<leader>pr` | Whole feature ↔ since pi's last run |
+| `<leader>pr` | Whole feature ↔ since the agent's last run |
 | `<leader>pc` | Comment on line/selection (normal or visual) |
 | `<leader>pl` | List pending comments (quickfix) |
-| `<leader>ps` | Send comments to pi |
+| `<leader>ps` | Send comments to the agent |
 | `:PiClear` | Discard pending comments |
 | `:PiReview [repo]` | Reopen a repo's CodeDiff (no repo: all, as nvim tabs) |
 
@@ -138,14 +156,14 @@ Comment on the **right** side of a diff (the real file). Comments are saved in
 
 | Command | Does |
 |---|---|
-| `f <name>` | Start a feature, or reopen it (continues pi's session; restarts any of its tabs that are back at a bare shell) |
-| `f resume` | After quitting WezTerm/Herdr: Herdr restores the layout as bare shells; this restarts pi (`--continue`), nvim, review, and prs in every feature workspace. Shell tabs and anything still running are left alone |
+| `f <name>` | Start a feature, or reopen it (continues the agent's session; restarts any of its tabs that are back at a bare shell) |
+| `f resume` | After quitting WezTerm/Herdr: Herdr restores the layout as bare shells; this restarts the agent (`--continue`), nvim, review, and prs in every feature workspace. Shell tabs and anything still running are left alone |
 | `f` | Picker |
-| `f add [repo…]` | Add repos to this feature (+ Herdr tabs, before shell). From your shell in Herdr it returns at once and sets them up in the background (pi gets them with your next prompt); run by pi it waits |
+| `f add [repo…]` | Add repos to this feature (+ Herdr tabs, before shell). From your shell in Herdr it returns at once and sets them up in the background (the agent gets them with your next prompt); run by the agent it waits |
 | `f prs [-r] [-c] [-n] [-w]` | PRs: from saved state; `-r` refresh live, `-c` copy, `-n` don't open browser, `-w` live view (the prs tab) |
-| `f sync --all` | What launchd runs every 30 min: PR/CI and plan refresh for every feature; post-merge resets wait for the one you're in or a busy pi; never pushes; pi gets a note with its next prompt. Log: `~/Library/Logs/f-sync.log` |
+| `f sync --all` | What launchd runs every 30 min: PR/CI and plan refresh for every feature; post-merge resets wait for the one you're in or a busy agent; never pushes; the agent gets a note with its next prompt. Log: `~/Library/Logs/f-sync.log` |
 | `f sync` | Same as `/sync`. Leaves repos with uncommitted changes or conflicts alone (says so). Never pushes the default branch or branches outside the feature |
-| `f ci fix` | Send failing checks + failed-job logs to the feature's pi (clipboard if pi isn't reachable) |
+| `f ci fix` | Send failing checks + failed-job logs to the feature's agent (clipboard if it isn't reachable) |
 | `f restore [name]` | Bring back a removed feature (worktrees, branches, uncommitted files), reopen its beads issue and open it. No name: list the trash. Kept 14 days; `f sync --all` deletes older ones, branches included. A name in the trash can't be reused until then |
 | `f goal [text]` | Show / set the goal |
 | `f comment list\|send\|clear` | Review comments (nvim uses these) |
@@ -156,7 +174,7 @@ Comment on the **right** side of a diff (the real file). Comments are saved in
 
 - One db for everything: `~/code/features/.beads`.
 - Each feature's issue id is in `.context/feature.json`; its `AGENTS.md` tells
-  pi how to plan steps under it.
+  the agent how to plan steps under it.
 - Useful: `bd ready` (what's unblocked), `bd list --status closed` (what you
   finished), `bd show <id>`, `bd children <id>`.
 - Removing a feature with open steps or unmerged work leaves its issue open
@@ -164,7 +182,7 @@ Comment on the **right** side of a diff (the real file). Comments are saved in
 
 ## Guard
 
-pi can't use admin AWS profiles or production kube contexts. At start it gets
+The agent can't use admin AWS profiles or production kube contexts. At start it gets
 filtered copies of `~/.aws/config`, `~/.aws/credentials`, and the kubeconfig
 (in `~/.cache/f/guard/`), default profile from `~/.config/f/guard.json`.
 Commands naming a denied profile/context/prod EKS cluster, or pointing back at
@@ -172,32 +190,33 @@ the real files, are blocked with a reason.
 
 - Allowed now: profiles without `admin`/`prod` (plus `team-eks-admin`),
   contexts without `prod` (dev, staging, minikube).
-- Change rules: edit `~/.config/f/guard.json`, then `/reload` pi.
-- SSO expired? Run `aws sso login` yourself (pi's filtered config shares the
+- Change rules: edit `~/.config/f/guard.json`, then restart the chat tab (pi: `/reload`).
+- SSO expired? Run `aws sso login` yourself (the agent's filtered config shares the
   login).
 
 ## Setup on a new machine
 
-1. Clone this repo and run `./install.sh` (links pi config + nvim module,
-   installs `f`).
-2. `herdr integration install pi`.
-3. nvim `init.lua`: `require("f").setup()`.
-4. Herdr config (in dotfiles): `ctrl+space` popup running `f`, sidebar hidden.
-5. Base clones in `~/code/features/` (one dir per repo).
-6. `cd ~/code/features && bd metrics off && bd init --prefix f --skip-agents --skip-hooks`.
-7. `~/.config/f/guard.json` with machine-specific allow/default profile.
+1. Clone this repo and run `./install.sh` (links Claude Code + pi config + nvim
+   module, installs `f`).
+2. `herdr integration install claude` (and `pi` if you use `F_AGENT=pi`).
+3. Claude Code `/config`: turn **Copy on select** on.
+4. nvim `init.lua`: `require("f").setup()`.
+5. Herdr config (in dotfiles): `ctrl+space` popup running `f`, sidebar hidden.
+6. Base clones in `~/code/features/` (one dir per repo).
+7. `cd ~/code/features && bd metrics off && bd init --prefix f --skip-agents --skip-hooks`.
+8. `~/.config/f/guard.json` with machine-specific allow/default profile.
 
 ## Troubleshooting
 
 | Symptom | Fix |
 |---|---|
-| Tabs are bare shells after a restart (no pi, no CodeDiff) | `f resume` (all features) or `f <name>` (one) |
+| Tabs are bare shells after a restart (no agent, no CodeDiff) | `f resume` (all features) or `f <name>` (one) |
 | Workspace has an old tab layout | `ctrl+b shift+d` to close it, then `f <name>` |
-| pi bash says "guard not set up" | `f creds` in a shell shows the error; fix, `/reload` |
+| Bash says "guard not set up" | `f creds` in a shell shows the error; fix, then restart the chat tab (pi: `/reload`) |
 | A command is blocked by guard | Read the reason; it's intended. Run it yourself if you really mean it |
-| pi says "Read `<repo>/CLAUDE.md` in full before working in <repo>/" | Intended: it reads the file (paging to the end), then retries. Again after a compaction |
-| `<leader>ps` failed | No pi in that feature; comments are kept and the message is on your clipboard |
-| `<leader>pr` says no last run | pi hasn't changed code in that repo since the guard/checkpoints started |
+| (pi) pi says "Read `<repo>/CLAUDE.md` in full before working in <repo>/" | Intended: it reads the file (paging to the end), then retries. Again after a compaction |
+| `<leader>ps` failed | No agent in that feature; comments are kept and the message is on your clipboard |
+| `<leader>pr` says no last run | The agent hasn't changed code in that repo since the guard/checkpoints started |
 | Repo tab says "no changes vs origin/main yet" | Nothing to diff yet; it checks every 3s and switches to CodeDiff once there is |
-| Picker status looks stale | pi status is live from Herdr; PRs and CI refresh every 30 min (launchd), after each pi run, and in the prs tab; `f prs -r` forces |
-| Extension changes not active | `/reload` in pi |
+| Picker status looks stale | Agent status is live from Herdr; PRs and CI refresh every 30 min (launchd), after each agent turn, and in the prs tab; `f prs -r` forces |
+| Mod/extension changes not active | Claude Code reloads the `f` mod on save (`/reload-plugins` forces); pi: `/reload` |

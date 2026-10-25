@@ -45,7 +45,7 @@ func ciFix(ctx context.Context, d deps, explicit string, print bool) error {
 	case n == 0:
 		info("no failing checks")
 	default:
-		ok("sent %d failing check(s) to pi", n)
+		ok("sent %d failing check(s) to the agent", n)
 	}
 	return nil
 }

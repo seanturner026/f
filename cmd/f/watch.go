@@ -160,7 +160,7 @@ func watchPRs(ctx context.Context, d deps, name string) error {
 					stateMod = modTime(feature.StatePath(d.layout, name))
 				}
 			case k == 'f':
-				note = "sending failing checks to pi…"
+				note = "sending failing checks to the agent…"
 				draw(watchView{name: name, repos: repos, state: state, errs: errs, mode: currentMode(state.PRs, time.Now(), settleUntil), note: note})
 				n, err := sendCIFix(ctx, d, name)
 				state, _ = feature.LoadState(d.layout, name) // sendCIFix refreshed it
@@ -171,7 +171,7 @@ func watchPRs(ctx context.Context, d deps, name string) error {
 				case n == 0:
 					note = "no failing checks"
 				default:
-					note = green(fmt.Sprintf("sent %d failing check(s) to pi: it proposes a fix, doesn't push", n))
+					note = green(fmt.Sprintf("sent %d failing check(s) to the agent: it proposes a fix, doesn't push", n))
 				}
 			}
 			continue

@@ -11,6 +11,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/seanturner026/pi/internal/agent"
 	"github.com/seanturner026/pi/internal/shell"
 )
 
@@ -180,16 +181,16 @@ func splitLabel(label string) (key, name string) {
 func reviewCommand(repo string) string { return "nvim -c " + shell.Quote("PiReview "+repo) }
 
 // OpenWorkspace focuses the workspace labelled label, or creates it in dir with
-// tabs: chat (pi with piArgs) · nvim · one review tab per repo · prs · shell.
+// tabs: chat (the agent) · nvim · one review tab per repo · prs · shell.
 // An existing workspace gets its stopped tabs restarted (ReviveWorkspace).
-func OpenWorkspace(ctx context.Context, r Runner, label, dir string, repos, piArgs []string) (OpenResult, error) {
+func OpenWorkspace(ctx context.Context, r Runner, label, dir string, repos []string, chat agent.Command) (OpenResult, error) {
 	if id, err := FindWorkspace(ctx, r, label); err != nil {
 		return "", err
 	} else if id != "" {
 		if err := call(ctx, r, nil, "workspace", "focus", id); err != nil {
 			return "", fmt.Errorf("focus workspace: %w", err)
 		}
-		n, err := ReviveWorkspace(ctx, r, id, label, repos, piArgs)
+		n, err := ReviveWorkspace(ctx, r, id, label, repos, chat)
 		if err != nil {
 			return "", err
 		}
@@ -199,11 +200,11 @@ func OpenWorkspace(ctx context.Context, r Runner, label, dir string, repos, piAr
 		return OpenFocused, nil
 	}
 
-	var chat created
-	if err := call(ctx, r, &chat, "workspace", "create", "--cwd", dir, "--label", label, "--focus"); err != nil {
+	var resp created
+	if err := call(ctx, r, &resp, "workspace", "create", "--cwd", dir, "--label", label, "--focus"); err != nil {
 		return "", fmt.Errorf("create workspace: %w", err)
 	}
-	ws, chatTab, chatPane := chat.Result.Workspace.ID, chat.Result.Tab.ID, chat.Result.RootPane.ID
+	ws, chatTab, chatPane := resp.Result.Workspace.ID, resp.Result.Tab.ID, resp.Result.RootPane.ID
 	if err := call(ctx, r, nil, "tab", "rename", chatTab, tabLabel(keyChat, "chat")); err != nil {
 		return "", fmt.Errorf("rename tab: %w", err)
 	}
@@ -229,32 +230,35 @@ func OpenWorkspace(ctx context.Context, r Runner, label, dir string, repos, piAr
 		return "", fmt.Errorf("focus chat tab: %w", err)
 	}
 
-	if err := startPi(ctx, r, label, chatPane, piArgs); err != nil {
+	if err := startAgent(ctx, r, label, chatPane, chat); err != nil {
 		return "", err
 	}
 	return OpenCreated, nil
 }
 
-// startPi starts pi with piArgs in pane, at its shell prompt.
-func startPi(ctx context.Context, r Runner, label, pane string, piArgs []string) error {
-	start := append([]string{"agent", "start", AgentName(label), "--kind", "pi", "--pane", pane, "--"}, piArgs...)
+// startAgent starts chat in pane, at its shell prompt.
+func startAgent(ctx context.Context, r Runner, label, pane string, chat agent.Command) error {
+	start := append([]string{"agent", "start", AgentName(label), "--kind", chat.Bin, "--pane", pane, "--"}, chat.Args...)
 	if err := call(ctx, r, nil, start...); err != nil {
 		// Fall back to typing the command into the pane.
-		cmd := "pi " + strings.Join(shell.QuoteAll(piArgs), " ")
+		cmd := chat.Bin + " " + strings.Join(shell.QuoteAll(chat.Args), " ")
 		if err2 := call(ctx, r, nil, "pane", "run", pane, cmd); err2 != nil {
-			return fmt.Errorf("start pi: %w (fallback: %w)", err, err2)
+			return fmt.Errorf("start %s: %w (fallback: %w)", chat.Bin, err, err2)
 		}
 	}
 	return nil
 }
 
+// chatCommand stands for the chat tab's agent in tabCommand.
+const chatCommand = "<chat>"
+
 // tabCommand is what a tab of a feature with repos runs, by its label: "" for
-// the shell tab and tabs f doesn't know. pi (the chat tab) is "pi".
+// the shell tab and tabs f doesn't know; the chat tab is chatCommand.
 func tabCommand(label string, repos []string) string {
 	_, name := splitLabel(label)
 	switch {
 	case name == "chat":
-		return "pi"
+		return chatCommand
 	case name == "nvim":
 		return "nvim"
 	case name == prsTab:
@@ -286,11 +290,11 @@ func atShell(ctx context.Context, r Runner, pane string) (bool, error) {
 	return resp.Result.Info.Shell != 0 && resp.Result.Info.Foreground == resp.Result.Info.Shell, nil
 }
 
-// ReviveWorkspace restarts what f's tabs run (pi with piArgs, nvim, review,
+// ReviveWorkspace restarts what f's tabs run (the chat agent, nvim, review,
 // prs) in workspace ws wherever the tab is back at a bare shell, e.g. after
 // Herdr restored its layout on restart. Split tabs, the shell tab, and tabs f
 // doesn't know are left alone. Returns how many tabs it restarted.
-func ReviveWorkspace(ctx context.Context, r Runner, ws, label string, repos, piArgs []string) (int, error) {
+func ReviveWorkspace(ctx context.Context, r Runner, ws, label string, repos []string, chat agent.Command) (int, error) {
 	tabs, err := listTabs(ctx, r, ws)
 	if err != nil {
 		return 0, err
@@ -321,8 +325,8 @@ func ReviveWorkspace(ctx context.Context, r Runner, ws, label string, repos, piA
 		if !idle {
 			continue
 		}
-		if cmd == "pi" {
-			err = startPi(ctx, r, label, p, piArgs)
+		if cmd == chatCommand {
+			err = startAgent(ctx, r, label, p, chat)
 		} else if err = call(ctx, r, nil, "pane", "run", p, cmd); err != nil {
 			err = fmt.Errorf("start %s tab: %w", t.Label, err)
 		}
@@ -441,7 +445,7 @@ type Agent struct {
 	Cwd    string
 }
 
-// PiAgents lists running pi agents.
+// PiAgents lists running chat agents (pi or Claude Code).
 func PiAgents(ctx context.Context, r Runner) ([]Agent, error) {
 	var resp struct {
 		Result struct {
@@ -458,7 +462,7 @@ func PiAgents(ctx context.Context, r Runner) ([]Agent, error) {
 	}
 	var out []Agent
 	for _, a := range resp.Result.Agents {
-		if a.Agent == "pi" {
+		if a.Agent == agent.Pi || a.Agent == agent.Claude {
 			out = append(out, Agent{Pane: a.Pane, Status: a.Status, Cwd: a.Cwd})
 		}
 	}
@@ -479,7 +483,7 @@ func AgentStatuses(ctx context.Context, r Runner) (map[string]AgentStatus, error
 }
 
 // ErrNoPi means no pi is running in the given directory.
-var ErrNoPi = errors.New("no pi running there")
+var ErrNoPi = errors.New("no agent running there")
 
 // PromptPi submits text to the pi running in dir (found by cwd, since Herdr
 // agent names are dropped when pi restarts).
@@ -491,7 +495,7 @@ func PromptPi(ctx context.Context, r Runner, dir, text string) error {
 	for _, a := range agents {
 		if a.Cwd == dir {
 			if err := call(ctx, r, nil, "agent", "prompt", a.Pane, text); err != nil {
-				return fmt.Errorf("prompt pi: %w", err)
+				return fmt.Errorf("prompt agent: %w", err)
 			}
 			return nil
 		}

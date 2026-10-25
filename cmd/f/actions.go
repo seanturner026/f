@@ -14,6 +14,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/seanturner026/pi/internal/agent"
 	"github.com/seanturner026/pi/internal/beads"
 	"github.com/seanturner026/pi/internal/feature"
 	"github.com/seanturner026/pi/internal/herdr"
@@ -137,7 +138,7 @@ func start(ctx context.Context, d deps, name string, repos []string) error {
 
 	if len(repos) == 0 && !interactive() {
 		// fzf would wait forever for a terminal that isn't there (pi's !f).
-		return fmt.Errorf("new feature %q needs repos: f %s -r <repo> [-r <repo>...], or /f %s in pi (it asks)", name, name, name)
+		return fmt.Errorf("new feature %q needs repos: f %s -r <repo> [-r <repo>...], or /f %s in chat (it asks)", name, name, name)
 	}
 	if len(repos) == 0 {
 		all, err := feature.BaseRepos(d.layout)
@@ -236,6 +237,29 @@ func setup(ctx context.Context, d deps, name string, repos []string) error {
 	return err
 }
 
+// setupWait blocks until f setup has added the current feature's worktrees
+// (state.json "setup" cleared): the Claude Code mod holds a turn on it. A
+// crashed f setup must not block the agent forever, hence the timeout.
+func setupWait(ctx context.Context, d deps) error {
+	const timeout = 5 * time.Minute
+	name, err := resolve(d, "")
+	if err != nil {
+		return err
+	}
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	for {
+		if state, err := feature.LoadState(d.layout, name); err != nil || state.Setup == nil {
+			return err
+		}
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("setup still running after %s", timeout)
+		case <-time.After(300 * time.Millisecond):
+		}
+	}
+}
+
 func addRepos(ctx context.Context, d deps, name string, repos []string) error {
 	info("  fetching %s", strings.Join(repos, ", "))
 	type added struct {
@@ -271,21 +295,18 @@ func addRepos(ctx context.Context, d deps, name string, repos []string) error {
 	return errors.Join(errs...)
 }
 
-// launch runs pi for the feature: in its own Herdr workspace when called from
-// inside Herdr, otherwise right here in this terminal.
+// launch runs the agent for the feature: in its own Herdr workspace when
+// called from inside Herdr, otherwise right here in this terminal.
 func launch(ctx context.Context, d deps, name string, reopen bool) error {
-	args := []string{"--name", name}
-	if reopen {
-		args = append(args, "--continue")
-	}
 	dir := feature.Dir(d.layout, name)
+	chat := agent.For(name, dir, reopen)
 	// Inside Herdr, its server is up by definition: skip the status round trip.
 	if !d.noHerdr && herdr.Inside() {
 		repos, err := feature.Repos(d.layout, name)
 		if err != nil {
 			return err
 		}
-		result, err := herdr.OpenWorkspace(ctx, d.run, name, dir, repos, args)
+		result, err := herdr.OpenWorkspace(ctx, d.run, name, dir, repos, chat)
 		if err != nil {
 			return err
 		}
@@ -293,17 +314,17 @@ func launch(ctx context.Context, d deps, name string, reopen bool) error {
 		return nil
 	}
 	if !interactive() {
-		fmt.Printf("cd %s && pi %s\n", shell.Quote(dir), strings.Join(shell.QuoteAll(args), " "))
+		fmt.Printf("cd %s && %s %s\n", shell.Quote(dir), chat.Bin, strings.Join(shell.QuoteAll(chat.Args), " "))
 		return nil
 	}
 	if err := os.Chdir(dir); err != nil {
 		return err
 	}
-	pi, err := exec.LookPath("pi")
+	bin, err := exec.LookPath(chat.Bin)
 	if err != nil {
 		return err
 	}
-	return syscall.Exec(pi, append([]string{"pi"}, args...), os.Environ())
+	return syscall.Exec(bin, append([]string{chat.Bin}, chat.Args...), os.Environ())
 }
 
 // resume restarts pi, nvim, review, and prs in every open feature workspace
@@ -338,7 +359,7 @@ func resume(ctx context.Context, d deps) error {
 				res.err = err
 				return
 			}
-			res.n, res.err = herdr.ReviveWorkspace(ctx, d.run, ws, name, repos, []string{"--name", name, "--continue"})
+			res.n, res.err = herdr.ReviveWorkspace(ctx, d.run, ws, name, repos, agent.For(name, feature.Dir(d.layout, name), true))
 		}()
 	}
 	wg.Wait()
@@ -392,7 +413,7 @@ func add(ctx context.Context, d deps, explicit string, repos []string) error {
 		if err := setupInBackground(d, name, repos); err != nil {
 			return err
 		}
-		info("setting up %s in the background; pi gets it with your next prompt", strings.Join(repos, ", "))
+		info("setting up %s in the background; the agent gets it with your next prompt", strings.Join(repos, ", "))
 	} else {
 		if err := addRepos(ctx, d, name, repos); err != nil {
 			return err
@@ -400,7 +421,7 @@ func add(ctx context.Context, d deps, explicit string, repos []string) error {
 		if _, err := feature.Sync(d.layout, name, ""); err != nil {
 			return err
 		}
-		info("AGENTS.md updated; /reload in pi to pick it up")
+		info("AGENTS.md updated")
 	}
 	if !d.noHerdr && herdr.Available(ctx, d.run) {
 		for _, repo := range repos {

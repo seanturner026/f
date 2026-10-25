@@ -351,7 +351,7 @@ func PlanView(name, issue string, steps []Step) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "%s (%s) · %d/%d done\n", name, issue, len(grouped[groupDone]), len(steps))
 	if len(steps) == 0 {
-		b.WriteString("no steps yet (pi plans them as child issues for multi-step work)\n")
+		b.WriteString("no steps yet (the agent plans them as child issues for multi-step work)\n")
 		return b.String()
 	}
 	for _, g := range planGroups {
@@ -364,6 +364,92 @@ func PlanView(name, issue string, steps []Step) string {
 			if w := waiting[s.ID]; len(w) > 0 {
 				fmt.Fprintf(&b, "      waits on %s\n", strings.Join(w, ", "))
 			}
+		}
+	}
+	return b.String()
+}
+
+// PlanTree renders a feature's plan as a dependency tree: steps that wait on
+// nothing at the top, each other step under the first step it waits on.
+func PlanTree(name, issue string, steps []Step) string {
+	grouped, _ := groupSteps(steps)
+	mark := map[string]string{}
+	for g, ss := range grouped {
+		for _, s := range ss {
+			mark[s.ID] = g.mark
+		}
+	}
+	inPlan := map[string]bool{}
+	for _, s := range steps {
+		inPlan[s.ID] = true
+	}
+	children := map[string][]Step{}
+	also := map[string][]string{} // waits-on beyond the step it's drawn under
+	var roots []Step
+	for _, s := range steps {
+		var deps []string
+		for _, id := range s.BlockedBy {
+			if inPlan[id] {
+				deps = append(deps, id)
+			}
+		}
+		if len(deps) == 0 {
+			roots = append(roots, s)
+			continue
+		}
+		children[deps[0]] = append(children[deps[0]], s)
+		also[s.ID] = deps[1:]
+	}
+	byID := func(a, b Step) int { return compareStepIDs(a.ID, b.ID) }
+	slices.SortStableFunc(roots, byID)
+	for _, c := range children {
+		slices.SortStableFunc(c, byID)
+	}
+
+	var b strings.Builder
+	fmt.Fprintf(&b, "%s (%s) · %d/%d done\n", name, issue, len(grouped[groupDone]), len(steps))
+	if len(steps) == 0 {
+		b.WriteString("no steps yet (the agent plans them as child issues for multi-step work)\n")
+		return b.String()
+	}
+	seen := map[string]bool{}
+	var walk func(s Step, indent, branch string)
+	walk = func(s Step, indent, branch string) {
+		seen[s.ID] = true
+		fmt.Fprintf(&b, "%s%s%s %s  %s\n", indent, branch, mark[s.ID], s.ID, s.Title)
+		next := indent
+		switch branch {
+		case "├─ ":
+			next += "│  "
+		case "└─ ":
+			next += "   "
+		}
+		kids := children[s.ID]
+		if a := also[s.ID]; len(a) > 0 {
+			pipe := "   " // under the step, continuing its children's line if it has any
+			if slices.ContainsFunc(kids, func(c Step) bool { return !seen[c.ID] }) {
+				pipe = "│  "
+			}
+			fmt.Fprintf(&b, "%s%s+ waits on %s\n", next, pipe, strings.Join(a, ", "))
+		}
+		for i, c := range kids {
+			if seen[c.ID] {
+				continue
+			}
+			if i == len(kids)-1 {
+				walk(c, next, "└─ ")
+			} else {
+				walk(c, next, "├─ ")
+			}
+		}
+	}
+	for _, r := range roots {
+		walk(r, "", "")
+	}
+	// Steps in a dependency cycle have no root: list them flat rather than drop them.
+	for _, s := range steps {
+		if !seen[s.ID] {
+			walk(s, "", "")
 		}
 	}
 	return b.String()

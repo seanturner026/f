@@ -1,0 +1,1 @@
+{ "name": "f", "version": "0.1.0", "description": "f feature workspaces in Claude Code: guard, goal, checkpoints, PRs, plan, pickers", "types": "./types/index.d.ts" }
