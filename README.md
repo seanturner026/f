@@ -7,7 +7,8 @@ around them (Herdr + nvim + beads). Claude Code is the default agent; `F_AGENT=p
 ## Install
 
 ```bash
-just install            # link Claude Code config + nvim module, go install ./cmd/f, launchd sync
+just install            # deploy f + Claude Code config + nvim module, launchd sync, git hooks
+                        # (afterwards every commit/pull on main deploys by itself)
 just herdr-integration  # Herdr agent-state hooks for Claude Code (busy/idle marks)
 just                    # every recipe (checks, sync-now, trace, ...)
 ```

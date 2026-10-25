@@ -14,7 +14,7 @@ My Claude Code and pi config plus `f`, the multi-repo feature workspace CLI. Wha
 
 ## Deploy
 
-- `just install` (see `just` for every recipe) symlinks `claude/` into `~/.claude/f` and `nvim/f.lua` into nvim, so edits are live (the mod reloads itself; restart nvim).
+- Every commit (or pull) on `main` deploys in the background (`.githooks/`, `just deploy`): `go install ./cmd/f`, and copies of `claude/` to `~/.claude/f` and `nvim/f.lua` into nvim. Commits on other branches deploy nothing; `just deploy` installs any checkout by hand. Log: `$TMPDIR/f-deploy.log`. `just` lists every recipe.
 - Go changes need `go install ./cmd/f`.
 - `agent/AGENTS.md` is my global pi rules (every pi session), not instructions for this repo.
 

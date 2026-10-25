@@ -14,29 +14,43 @@ default:
 
 alias i := install
 alias b := install-f
+alias d := deploy
 
-[doc("Everything: link config, install f, load the launchd sync")]
+[doc("Everything: deploy, Herdr plugin, launchd sync, git hooks (deploy on commits to main)")]
 [group("install")]
-install: link install-f launchd
+install: deploy herdr-plugin launchd hooks
 
-[doc("Symlink Claude Code, nvim and the Herdr plugin into place (non-symlinks are backed up)")]
+[doc("Install this checkout: f, plus copies of the Claude Code mod/statusline/settings and nvim's f.lua")]
 [group("install")]
-link:
+deploy: install-f
     #!/usr/bin/env bash
     set -euo pipefail
-    link() { # <source> <target>
+    # Copies, not symlinks: the installed version is what this checkout had when
+    # deployed, whatever any clone has checked out later.
+    copy() { # <source> <target>
       local src=$1 target=$2
+      [ -L "$target" ] && rm "$target" # earlier installs symlinked into a clone
       mkdir -p "$(dirname "$target")"
-      if [ -L "$target" ]; then rm "$target"
-      elif [ -e "$target" ]; then mv "$target" "$target.bak.$(date +%s)"; echo "backed up $target"; fi
-      ln -s "$src" "$target"; echo "linked $target -> $src"
+      if [ -d "$src" ]; then
+        # The engine writes the mod's .claude-plugin/types/ itself.
+        rsync -a --delete --exclude '.claude-plugin/types/' "$src/" "$target/"
+      else
+        cp "$src" "$target"
+      fi
     }
-    # Claude Code: settings, statusline and the f mod (f passes them to claude).
-    link "{{ repo }}/claude" "$HOME/.claude/f"
-    # nvim: require("f").setup() in init.lua.
-    link "{{ repo }}/nvim/f.lua" "$HOME/.config/nvim/lua/f.lua"
-    # Herdr: the f picker popup (ctrl+space in herdr/config.toml).
+    copy "{{ repo }}/claude" "$HOME/.claude/f"
+    copy "{{ repo }}/nvim/f.lua" "$HOME/.config/nvim/lua/f.lua"
+    echo "deployed $(git -C "{{ repo }}" rev-parse --short HEAD) (Claude Code mod, statusline, nvim f.lua; restart nvim)"
+
+[doc("Link the Herdr plugin (the f picker popup, ctrl+space)")]
+[group("install")]
+herdr-plugin:
     if command -v herdr >/dev/null; then herdr plugin link "{{ repo }}/herdr-plugin" >/dev/null && echo "linked herdr plugin f"; fi
+
+[doc("Deploy after every commit or pull on main (git hooks in .githooks/)")]
+[group("install")]
+hooks:
+    git -C "{{ repo }}" config core.hooksPath .githooks && echo "git hooks: .githooks (deploy on main)"
 
 [doc("go install ./cmd/f")]
 [group("install")]

@@ -198,8 +198,9 @@ the real files, are blocked with a reason.
 
 ## Setup on a new machine
 
-1. Clone this repo and run `just install` (links Claude Code config + nvim
-   module, installs `f`, loads the launchd sync).
+1. Clone this repo and run `just install` (installs `f`, copies the Claude Code
+   config and nvim module, loads the launchd sync, and turns on the git hooks
+   that redeploy after each commit or pull on `main`).
 2. `just herdr-integration`.
 3. Claude Code `/config`: turn **Copy on select** on.
 4. nvim `init.lua`: `require("f").setup()`.
