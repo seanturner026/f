@@ -109,7 +109,7 @@ The statusline shows the feature's PRs with CI, like pi's footer.
 | `/plan` | As in pi, but in a sidebar that updates as the plan changes; replaces Claude Code's `/plan` (shift+tab still reaches plan mode) |
 
 The guard, goal, checkpoints and PR recording work as in pi. Herdr's busy/idle
-marks need `herdr integration install claude`. Mouse selection copies when
+marks need `herdr integration install claude`. A Glass sound plays when Claude finishes (`Stop` hook in `claude/settings.json`; any `/System/Library/Sounds/*.aiff` works). Mouse selection copies when
 **Copy on select** is on in `/config`; hold Shift for Herdr's own selection.
 
 ### pi (`F_AGENT=pi`)
