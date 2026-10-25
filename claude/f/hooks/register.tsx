@@ -419,9 +419,6 @@ export const register: Register = on => {
         })}
       </Box>
     )
-  })}
-      </Box>
-    )
   })
 
   // Quieter chrome, closer to pi: no "Worked for 47s" row (ctrl+o still shows it).
