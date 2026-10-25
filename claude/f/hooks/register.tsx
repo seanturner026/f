@@ -28,7 +28,7 @@ type Verdict = { block: boolean; reason?: string }
 const PICK_PANE = 'f-pick'
 const PLAN_PANE = 'f-plan'
 // f plan show --tree's status marks: done, in progress, ready, blocked, deferred.
-const MARK_COLORS: Record<string, string> = { '✓': 'green', '◐': 'blue', '○': 'cyan', '●': 'yellow', '❄': 'gray' }
+const MARK_COLORS: Record<string, string> = { '✓': 'success', '◐': 'suggestion', '○': 'text', '●': 'warning', '❄': 'subtle' }
 const PR_URL = /https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/pull\/\d+/g
 
 const plan = atom({ plugin: 'f', key: 'plan' } as const, null, { shape: 'plan-1' })
@@ -381,33 +381,45 @@ export const register: Register = on => {
     const text = await read($, plan)
     if (!text) return <Text dimColor>no plan</Text>
     // Tree lines dim, the mark colored by status, the title wrapping in its own column.
+    // Gaps are margins: a Text's trailing spaces get collapsed.
     const rows = text.split('\n').filter(l => l.trim())
     return (
       <Box flexDirection="column" width={e.props.bodyColumns}>
         {rows.map((l, i) => {
-          const step = /^([ │├└─]*)([○●◐❄✓]) (\S+)\s+(.*)$/.exec(l)
           if (i === 0) return <Text bold>{l}</Text>
-          if (!step) {
-            const [, tree = '', rest = l] = /^([ │├└─]*)(.*)$/.exec(l) ?? []
-            return (
-              <Box flexDirection="row">
-                <Text dimColor>{tree}</Text>
-                <Text dimColor wrap="wrap">{rest}</Text>
-              </Box>
-            )
-          }
-          const [, tree = '', mark = '', id = '', title = ''] = step
+          const [, rawTree = '', rest = l] = /^([ │├└─]*)(.*)$/.exec(l) ?? []
+          const tree = rawTree.trimEnd()
+          const step = /^([○●◐❄✓]) (\S+)\s+(.*)$/.exec(rest)
           return (
             <Box flexDirection="row">
-              <Text dimColor>{tree}</Text>
-              <Text color={MARK_COLORS[mark]}>{mark} </Text>
-              <Text dimColor>{id}  </Text>
-              <Box flexShrink={1}>
-                <Text wrap="wrap">{title}</Text>
-              </Box>
+              {tree && (
+                <Box marginRight={1}>
+                  <Text dimColor>{tree}</Text>
+                </Box>
+              )}
+              {step ? (
+                <Box flexDirection="row" flexShrink={1}>
+                  <Box marginRight={1}>
+                    <Text color={MARK_COLORS[step[1] ?? '']}>{step[1]}</Text>
+                  </Box>
+                  <Box marginRight={2}>
+                    <Text dimColor>{step[2]}</Text>
+                  </Box>
+                  <Box flexShrink={1}>
+                    <Text wrap="wrap">{step[3]}</Text>
+                  </Box>
+                </Box>
+              ) : (
+                <Box flexShrink={1}>
+                  <Text dimColor wrap="wrap">{rest}</Text>
+                </Box>
+              )}
             </Box>
           )
         })}
+      </Box>
+    )
+  })}
       </Box>
     )
   })

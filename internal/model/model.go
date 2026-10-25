@@ -416,7 +416,7 @@ func PlanTree(name, issue string, steps []Step) string {
 	var walk func(s Step, indent, branch string)
 	walk = func(s Step, indent, branch string) {
 		seen[s.ID] = true
-		fmt.Fprintf(&b, "%s%s%s %s  %s\n", indent, branch, mark[s.ID], s.ID, s.Title)
+		fmt.Fprintf(&b, "%s%s%s %s  %s\n", indent, branch, mark[s.ID], stepNumber(issue, s.ID), s.Title)
 		next := indent
 		switch branch {
 		case "├─ ":
@@ -430,7 +430,11 @@ func PlanTree(name, issue string, steps []Step) string {
 			if slices.ContainsFunc(kids, func(c Step) bool { return !seen[c.ID] }) {
 				pipe = "│  "
 			}
-			fmt.Fprintf(&b, "%s%s+ waits on %s\n", next, pipe, strings.Join(a, ", "))
+			nums := make([]string, len(a))
+			for i, id := range a {
+				nums[i] = stepNumber(issue, id)
+			}
+			fmt.Fprintf(&b, "%s%s+ waits on %s\n", next, pipe, strings.Join(nums, ", "))
 		}
 		for i, c := range kids {
 			if seen[c.ID] {
@@ -454,6 +458,9 @@ func PlanTree(name, issue string, steps []Step) string {
 	}
 	return b.String()
 }
+
+// stepNumber is a step's ID without its feature issue's prefix ("f-jry.3" → "3").
+func stepNumber(issue, id string) string { return strings.TrimPrefix(id, issue+".") }
 
 // compareStepIDs orders "f-3vh.2" before "f-3vh.10" (numeric suffix).
 func compareStepIDs(a, b string) int {
