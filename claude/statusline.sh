@@ -38,4 +38,5 @@ prs=$(cd "$root" && f prs --json 2>/dev/null | jq -r '
       | "\(.repo) #\(.number) " + (if .status == "open" then c("36"; "open") else c("2"; "draft") end) + ci]
      + ([$all[] | select(.status == "merged")] | length | if . > 0 then [c("32"; "\(.) merged")] else [] end))
   | if length > 0 then c("2"; "PRs: ") + join(c("2"; " · ")) else empty end')
-[ -n "$prs" ] && printf '%s\n' "$prs"
+# Exit 0 even with no PRs: Claude Code drops the whole status line when this script fails.
+if [ -n "$prs" ]; then printf '%s\n' "$prs"; fi
