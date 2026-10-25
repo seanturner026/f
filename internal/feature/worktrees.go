@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"slices"
 	"sync"
 
 	"github.com/seanturner026/pi/internal/git"
@@ -81,62 +80,6 @@ func PRs(ctx context.Context, r Runner, l Layout, name string) (prs []model.PR, 
 		prs = append(prs, results[i]...)
 	}
 	return prs, errs, nil
-}
-
-// Finished reports whether a feature's work has all landed: every repo is
-// clean, and every repo with commits has them in the default branch, by
-// ancestry or by content (squash merges), and some PR merged (by its saved
-// PRs: no network, so it's instant; a merge the saved state hasn't seen just
-// means the feature isn't offered for cleanup yet). Repos are checked
-// concurrently.
-func Finished(ctx context.Context, r Runner, l Layout, name string) bool {
-	repos, err := Repos(l, name)
-	if err != nil {
-		return false
-	}
-	state, _ := LoadState(l, name)
-	if !slices.ContainsFunc(state.PRs, func(p model.PR) bool { return p.Status == model.PRStatusMerged }) {
-		return false // nothing merged yet: can't be finished, skip the git checks
-	}
-	type result struct{ done, merged bool }
-	results := make([]result, len(repos))
-	var wg sync.WaitGroup
-	for i, repo := range repos {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			wt := RepoDir(l, name, repo)
-			if n, err := git.ChangedFiles(ctx, r, wt); err != nil || n > 0 {
-				return // dirty: not done
-			}
-			base := baseRef(ctx, r, l, repo)
-			if ahead, err := git.CommitsAhead(ctx, r, wt, base); err == nil && ahead == 0 {
-				// untouched, or synced after its PR merged (f sync)
-				results[i] = result{done: true, merged: hasMergedPR(state.PRs, repo)}
-				return
-			}
-			var prs []model.PR
-			for _, p := range state.PRs {
-				if p.Repo == repo {
-					prs = append(prs, p)
-				}
-			}
-			if head, err := git.Head(ctx, r, wt); err == nil && notInBase(ctx, r, wt, base, head, prs, false) == 0 {
-				results[i] = result{done: true, merged: hasMergedPR(prs, repo)}
-			}
-		}()
-	}
-	wg.Wait()
-	merged := 0
-	for _, res := range results {
-		if !res.done {
-			return false
-		}
-		if res.merged {
-			merged++
-		}
-	}
-	return merged > 0
 }
 
 func hasMergedPR(prs []model.PR, repo string) bool {
@@ -219,7 +162,7 @@ func unmergedIn(ctx context.Context, r Runner, l Layout, name, repo string, know
 		revs = append(revs, b)
 	}
 	for _, rev := range revs {
-		if n := notInBase(ctx, r, wt, base, rev, prs, true); n > 0 {
+		if n := unsaved(ctx, r, wt, base, rev, prs); n > 0 {
 			problems = append(problems, fmt.Sprintf("%s: %d commit(s) not pushed or merged", repo, n))
 			break
 		}
@@ -227,18 +170,15 @@ func unmergedIn(ctx context.Context, r Runner, l Layout, name, repo string, know
 	return problems
 }
 
-// notInBase counts rev's commits that aren't in base: by ancestry, as an
-// equivalent patch (git cherry), or by content after a squash merge. With
-// pushedOK, commits on a remote branch don't count (removing the feature
-// doesn't lose them). Cheapest checks first: most revs need two git calls.
-func notInBase(ctx context.Context, r Runner, wt, base, rev string, prs []model.PR, pushedOK bool) int {
+// unsaved counts rev's commits that removing the feature would lose: not on
+// any remote branch, and not in base by ancestry, as an equivalent patch (git
+// cherry), or by content after a squash merge. Cheapest checks first: most
+// revs need two git calls.
+func unsaved(ctx context.Context, r Runner, wt, base, rev string, prs []model.PR) int {
 	if rev == "" {
 		return 0
 	}
-	commits, err := git.Commits(ctx, r, wt, rev, base)
-	if pushedOK {
-		commits, err = git.Unpushed(ctx, r, wt, rev, base)
-	}
+	commits, err := git.Unpushed(ctx, r, wt, rev, base)
 	if err != nil {
 		return 1
 	}

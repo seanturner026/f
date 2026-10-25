@@ -533,46 +533,6 @@ func printPRs(d deps, name string, list []model.PR, errs map[string]error) {
 	}
 }
 
-// cleanMerged finds finished features and removes them: worktrees, branches,
-// and Herdr workspace (the picker's alt-x).
-func cleanMerged(ctx context.Context, d deps) []string {
-	return removeFinished(ctx, d, findFinished(ctx, d))
-}
-
-// findFinished lists features whose work has all landed (checked in parallel).
-func findFinished(ctx context.Context, d deps) []string {
-	names := feature.List(d.layout)
-	finished := make([]bool, len(names))
-	var wg sync.WaitGroup
-	for i, name := range names {
-		wg.Add(1)
-		go func() { defer wg.Done(); finished[i] = feature.Finished(ctx, d.run, d.layout, name) }()
-	}
-	wg.Wait()
-	var done []string
-	for i, name := range names {
-		if finished[i] {
-			done = append(done, name)
-		}
-	}
-	return done
-}
-
-// removeFinished removes the given finished features.
-func removeFinished(ctx context.Context, d deps, done []string) []string {
-	var removed []string
-	for _, name := range done {
-		issue := issueUpdateInBackground(d, name, false, nil) // bd takes ~0.8s a feature
-		if err := removeWithWorkspace(ctx, d, name); err != nil {
-			fmt.Printf("%s %v\n", red("cleanup:"), err)
-			continue
-		}
-		issue()
-		removed = append(removed, name)
-	}
-	return removed
-}
-
 // removeWithWorkspace moves the feature to the trash (f restore brings it
 // back) and closes its Herdr workspace.
 func removeWithWorkspace(ctx context.Context, d deps, name string) error {

@@ -17,7 +17,7 @@ import (
 const help = `f: one pi session across several repos, each on its own worktree.
 
   f <name>         start a feature (pick repos), or reopen it
-  f                picker: what needs you → jump there (ctrl-x remove, alt-x clean merged)
+  f                picker: what needs you → jump there (ctrl-x remove)
   f add [repo...]  add repos to this feature
   f resume         after a Herdr restart: restart pi, nvim, prs in every feature workspace
   f prs [-r] [-c]  this feature's PRs (-r refresh, -c copy, -w live view)

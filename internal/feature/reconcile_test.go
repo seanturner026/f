@@ -446,24 +446,6 @@ func TestUnmergedSquashMerged(t *testing.T) {
 	}
 }
 
-func TestFinishedSquashMerged(t *testing.T) {
-	f := newSyncFixture(t)
-	f.commit("b.txt", "pr\n")
-	m := f.squash("feat")
-	git(t, f.wt, "fetch", "-q", "--prune", "origin")
-	pr := stackPR(1, "feat", "main", model.PRStatusMerged, m)
-	if _, err := feature.UpdateState(f.l, "feat", func(s *feature.State) { s.PRs = []model.PR{pr} }); err != nil {
-		t.Fatal(err)
-	}
-	if !feature.Finished(context.Background(), &ghFake{}, f.l, "feat") {
-		t.Error("squash-merged feature not finished")
-	}
-	f.commit("c.txt", "more\n")
-	if feature.Finished(context.Background(), &ghFake{}, f.l, "feat") {
-		t.Error("finished with a commit after the merge")
-	}
-}
-
 func TestRemoveRestoreExpire(t *testing.T) {
 	ctx := context.Background()
 	f := newSyncFixture(t)

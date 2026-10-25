@@ -105,8 +105,8 @@ func attention(r pickerRow) int {
 }
 
 // pickFeature is the control center: features ordered by what needs you.
-// ENTER returns the chosen feature; ctrl-x removes one, alt-x cleans up all
-// merged ones, then the picker reopens with a status line.
+// ENTER returns the chosen feature; ctrl-x removes one, then the picker
+// reopens with a status line.
 func pickFeature(ctx context.Context, d deps) (string, error) {
 	msg := ""
 	for {
@@ -118,14 +118,14 @@ func pickFeature(ctx context.Context, d deps) (string, error) {
 			return "", nil
 		}
 		titles, lines := pickerTable(rows)
-		header := []string{dim("⏎ open · ctrl-x remove · alt-x clean merged"), "", titles}
+		header := []string{dim("⏎ open · ctrl-x remove"), "", titles}
 		if msg != "" {
 			header = append([]string{msg}, header...)
 		}
 		// Full-screen (fast in Herdr's popup); ctrl-space closes it, like it opened.
 		// The cursor starts on the top row: the feature you're in.
 		out, err := runFzf(lines, "--ansi", "--delimiter=\t", "--with-nth=2..",
-			"--expect=ctrl-x,alt-x", "--bind=ctrl-space:abort", "--prompt=feature> ",
+			"--expect=ctrl-x", "--bind=ctrl-space:abort", "--prompt=feature> ",
 			"--header="+strings.Join(header, "\n"))
 		if err != nil || len(out) == 0 {
 			return "", err
@@ -140,12 +140,6 @@ func pickFeature(ctx context.Context, d deps) (string, error) {
 		case "ctrl-x":
 			if name != "" {
 				msg = removeFeature(ctx, d, name)
-			}
-		case "alt-x":
-			removed := cleanMerged(ctx, d)
-			msg = "nothing merged to clean up"
-			if len(removed) > 0 {
-				msg = "removed " + strings.Join(removed, ", ")
 			}
 		}
 	}

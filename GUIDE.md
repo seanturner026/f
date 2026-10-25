@@ -39,8 +39,8 @@ by `f`).
    pi "merged"), so more work in the feature starts a fresh PR. Squash merges are
    recognized by content: merged stack branches are reset or deleted, the rest rebased
    onto main and pushed.
-7. **Done**: when PRs merge, `alt-x` in the picker cleans up every merged
-   feature (or `ctrl-x` one). The beads issue closes with the PR links. It only
+7. **Done**: when PRs merge, `ctrl-x` the feature in the picker. The beads
+   issue closes with the PR links. It only
    asks first about uncommitted files or commits that are neither pushed nor merged
    (local check, no GitHub: about a second). Removed features go to the trash with
    their branches and uncommitted files: `f restore <name>` within 14 days.
@@ -85,7 +85,6 @@ learns shows in the picker too.
 |---|---|
 | `enter` | Jump to the feature (recreates its workspace if closed) |
 | `ctrl-x` | Remove the feature (to the trash for 14 days: `f restore <name>`) and close its workspace. Asks if work would be lost |
-| `alt-x` | Clean up every merged feature |
 | `esc` / `ctrl-space` | Close |
 
 Columns: `●` marks the workspace you're in (listed first, with the cursor on it) ·
