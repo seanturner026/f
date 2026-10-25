@@ -27,6 +27,8 @@ type Verdict = { block: boolean; reason?: string }
 
 const PICK_PANE = 'f-pick'
 const PLAN_PANE = 'f-plan'
+// f plan show --tree's status marks: done, in progress, ready, blocked, deferred.
+const MARK_COLORS: Record<string, string> = { '✓': 'green', '◐': 'blue', '○': 'cyan', '●': 'yellow', '❄': 'gray' }
 const PR_URL = /https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/pull\/\d+/g
 
 const plan = atom({ plugin: 'f', key: 'plan' } as const, null, { shape: 'plan-1' })
@@ -378,20 +380,34 @@ export const register: Register = on => {
     const { Box, Text } = $.ui.resolve(e)
     const text = await read($, plan)
     if (!text) return <Text dimColor>no plan</Text>
-    // Tree prefix (and status mark) in a fixed column, the rest wrapping beside it.
-    const rows = text.split('\n').filter(l => l.trim()).map(l => /^([ │├└─]*(?:[○●◐❄✓] )?)(.*)$/.exec(l) ?? ['', '', l])
+    // Tree lines dim, the mark colored by status, the title wrapping in its own column.
+    const rows = text.split('\n').filter(l => l.trim())
     return (
       <Box flexDirection="column" width={e.props.bodyColumns}>
-        {rows.map(([, tree = '', rest = ''], i) => (
-          <Box flexDirection="row">
-            <Text>{tree}</Text>
-            <Box flexShrink={1}>
-              <Text wrap="wrap" bold={i === 0} dimColor={tree.includes('✓') || rest.startsWith('+ waits on')}>
-                {rest}
-              </Text>
+        {rows.map((l, i) => {
+          const step = /^([ │├└─]*)([○●◐❄✓]) (\S+)\s+(.*)$/.exec(l)
+          if (i === 0) return <Text bold>{l}</Text>
+          if (!step) {
+            const [, tree = '', rest = l] = /^([ │├└─]*)(.*)$/.exec(l) ?? []
+            return (
+              <Box flexDirection="row">
+                <Text dimColor>{tree}</Text>
+                <Text dimColor wrap="wrap">{rest}</Text>
+              </Box>
+            )
+          }
+          const [, tree = '', mark = '', id = '', title = ''] = step
+          return (
+            <Box flexDirection="row">
+              <Text dimColor>{tree}</Text>
+              <Text color={MARK_COLORS[mark]}>{mark} </Text>
+              <Text dimColor>{id}  </Text>
+              <Box flexShrink={1}>
+                <Text wrap="wrap">{title}</Text>
+              </Box>
             </Box>
-          </Box>
-        ))}
+          )
+        })}
       </Box>
     )
   })
