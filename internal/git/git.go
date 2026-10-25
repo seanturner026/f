@@ -229,6 +229,13 @@ func CurrentBranch(ctx context.Context, r Runner, wt string) string {
 	return out
 }
 
+// FastForward moves repoDir's checked-out branch to rev, if that's a fast-forward.
+// Like a pull, it runs the repo's post-merge hook.
+func FastForward(ctx context.Context, r Runner, repoDir, rev string) error {
+	_, err := r.Run(ctx, repoDir, "git", "merge", "--ff-only", "-q", rev)
+	return err
+}
+
 // Checkout checks out rev: a branch, or with detach any commit (detached HEAD).
 func Checkout(ctx context.Context, r Runner, wt, rev string, detach bool) error {
 	args := []string{"checkout", "-q", rev}

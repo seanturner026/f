@@ -45,6 +45,10 @@ func syncAllFeature(ctx context.Context, d deps, name, focused, stamp string) {
 		fmt.Printf("%s %s: %v\n", stamp, name, err)
 		return
 	}
+	// Source clones move even while you're in the feature: they aren't its worktrees.
+	for _, l := range feature.UpdateSources(ctx, d.run, d.layout, name, after.PRs) {
+		fmt.Printf("%s %s: %s\n", stamp, name, l)
+	}
 	var lines []string
 	switch {
 	case name == focused:

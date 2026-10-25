@@ -82,7 +82,7 @@ launchd:
       <key>ProgramArguments</key>
       <array><string>/bin/sh</string><string>-c</string><string>exec f sync --all</string></array>
       <key>EnvironmentVariables</key>
-      <dict><key>PATH</key><string>$(go env GOPATH)/bin:$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string><key>F_CALLER</key><string>launchd</string></dict>
+      <dict><key>PATH</key><string>$(go env GOPATH)/bin:$(dirname "$(command -v go)"):$(dirname "$(command -v just)"):$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string><key>F_CALLER</key><string>launchd</string></dict>
       <key>StartInterval</key><integer>1800</integer>
       <key>StandardOutPath</key><string>{{ sync_log }}</string>
       <key>StandardErrorPath</key><string>{{ sync_log }}</string>
