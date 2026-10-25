@@ -24,6 +24,14 @@ func green(s string) string { return color("32", s) }
 func dim(s string) string   { return color("2", s) }
 func bold(s string) string  { return color("1", s) }
 
+// link makes text a terminal hyperlink (OSC 8): cmd+click opens url.
+func link(url, text string) string {
+	if !useColor || url == "" {
+		return text
+	}
+	return "\033]8;;" + url + "\033\\" + text + "\033]8;;\033\\"
+}
+
 func info(format string, a ...any) { fmt.Println(dim(fmt.Sprintf(format, a...))) }
 func ok(format string, a ...any)   { fmt.Println(green(fmt.Sprintf(format, a...))) }
 

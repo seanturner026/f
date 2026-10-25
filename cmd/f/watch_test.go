@@ -107,7 +107,7 @@ checks running: refreshing every minute · r refresh · f fix CI · q quit
 
 argocd
   #412 open  Add ACK app
-    ✗ Test / build  https://ci/1
+    ✗ Test / build
     ⋯ Diff / build
     ✓ 2 passed · 1 skipped
 

@@ -75,10 +75,11 @@ picker (`3/5 done · next: …`).
 | `f` | Fix CI: send failing checks + logs to this feature's agent (same as `/ci`) |
 | `q` | Quit (back to a shell; `f prs -w` restarts it) |
 
-Each open PR lists its failing (with link) and running checks; passed and
-skipped are a count. It asks GitHub every minute only while checks run or for
-5 minutes after a push or new PR; otherwise it just watches for pushes. What it
-learns shows in the picker too.
+Each open PR lists its failing and running checks; passed and skipped are a
+count. PR numbers, titles and check names are links: cmd+click opens them. It
+asks GitHub every minute only while checks run or for 5 minutes after a push or
+new PR; otherwise it just watches for pushes. What it learns shows in the
+picker too.
 
 ### Picker (`ctrl+space` or bare `f`)
 

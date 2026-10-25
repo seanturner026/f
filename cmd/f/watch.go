@@ -273,6 +273,7 @@ var checkMark = map[model.CheckState]string{
 
 // renderWatch draws the PRs tab: per repo its PRs, and for open ones the
 // failing and running checks one per line, passed/skipped as a count.
+// PRs and checks are hyperlinks to GitHub and CI.
 func renderWatch(v watchView) string {
 	var b strings.Builder
 	status := dim(string(v.mode))
@@ -301,7 +302,7 @@ func renderWatch(v watchView) string {
 		var done = map[model.PRStatus][]string{}
 		for _, p := range byRepo[repo] {
 			if !p.Status.IsActive() {
-				done[p.Status] = append(done[p.Status], fmt.Sprintf("#%d", p.Number))
+				done[p.Status] = append(done[p.Status], link(p.URL, fmt.Sprintf("#%d", p.Number)))
 			}
 		}
 		for _, st := range []model.PRStatus{model.PRStatusMerged, model.PRStatusClosed} {
@@ -314,7 +315,7 @@ func renderWatch(v watchView) string {
 			if !p.Status.IsActive() {
 				continue
 			}
-			fmt.Fprintf(&b, "  %s#%d %s  %s\n", prefix, p.Number, p.Status, p.Title)
+			fmt.Fprintf(&b, "  %s%s %s  %s\n", prefix, link(p.URL, fmt.Sprintf("#%d", p.Number)), p.Status, link(p.URL, p.Title))
 			indent := "    " + strings.Repeat(" ", len([]rune(prefix)))
 			b.WriteString(renderChecks(indent, p.Checks))
 		}
@@ -332,11 +333,7 @@ func renderChecks(indent string, checks []model.Check) string {
 	for _, state := range []model.CheckState{model.CheckFail, model.CheckPending} {
 		for _, c := range checks {
 			if c.State == state {
-				fmt.Fprintf(&b, "%s%s %s", indent, checkMark[state], c.Name)
-				if state == model.CheckFail && c.URL != "" {
-					b.WriteString("  " + dim(c.URL))
-				}
-				b.WriteString("\n")
+				fmt.Fprintf(&b, "%s%s %s\n", indent, checkMark[state], link(c.URL, c.Name))
 			}
 		}
 	}
