@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/seanturner026/pi/internal/model"
 )
@@ -27,6 +28,7 @@ type issue struct {
 	ID           string `json:"id"`
 	Title        string `json:"title"`
 	Status       string `json:"status"`
+	ExternalRef  string `json:"external_ref"` // a step's PR URLs, space-separated (see LinkedPRs)
 	Dependencies []struct {
 		DependsOn string `json:"depends_on_id"`
 		Type      string `json:"type"` // "blocks", "parent-child", ...
@@ -118,7 +120,7 @@ func Steps(ctx context.Context, r Runner, dir, id string) ([]model.Step, error) 
 	}
 	steps := make([]model.Step, 0, len(children))
 	for _, c := range children {
-		s := model.Step{ID: c.ID, Title: c.Title, Status: model.StepStatus(c.Status)}
+		s := model.Step{ID: c.ID, Title: c.Title, Status: model.StepStatus(c.Status), PRs: LinkedPRs(c.ExternalRef)}
 		for _, d := range c.Dependencies {
 			if d.Type == "blocks" {
 				s.BlockedBy = append(s.BlockedBy, d.DependsOn)
@@ -127,4 +129,17 @@ func Steps(ctx context.Context, r Runner, dir, id string) ([]model.Step, error) 
 		steps = append(steps, s)
 	}
 	return steps, nil
+}
+
+// LinkedPRs parses a step's external ref: the URLs of its PRs, space-separated
+// (pi links them: bd update <id> --external-ref "<url> <url>"). Anything that
+// isn't a GitHub PR URL is ignored.
+func LinkedPRs(ref string) []string {
+	var urls []string
+	for _, f := range strings.Fields(ref) {
+		if strings.HasPrefix(f, "https://github.com/") && strings.Contains(f, "/pull/") {
+			urls = append(urls, strings.TrimSuffix(f, "/"))
+		}
+	}
+	return urls
 }

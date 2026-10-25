@@ -47,7 +47,8 @@ func reconcileLines(ctx context.Context, d deps, name string, stackSync bool) ([
 	if err != nil {
 		return nil, err
 	}
-	return syncLines(results, true), nil
+	closed, _ := closeMergedSteps(ctx, d, name, state.PRs)
+	return append(syncLines(results, true), closed...), nil
 }
 
 // syncLines describes Reconcile's results, one line per branch marked ✓, and

@@ -197,6 +197,22 @@ func StackPRs(ctx context.Context, r Runner, dir, repo string) ([]model.PR, erro
 	return prs, nil
 }
 
+// PRStatus looks up one PR's status by URL (any repo).
+func PRStatus(ctx context.Context, r Runner, dir, url string) (model.PRStatus, error) {
+	out, err := r.Run(ctx, dir, "gh", "pr", "view", url, "--json", "state,isDraft")
+	if err != nil {
+		return "", fmt.Errorf("view %s: %w", url, err)
+	}
+	var p struct {
+		State   string `json:"state"`
+		IsDraft bool   `json:"isDraft"`
+	}
+	if err := json.Unmarshal([]byte(out), &p); err != nil {
+		return "", fmt.Errorf("view %s: decode: %w", url, err)
+	}
+	return model.PRStatusFromGitHub(p.State, p.IsDraft), nil
+}
+
 // RepoPRs returns the repo's stack PRs if dir is on a gh stack, otherwise the
 // PRs whose head is branch.
 func RepoPRs(ctx context.Context, r Runner, dir, repo, branch string) ([]model.PR, error) {

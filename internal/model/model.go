@@ -266,6 +266,23 @@ type Step struct {
 	Title     string
 	Status    StepStatus
 	BlockedBy []string // steps this one depends on ("blocks" dependencies)
+	PRs       []string // URLs of the step's PRs (its external ref): f closes it when all have merged
+}
+
+// MergedSteps returns the open steps whose linked PRs have all merged, by
+// status (a PR it can't tell about counts as not merged). GitHub decides when a
+// linked step is done; steps without PRs are closed by hand.
+func MergedSteps(steps []Step, status func(url string) PRStatus) []Step {
+	var done []Step
+	for _, s := range steps {
+		if s.Status == StepClosed || len(s.PRs) == 0 {
+			continue
+		}
+		if !slices.ContainsFunc(s.PRs, func(u string) bool { return status(u) != PRStatusMerged }) {
+			done = append(done, s)
+		}
+	}
+	return done
 }
 
 // stepGroup is a section of PlanView, in display order.

@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/seanturner026/pi/internal/feature"
@@ -45,8 +46,15 @@ func syncAll(ctx context.Context, d deps) error {
 			}
 			lines = syncLines(results, false)
 		}
-		var notes []string
+		closed, linked := closeMergedSteps(ctx, d, name, after.PRs)
+		notes := closed
+		for _, l := range closed {
+			fmt.Printf("%s %s: %s\n", stamp, name, l)
+		}
 		for _, p := range newlyMerged(before.PRs, after.PRs) {
+			if linked[strings.TrimSuffix(p.URL, "/")] {
+				continue // its step closes itself (above)
+			}
 			n := fmt.Sprintf("%s #%d merged (%s): close its beads step (bd close <id> --reason %s)", p.Repo, p.Number, p.URL, p.URL)
 			fmt.Printf("%s %s: %s\n", stamp, name, n)
 			notes = append(notes, n)

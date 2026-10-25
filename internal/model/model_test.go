@@ -1,6 +1,7 @@
 package model_test
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/seanturner026/pi/internal/model"
@@ -220,5 +221,25 @@ Done
 `
 	if got := model.PlanView("sqs", "f-1", steps); got != want {
 		t.Errorf("PlanView:\n%s\nwant:\n%s", got, want)
+	}
+}
+
+func TestMergedSteps(t *testing.T) {
+	status := map[string]model.PRStatus{"a": model.PRStatusMerged, "b": model.PRStatusMerged, "c": model.PRStatusOpen}
+	steps := []model.Step{
+		{ID: "1", Status: model.StepInProgress, PRs: []string{"a"}},       // merged
+		{ID: "2", Status: model.StepOpen, PRs: []string{"a", "b"}},        // all merged (staging + prod)
+		{ID: "3", Status: model.StepInProgress, PRs: []string{"a", "c"}},  // prod still open
+		{ID: "4", Status: model.StepInProgress, PRs: []string{"unknown"}}, // can't tell: keep
+		{ID: "5", Status: model.StepInProgress},                           // no PR: by hand
+		{ID: "6", Status: model.StepClosed, PRs: []string{"a"}},           // already closed
+	}
+	got := model.MergedSteps(steps, func(u string) model.PRStatus { return status[u] })
+	var ids []string
+	for _, s := range got {
+		ids = append(ids, s.ID)
+	}
+	if strings.Join(ids, ",") != "1,2" {
+		t.Errorf("MergedSteps = %v, want 1,2", ids)
 	}
 }

@@ -7,6 +7,7 @@ import (
 
 	"github.com/seanturner026/pi/internal/beads"
 	"github.com/seanturner026/pi/internal/feature"
+	"github.com/seanturner026/pi/internal/github"
 	"github.com/seanturner026/pi/internal/model"
 )
 
@@ -137,4 +138,50 @@ func closeIssueCmd(ctx context.Context, d deps, issue, name, reason, note string
 	}
 	_, err := closeOrNote(ctx, d, issue, name, reason)
 	return err
+}
+
+// closeMergedSteps closes the feature's open steps whose linked PRs have all
+// merged (model.MergedSteps): GitHub decides when a linked step is done, so
+// beads doesn't go stale when pi isn't around to close it. PRs the feature
+// doesn't track (e.g. a merged stack branch f sync dropped) are looked up live.
+// Returns a line per closed step, and every PR URL linked to a step.
+func closeMergedSteps(ctx context.Context, d deps, name string, prs []model.PR) (lines []string, linked map[string]bool) {
+	linked = map[string]bool{}
+	info, err := feature.LoadInfo(d.layout, name)
+	if err != nil || info.Issue == "" {
+		return nil, linked
+	}
+	steps, err := beads.Steps(ctx, d.run, d.layout.Base, info.Issue)
+	if err != nil {
+		return nil, linked
+	}
+	known := map[string]model.PRStatus{}
+	for _, p := range prs {
+		known[strings.TrimSuffix(p.URL, "/")] = p.Status
+	}
+	for _, s := range steps {
+		for _, u := range s.PRs {
+			linked[u] = true
+		}
+	}
+	status := func(url string) model.PRStatus {
+		if st, ok := known[url]; ok {
+			return st
+		}
+		st, _ := github.PRStatus(ctx, d.run, d.layout.Base, url) // "" on error: not merged
+		known[url] = st
+		return st
+	}
+	for _, s := range model.MergedSteps(steps, status) {
+		reason := strings.Join(s.PRs, " ")
+		if err := beads.Close(ctx, d.run, d.layout.Base, s.ID, reason); err != nil {
+			lines = append(lines, fmt.Sprintf("couldn't close beads step %s (%s): %v", s.ID, s.Title, err))
+			continue
+		}
+		lines = append(lines, fmt.Sprintf("closed beads step %s (%s): %s merged", s.ID, s.Title, reason))
+	}
+	if len(lines) > 0 {
+		_ = planSyncFeature(ctx, d, name) // the picker's progress
+	}
+	return lines, linked
 }

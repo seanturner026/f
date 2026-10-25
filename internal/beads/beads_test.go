@@ -97,3 +97,13 @@ func TestProgress(t *testing.T) {
 		})
 	}
 }
+
+func TestLinkedPRs(t *testing.T) {
+	got := beads.LinkedPRs("https://github.com/o/r/pull/1  https://github.com/o/r/pull/2/ gh-9 https://linear.app/x")
+	if strings.Join(got, " ") != "https://github.com/o/r/pull/1 https://github.com/o/r/pull/2" {
+		t.Errorf("LinkedPRs = %q", got)
+	}
+	if beads.LinkedPRs("") != nil {
+		t.Error("empty ref: want no PRs")
+	}
+}

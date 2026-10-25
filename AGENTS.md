@@ -21,6 +21,7 @@ My pi config plus `f`, the multi-repo feature workspace CLI. What each part is: 
 
 ## Conventions
 
+- One owner per fact; copies are for display only, never for decisions: plan steps → beads (`state.json` `plan` is a cache), PRs merged or not → GitHub (`state.json` `prs` is a cache), code → the worktrees. A beads step linked to PRs (`external_ref`, space-separated URLs) is closed by `f` when GitHub says they all merged (`closeMergedSteps`).
 - `f` is the only writer of a feature's `.context/`; pi (`agent/extensions/`) and nvim (`nvim/f.lua`) read it or call `f`.
 - Change `state.json` with `feature.UpdateState` (it locks), never `SaveState` alone.
 - `feature.json` (`feature.Info`), `state.json`, and `f prs --json` (`model.PR`) are mirrored by hand in `agent/extensions/f.ts`, `agent/extensions/repo-instructions/index.ts`, and `nvim/f.lua`: change them together.

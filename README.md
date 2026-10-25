@@ -56,6 +56,9 @@ One beads db for all features: `~/code/features/.beads` (local, metrics off).
   id in `.context/feature.json`. The goal (first prompt) is its description.
 - Multi-step work: pi plans steps as child issues with dependencies and works
   them in `bd ready` order (instructions in the feature's AGENTS.md).
+- pi links each step to its PRs (`bd update <id> --external-ref "<url> <url>"`);
+  `f sync` (and the 30-min `f sync --all`) closes a step once all its PRs have
+  merged. Steps without PRs are closed by hand.
 - The picker shows progress (`3/5 done · next: …`), synced after each pi run.
 - Cleanup closes the issue (with merged PR links). If plan steps are still
   open, or the feature was removed with unmerged work, it stays open with a note.

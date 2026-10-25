@@ -43,7 +43,8 @@ This feature is beads issue ` + "`{{.Issue}}`" + `. For multi-step work, plan th
 
 - Create steps: ` + "`bd create \"<step>\" --parent {{.Issue}} --description \"<repos, what, how to verify>\"`" + `
 - Order them: ` + "`bd dep add <later-id> <earlier-id>`" + ` (later depends on earlier)
-- Next step: ` + "`bd ready --parent {{.Issue}}`" + `; close each as its PR lands: ` + "`bd close <id> --reason \"<PR url>\"`" + `
+- Next step: ` + "`bd ready --parent {{.Issue}}`" + `.
+- When you open a step's PR, link it: ` + "`bd update <id> --external-ref \"<PR url> [<PR url>...]\"`" + ` (every PR of the step, space-separated; it replaces, so include earlier ones, e.g. staging and production). f closes the step when they've all merged; don't close linked steps yourself. Close steps without a PR by hand: ` + "`bd close <id> --reason \"<what was done>\"`" + `.
 - One-off changes don't need child issues. Run ` + "`bd prime`" + ` for the full bd workflow.
 {{end}}`))
 
