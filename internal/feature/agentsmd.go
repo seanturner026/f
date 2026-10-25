@@ -61,14 +61,7 @@ func writeAgentsMD(l Layout, info Info) error {
 	}
 	repos := make([]agentsRepo, 0, len(info.Repos))
 	for _, r := range info.Repos {
-		ar := agentsRepo{Dir: r}
-		for _, c := range []string{"AGENTS.md", "CLAUDE.md"} {
-			if _, err := os.Stat(filepath.Join(RepoDir(l, info.Name, r), c)); err == nil {
-				ar.Instructions = r + "/" + c
-				break
-			}
-		}
-		repos = append(repos, ar)
+		repos = append(repos, agentsRepo{Dir: r, Instructions: InstructionFile(l, info.Name, r)})
 	}
 	f, err := os.Create(AgentsMDPath(l, info.Name))
 	if err != nil {

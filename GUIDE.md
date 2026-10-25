@@ -21,8 +21,11 @@ by `f`).
 
 1. **Start**: from any Herdr shell (`ctrl+b t` popup, or a shell tab):
    `f <name>` → pick repos (TAB selects, filter clears) → Herdr opens the
-   workspace, pi waiting. Type your first prompt; it becomes the goal and the
-   beads issue description. Use `@` to reference files across repos.
+   workspace at once, pi waiting, while worktrees are fetched in the background
+   (repo tabs say "setting up"). Type your first prompt; if you send it before
+   they're ready, pi shows "setting up worktrees… (n/m)" and starts when they
+   are. It becomes the goal and the beads issue description. Use `@` to
+   reference files across repos.
 2. **Direction**: pi asks questions, then proposes. Approve or steer.
 3. **Review**: `opt+3…` repo tabs show a live CodeDiff of the whole feature.
    `<leader>pr` toggles to *just pi's last run*. Comment with `<leader>pc`,
@@ -139,7 +142,7 @@ Comment on the **right** side of a diff (the real file). Comments are saved in
 | `f <name>` | Start a feature, or reopen it (continues pi's session; restarts any of its tabs that are back at a bare shell) |
 | `f resume` | After quitting WezTerm/Herdr: Herdr restores the layout as bare shells; this restarts pi (`--continue`), nvim, review, and prs in every feature workspace. Shell tabs and anything still running are left alone |
 | `f` | Picker |
-| `f add [repo…]` | Add repos to this feature (+ Herdr tabs, before shell) |
+| `f add [repo…]` | Add repos to this feature (+ Herdr tabs, before shell). From your shell in Herdr it returns at once and sets them up in the background (pi gets them with your next prompt); run by pi it waits |
 | `f prs [-r] [-c] [-n] [-w]` | PRs: from saved state; `-r` refresh live, `-c` copy, `-n` don't open browser, `-w` live view (the prs tab) |
 | `f sync --all` | What launchd runs every 30 min: PR/CI and plan refresh for every feature; post-merge resets wait for the one you're in or a busy pi; never pushes; pi gets a note with its next prompt. Log: `~/Library/Logs/f-sync.log` |
 | `f sync` | Same as `/sync`. Leaves repos with uncommitted changes or conflicts alone (says so). Never pushes the default branch or branches outside the feature |

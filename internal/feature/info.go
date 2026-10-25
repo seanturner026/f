@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 )
 
 // Info describes a feature for everything outside f (pi extension, nvim):
@@ -53,8 +54,8 @@ func SetIssue(l Layout, name, issue string) (Info, error) {
 	return Sync(l, name, "")
 }
 
-// Sync refreshes the feature's info (repos from disk; goal if non-empty,
-// otherwise the existing one) and regenerates AGENTS.md from it.
+// Sync refreshes the feature's info (repos from disk, plus any still being set
+// up; goal if non-empty, otherwise the existing one) and regenerates AGENTS.md.
 func Sync(l Layout, name, goal string) (Info, error) {
 	info, err := LoadInfo(l, name)
 	if err != nil {
@@ -63,6 +64,14 @@ func Sync(l Layout, name, goal string) (Info, error) {
 	repos, err := Repos(l, name)
 	if err != nil {
 		return Info{}, err
+	}
+	if state, _ := LoadState(l, name); state.Setup != nil {
+		for _, r := range state.Setup.Repos {
+			if !slices.Contains(repos, r) {
+				repos = append(repos, r)
+			}
+		}
+		slices.Sort(repos)
 	}
 	info.Name, info.Root, info.Repos = name, Dir(l, name), repos
 	switch {

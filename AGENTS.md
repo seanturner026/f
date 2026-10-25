@@ -26,5 +26,6 @@ My pi config plus `f`, the multi-repo feature workspace CLI. What each part is: 
 - Change `state.json` with `feature.UpdateState` (it locks), never `SaveState` alone.
 - `feature.json` (`feature.Info`), `state.json`, and `f prs --json` (`model.PR`) are mirrored by hand in `agent/extensions/f.ts`, `agent/extensions/repo-instructions/index.ts`, and `nvim/f.lua`: change them together.
 - Packages that shell out declare their own small `Runner` interface; `shell.Exec` implements it, tests use fakes.
+- `state.json` `setup` (`feature.Setup`): repos `f setup` is still adding in the background; `feature.json` already lists them, `f.ts` holds a run until it's gone, nvim review tabs wait for the worktree. `f setup` queues sync notes before `EndSetup`, so pi gets them with the run it was holding.
 - `feature.Remove` moves a feature into `.features/.trash/<name>-<stamp>` and re-links its worktrees there (`git worktree repair`), keeping branches; only `EmptyTrash` (after `TrashRetention`) prunes worktrees and deletes branches.
 - "Merged" means in the default branch by ancestry or by content (`git.InBase`: squash merges), never just `head_oid` ancestry. Force pushes go through `git.ForcePushBranch` (refuses the default branch and branches outside the feature).

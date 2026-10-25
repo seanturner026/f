@@ -102,7 +102,7 @@ func goal(ctx context.Context, d deps, explicit, text string) error {
 
 // start creates a feature, or reopens it if it exists. With no name, it picks
 // an existing feature to reopen.
-func start(ctx context.Context, d deps, name string, repos []string, prompt string) error {
+func start(ctx context.Context, d deps, name string, repos []string) error {
 	if name == "" {
 		if len(feature.List(d.layout)) == 0 {
 			fmt.Print(help)
@@ -117,7 +117,7 @@ func start(ctx context.Context, d deps, name string, repos []string, prompt stri
 		}
 		ensureIssue(ctx, d, picked)
 		syncInBackground(picked)
-		return launch(ctx, d, picked, "", true)
+		return launch(ctx, d, picked, true)
 	}
 	if err := checkName(name); err != nil {
 		return err
@@ -128,7 +128,7 @@ func start(ctx context.Context, d deps, name string, repos []string, prompt stri
 		}
 		ensureIssue(ctx, d, name)
 		syncInBackground(name)
-		return launch(ctx, d, name, "", true)
+		return launch(ctx, d, name, true)
 	}
 
 	if _, ok := feature.InTrash(d.layout, name); ok {
@@ -156,14 +156,84 @@ func start(ctx context.Context, d deps, name string, repos []string, prompt stri
 	}
 
 	fmt.Println(bold(name))
+	if !d.noHerdr && herdr.Inside() {
+		// Open the workspace now; worktrees and the beads issue come in the
+		// background (fetching takes seconds) while you write the first prompt.
+		if err := setupInBackground(d, name, repos); err != nil {
+			return err
+		}
+		return launch(ctx, d, name, false)
+	}
 	if err := addRepos(ctx, d, name, repos); err != nil {
 		return err
 	}
-	if _, err := feature.Sync(d.layout, name, prompt); err != nil {
+	if _, err := feature.Sync(d.layout, name, ""); err != nil {
 		return err
 	}
 	ensureIssue(ctx, d, name)
-	return launch(ctx, d, name, prompt, false)
+	return launch(ctx, d, name, false)
+}
+
+// setupInBackground records repos as pending (so AGENTS.md, nvim and pi know
+// them already) and starts `f setup` to add their worktrees.
+func setupInBackground(d deps, name string, repos []string) error {
+	if err := feature.BeginSetup(d.layout, name, repos); err != nil {
+		return err
+	}
+	if _, err := feature.Sync(d.layout, name, ""); err != nil {
+		return err
+	}
+	startDetached(append([]string{"setup", "-f", name}, repos...)...)
+	return nil
+}
+
+// setup is `f setup`: add repos' worktrees (concurrently), then the beads
+// issue, and tell pi what's ready (or failed) with its next prompt. pi waits
+// for it before a run (state.json "setup").
+func setup(ctx context.Context, d deps, name string, repos []string) error {
+	errs := make([]error, len(repos))
+	var wg sync.WaitGroup
+	var agentsMD sync.Mutex // Sync rewrites AGENTS.md: one at a time
+	for i, repo := range repos {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_, _, errs[i] = feature.AddRepo(ctx, d.run, d.layout, name, repo)
+			if errs[i] == nil {
+				agentsMD.Lock()
+				_, errs[i] = feature.Sync(d.layout, name, "") // its instructions file, for AGENTS.md
+				agentsMD.Unlock()
+			}
+			_ = feature.FinishSetup(d.layout, name, repo) // progress for pi's "setting up (n/m)"
+		}()
+	}
+	wg.Wait()
+	var ready, notes []string
+	for i, repo := range repos {
+		if errs[i] != nil {
+			notes = append(notes, fmt.Sprintf("couldn't set up %s: %v (retry: f add %s)", repo, errs[i], repo))
+			continue
+		}
+		if file := feature.InstructionFile(d.layout, name, repo); file != "" {
+			ready = append(ready, fmt.Sprintf("%s/ (instructions: %s)", repo, file))
+		} else {
+			ready = append(ready, repo+"/")
+		}
+	}
+	if len(ready) > 0 {
+		notes = append([]string{"worktrees ready (AGENTS.md lists them): " + strings.Join(ready, ", ")}, notes...)
+	}
+	// Notes first, then end setup: pi stops waiting when setup ends and takes
+	// the notes right after.
+	err := feature.AddSyncNotes(d.layout, name, notes...)
+	if endErr := feature.EndSetup(d.layout, name); err == nil {
+		err = endErr
+	}
+	if _, syncErr := feature.Sync(d.layout, name, ""); err == nil { // drop failed repos from feature.json
+		err = syncErr
+	}
+	ensureIssue(ctx, d, name) // bd create: ~0.8s, after pi is unblocked
+	return err
 }
 
 func addRepos(ctx context.Context, d deps, name string, repos []string) error {
@@ -203,13 +273,10 @@ func addRepos(ctx context.Context, d deps, name string, repos []string) error {
 
 // launch runs pi for the feature: in its own Herdr workspace when called from
 // inside Herdr, otherwise right here in this terminal.
-func launch(ctx context.Context, d deps, name, prompt string, reopen bool) error {
+func launch(ctx context.Context, d deps, name string, reopen bool) error {
 	args := []string{"--name", name}
 	if reopen {
 		args = append(args, "--continue")
-	}
-	if prompt != "" {
-		args = append(args, prompt)
 	}
 	dir := feature.Dir(d.layout, name)
 	// Inside Herdr, its server is up by definition: skip the status round trip.
@@ -318,13 +385,23 @@ func add(ctx context.Context, d deps, explicit string, repos []string) error {
 	if err := feature.CheckRepos(d.layout, repos); err != nil {
 		return err
 	}
-	if err := addRepos(ctx, d, name, repos); err != nil {
-		return err
+	// You typing in Herdr: return now and set up in the background. pi running
+	// f add (not a terminal) uses the repo right after, so it waits.
+	lazy := interactive() && !d.noHerdr && herdr.Inside()
+	if lazy {
+		if err := setupInBackground(d, name, repos); err != nil {
+			return err
+		}
+		info("setting up %s in the background; pi gets it with your next prompt", strings.Join(repos, ", "))
+	} else {
+		if err := addRepos(ctx, d, name, repos); err != nil {
+			return err
+		}
+		if _, err := feature.Sync(d.layout, name, ""); err != nil {
+			return err
+		}
+		info("AGENTS.md updated; /reload in pi to pick it up")
 	}
-	if _, err := feature.Sync(d.layout, name, ""); err != nil {
-		return err
-	}
-	info("AGENTS.md updated; /reload in pi to pick it up")
 	if !d.noHerdr && herdr.Available(ctx, d.run) {
 		for _, repo := range repos {
 			if added, err := herdr.AddRepoTab(ctx, d.run, d.socket, name, feature.Dir(d.layout, name), repo); err != nil {
@@ -485,13 +562,12 @@ func findFinished(ctx context.Context, d deps) []string {
 func removeFinished(ctx context.Context, d deps, done []string) []string {
 	var removed []string
 	for _, name := range done {
-		if note := closeIssue(ctx, d, name); note != "" {
-			fmt.Println(dim(name + ": " + note))
-		}
+		issue := issueUpdateInBackground(d, name, false, nil) // bd takes ~0.8s a feature
 		if err := removeWithWorkspace(ctx, d, name); err != nil {
 			fmt.Printf("%s %v\n", red("cleanup:"), err)
 			continue
 		}
+		issue()
 		removed = append(removed, name)
 	}
 	return removed
@@ -529,5 +605,5 @@ func restore(ctx context.Context, d deps, name string) error {
 		_ = beads.Reopen(ctx, d.run, d.layout.Base, info.Issue) // fails if it was left open: fine
 	}
 	fmt.Println(green("restored " + name))
-	return start(ctx, d, name, nil, "")
+	return start(ctx, d, name, nil)
 }

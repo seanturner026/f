@@ -31,6 +31,7 @@ type State struct {
 	// SyncNotes tell pi what a background f sync changed (e.g. a repo reset to
 	// main after its PR merged); the f extension hands them over on the next prompt.
 	SyncNotes []string `json:"sync_notes,omitempty"`
+	Setup     *Setup   `json:"setup,omitempty"` // repos still being added in the background
 }
 
 // AddSyncNotes queues notes for pi.

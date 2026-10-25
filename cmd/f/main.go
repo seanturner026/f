@@ -43,13 +43,12 @@ func main() {
 		EnableShellCompletion:         true,
 		Flags: []cli.Flag{
 			&cli.StringSliceFlag{Name: "repo", Aliases: []string{"r"}, Usage: "repo (skips fzf)", Local: true},
-			&cli.StringFlag{Name: "prompt", Aliases: []string{"p"}, Usage: "first prompt for pi", Local: true},
 		},
 		Action: func(ctx context.Context, c *cli.Command) error {
 			if c.NArg() > 1 {
 				return fmt.Errorf("one feature name at a time")
 			}
-			return start(ctx, d, c.Args().First(), c.StringSlice("repo"), c.String("prompt"))
+			return start(ctx, d, c.Args().First(), c.StringSlice("repo"))
 		},
 		ShellComplete: func(ctx context.Context, c *cli.Command) { printLines(feature.List(d.layout)) },
 		Commands: []*cli.Command{
@@ -180,6 +179,17 @@ func main() {
 						names = append(names, t.Name)
 					}
 					printLines(names)
+				},
+			},
+			{
+				// Started by f <new feature> and f add: fetch and add worktrees, then
+				// the beads issue, while the workspace is already open.
+				Name:      "setup",
+				Hidden:    true,
+				ArgsUsage: "repo...",
+				Flags:     []cli.Flag{featureFlag},
+				Action: func(ctx context.Context, c *cli.Command) error {
+					return setup(ctx, d, c.String("feature"), c.Args().Slice())
 				},
 			},
 			{

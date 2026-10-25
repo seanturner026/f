@@ -281,20 +281,32 @@ end
 
 local WAIT_MS = 3000 -- how often a waiting review tab checks for changes
 
+local function is_worktree(dir)
+  return vim.uv.fs_stat(dir .. "/.git") ~= nil
+end
+
 -- wait_for_changes shows a placeholder in the current tab until repo has
--- changes, then opens its CodeDiff and closes the placeholder.
+-- changes, then opens its CodeDiff and closes the placeholder. A repo f is
+-- still setting up (f setup) has no worktree yet: it waits for that first.
 local function wait_for_changes(root, repo)
   local dir = root .. "/" .. repo
-  local upstream = vim.trim(git(dir, "rev-parse", "--abbrev-ref", "origin/HEAD").stdout or "")
   vim.cmd("enew")
   local buf, tab = vim.api.nvim_get_current_buf(), vim.api.nvim_get_current_tabpage()
   vim.bo[buf].buftype, vim.bo[buf].bufhidden, vim.bo[buf].swapfile = "nofile", "wipe", false
-  vim.api.nvim_buf_set_lines(buf, 0, -1, false, {
-    "",
-    "  " .. repo .. ": no changes vs " .. (upstream ~= "" and upstream or "origin/HEAD") .. " yet.",
-    "  This tab switches to CodeDiff once there are.",
-  })
-  vim.bo[buf].modifiable, vim.bo[buf].modified = false, false
+  local function show()
+    local text
+    if is_worktree(dir) then
+      local upstream = vim.trim(git(dir, "rev-parse", "--abbrev-ref", "origin/HEAD").stdout or "")
+      text = repo .. ": no changes vs " .. (upstream ~= "" and upstream or "origin/HEAD") .. " yet."
+    else
+      text = repo .. ": setting up its worktree (f is fetching)."
+    end
+    vim.bo[buf].modifiable = true
+    vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "", "  " .. text, "  This tab switches to CodeDiff once there are changes." })
+    vim.bo[buf].modifiable, vim.bo[buf].modified = false, false
+  end
+  show()
+  local ready = is_worktree(dir)
   vim.api.nvim_tabpage_set_var(tab, "pi_repo", repo)
   vim.cmd("redrawtabline")
 
@@ -302,6 +314,13 @@ local function wait_for_changes(root, repo)
   timer:start(WAIT_MS, WAIT_MS, vim.schedule_wrap(function()
     if not vim.api.nvim_tabpage_is_valid(tab) or not vim.api.nvim_buf_is_valid(buf) then
       return timer:close()
+    end
+    if not is_worktree(dir) then
+      return
+    end
+    if not ready then
+      ready = true
+      show()
     end
     if not has_changes(dir) then
       return
@@ -377,10 +396,13 @@ local function review(opts)
       return vim.notify("PiReview: no repo " .. only .. " in this feature", vim.log.levels.WARN)
     end
     repos = { only }
-    if not has_changes(root .. "/" .. only) then
+    if not is_worktree(root .. "/" .. only) or not has_changes(root .. "/" .. only) then
       return wait_for_changes(root, only)
     end
   else
+    repos = vim.tbl_filter(function(r) -- skip repos f is still setting up
+      return is_worktree(root .. "/" .. r)
+    end, repos)
     vim.o.tabline = "%!v:lua.require'f'.tabline()"
     vim.o.showtabline = 2
   end

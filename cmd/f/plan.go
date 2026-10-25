@@ -29,21 +29,6 @@ func ensureIssue(ctx context.Context, d deps, name string) {
 	}
 }
 
-// closeIssue closes the feature's issue (call before the feature is removed).
-// If bd won't close it (e.g. plan steps still open), it notes why and leaves
-// it open; the returned text says so ("" when closed or there's no issue).
-func closeIssue(ctx context.Context, d deps, name string) string {
-	info, _ := feature.LoadInfo(d.layout, name)
-	if info.Issue == "" {
-		return ""
-	}
-	state, _ := feature.LoadState(d.layout, name)
-	if closed, _ := closeOrNote(ctx, d, info.Issue, name, closeReason(state.PRs)); !closed {
-		return fmt.Sprintf("issue %s left open (plan steps still open?)", info.Issue)
-	}
-	return ""
-}
-
 // closeReason is a removed feature's close reason: its merged PRs, if any.
 func closeReason(prs []model.PR) string {
 	var urls []string

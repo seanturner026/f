@@ -14,6 +14,8 @@
  * - Sync: /sync runs `f sync` (after a merge: reset that repo to main). Notes
  *   from the background sync (launchd: f sync --all) come with the next prompt.
  * - /f <name> [repo...]: open or start a feature without leaving chat.
+ * - Setup: a new feature (or f add) opens before its worktrees exist; a run
+ *   waits until `f setup` has added them (state.json "setup").
  * - Plan: after each run, `f plan sync` saves the beads issue's progress for
  *   the picker (bd is too slow to query when the picker opens); /plan toggles
  *   a widget with the steps (`f plan show`).
@@ -37,6 +39,20 @@ function ciMark(p: PR): "" | "✗" | "⋯" | "✓" {
 	if (states.includes("pending")) return "⋯";
 	return states.length ? "✓" : "";
 }
+
+// state.json "setup" (feature.Setup): repos f is still adding in the background.
+type Setup = { repos: string[]; pending: string[] };
+
+function setupOf(cwd: string): Setup | undefined {
+	try {
+		const state = JSON.parse(readFileSync(join(cwd, ".context", "state.json"), "utf-8")) as { setup?: Setup };
+		return state.setup ?? undefined;
+	} catch {
+		return undefined;
+	}
+}
+
+const SETUP_WAIT_MS = 5 * 60_000; // a crashed f setup must not block pi forever
 
 const PR_URL = /https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/pull\/\d+/g;
 const STATUS_KEY = "f-prs";
@@ -260,12 +276,26 @@ export default function (pi: ExtensionAPI) {
 
 	let running = false;
 
+	// waitForSetup holds a run until f setup has added the feature's worktrees
+	// (a new feature opens at once; fetching takes seconds).
+	async function waitForSetup(ctx: ExtensionContext): Promise<void> {
+		let s = setupOf(ctx.cwd);
+		const deadline = Date.now() + SETUP_WAIT_MS;
+		while (s && Date.now() < deadline && !ctx.signal?.aborted) {
+			if (ctx.mode === "tui") ctx.ui.setWorkingMessage(`setting up worktrees\u2026 (${s.repos.length - s.pending.length}/${s.repos.length})`);
+			await new Promise((r) => setTimeout(r, 500));
+			s = setupOf(ctx.cwd);
+		}
+		if (ctx.mode === "tui") ctx.ui.setWorkingMessage();
+	}
+
 	pi.on("before_agent_start", async (event, ctx) => {
 		const info = featureInfo(ctx.cwd);
 		if (!info || running) return; // follow-ups within one run share its snapshot
 		running = true;
 		const prompt = event.prompt.trim();
 		try {
+			await waitForSetup(ctx); // the snapshot below needs the worktrees
 			// Background: also sets the beads description (bd is ~0.5s).
 			if (!info.goal && prompt) background(f(ctx, "goal", prompt));
 			// Awaited: the snapshot must exist before pi starts editing.
@@ -286,7 +316,7 @@ export default function (pi: ExtensionAPI) {
 		return {
 			message: {
 				customType: "f-sync",
-				content: `While you were idle, f sync changed repos in this feature (re-read files before editing them):\n${notes}`,
+				content: `Notes from f since your last run (re-read files before editing them):\n${notes}`,
 				display: true,
 			},
 		};
