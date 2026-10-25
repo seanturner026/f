@@ -65,6 +65,8 @@ func CheckpointEnd(ctx context.Context, r Runner, l Layout, name string) ([]stri
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
+			ctx, span := tracing.Start(ctx, "checkpoint end repo", attribute.String("repo", repo))
+			defer func() { tracing.End(span, errs[i]) }()
 			changed[i], errs[i] = checkpointEndRepo(ctx, r, RepoDir(l, name, repo))
 			if errs[i] != nil {
 				errs[i] = fmt.Errorf("checkpoint %s: %w", repo, errs[i])

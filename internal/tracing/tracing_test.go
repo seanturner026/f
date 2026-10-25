@@ -183,8 +183,9 @@ func TestCommandName(t *testing.T) {
 		{"herdr", []string{"tab", "create", "--workspace", "w1"}, "herdr tab create"},
 		{"bd", []string{"note", "f-1", "text"}, "bd note"},
 		{"git", []string{"-c", "x=y", "log"}, "git"},
+		{"env", []string{"GIT_INDEX_FILE=/tmp/x123", "git", "write-tree"}, "git write-tree"},
 	} {
-		if got := CommandName(tt.name, tt.args); got != tt.want {
+		if got := CommandName(unwrapEnv(tt.name, tt.args)); got != tt.want {
 			t.Errorf("CommandName(%s %v) = %q, want %q", tt.name, tt.args, got, tt.want)
 		}
 	}

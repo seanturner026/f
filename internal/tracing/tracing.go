@@ -126,11 +126,12 @@ type Traced struct {
 }
 
 func (t Traced) Run(ctx context.Context, dir, name string, args ...string) (string, error) {
+	cmd, cmdArgs := unwrapEnv(name, args)
 	attrs := []attribute.KeyValue{attribute.String("exec.dir", t.rel(dir))}
-	if name != "bd" { // bd notes and descriptions hold arbitrary text
-		attrs = append(attrs, attribute.String("exec.args", truncate(strings.Join(args, " "), 60)))
+	if cmd != "bd" { // bd notes and descriptions hold arbitrary text
+		attrs = append(attrs, attribute.String("exec.args", truncate(strings.Join(cmdArgs, " "), 60)))
 	}
-	ctx, span := Start(ctx, CommandName(name, args), attrs...)
+	ctx, span := Start(ctx, CommandName(cmd, cmdArgs), attrs...)
 	out, err := t.Runner.Run(ctx, dir, name, args...)
 	code := 0
 	if err != nil {
@@ -154,6 +155,20 @@ func (t Traced) rel(dir string) string {
 		return r
 	}
 	return dir
+}
+
+// unwrapEnv sees through `env VAR=value... cmd args` (git snapshots use a
+// temp GIT_INDEX_FILE), so the span is named after cmd, not a per-run path.
+func unwrapEnv(name string, args []string) (string, []string) {
+	if name != "env" {
+		return name, args
+	}
+	for i, a := range args {
+		if !strings.Contains(a, "=") && !strings.HasPrefix(a, "-") {
+			return a, args[i+1:]
+		}
+	}
+	return name, args
 }
 
 // CommandName is a command's span name: the command and its first
