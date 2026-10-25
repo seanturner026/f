@@ -25,9 +25,13 @@ just                    # every recipe (checks, sync-now, trace, ...)
 `f` starts one agent session that works across several repos, each on its own git
 worktree (`f -h` for commands).
 
-- Features live in `~/code/features/.features/<name>/<repo>` (branch =
-  name; override the base with `F_BASE`). Feature state is local-only in
-  `<feature>/.context/` (`feature.json`, PRs, comments), written only by `f`.
+- Per machine, `~/.config/f/config.json` says where features live (`home`,
+  default `~/code/features`; `F_BASE` overrides) and which repos you can pick
+  (`repos`: paths, or `dir/*` for every repo in dir; default `<home>/*`):
+  `{"home": "~/code/features", "repos": ["~/code/features/*", "~/code/github/me/dotfiles"]}`.
+- Features live in `<home>/.features/<name>/<repo>` (branch = name). Feature
+  state is local-only in `<feature>/.context/` (`feature.json`, PRs, comments),
+  written only by `f`.
 - Inside Herdr each feature gets a workspace: `chat · nvim · <repo>… · prs · shell`,
   each repo tab a live CodeDiff (`<leader>pr` toggles whole feature ↔ the agent's last
   run); `prs` is `f prs --watch` (PRs + checks, polls GitHub only while checks
@@ -55,7 +59,7 @@ The agent never uses admin AWS profiles or production kube contexts
 
 ## Beads
 
-One beads db for all features: `~/code/features/.beads` (local, metrics off).
+One beads db for all features: `<home>/.beads` (local, metrics off).
 
 - Every feature gets a beads issue (`f <name>`; older features on next reopen),
   id in `.context/feature.json`. The goal (first prompt) is its description.

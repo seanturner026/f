@@ -1,7 +1,7 @@
 // Package feature manages feature workspaces: one directory per feature holding
 // a git worktree per repo (branch = feature name) plus a generated AGENTS.md.
 //
-//	<Base>/<repo>                      base clones
+//	<Sources>                          base clones (anywhere: Config.Repos)
 //	<Base>/.features/<feature>/<repo>  worktrees
 package feature
 
@@ -30,31 +30,52 @@ var (
 	ErrNotFound = errors.New("no such feature")
 	// ErrInvalidName means a feature name has characters git or Herdr won't accept.
 	ErrInvalidName = errors.New("invalid feature name (use lowercase, digits, - . _)")
-	// ErrNoBaseClone means a repo isn't cloned under Base.
+	// ErrNoBaseClone means no repo source has a clone of that name.
 	ErrNoBaseClone = errors.New("no base clone")
 )
 
 // Layout locates base clones and feature directories.
 type Layout struct {
-	Base     string // base clones
-	Features string // feature directories
+	Base     string   // f's home: .features (and its trash), the beads db
+	Features string   // feature directories
+	Sources  []string // base clones: a repo's path, or dir/* for every repo in dir
 }
 
-// NewLayout returns the layout rooted at base.
+// NewLayout returns the layout rooted at base, offering the repos in it.
 func NewLayout(base string) Layout {
-	return Layout{Base: base, Features: filepath.Join(base, ".features")}
+	return Layout{Base: base, Features: filepath.Join(base, ".features"), Sources: []string{filepath.Join(base, "*")}}
 }
 
-// DefaultLayout uses $F_BASE, or ~/code/features.
-func DefaultLayout() (Layout, error) {
-	if base := os.Getenv("F_BASE"); base != "" {
-		return NewLayout(base), nil
+// RepoPath is repo's base clone, or "" if no source has it.
+func (l Layout) RepoPath(repo string) string {
+	clones, _ := l.baseClones()
+	return clones[repo]
+}
+
+// baseClones maps each base clone's name (its directory name) to its path.
+// Two sources with the same name is an error; the first is kept.
+func (l Layout) baseClones() (map[string]string, error) {
+	clones := map[string]string{}
+	var errs []error
+	add := func(path string) {
+		name := filepath.Base(path)
+		if prev, ok := clones[name]; ok && prev != path {
+			errs = append(errs, fmt.Errorf("two repos named %q: %s and %s", name, prev, path))
+			return
+		}
+		clones[name] = path
 	}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return Layout{}, fmt.Errorf("default layout: %w", err)
+	for _, src := range l.Sources {
+		if dir, ok := strings.CutSuffix(src, string(filepath.Separator)+"*"); ok {
+			names, _ := gitDirs(dir) // a missing source dir offers nothing
+			for _, n := range names {
+				add(filepath.Join(dir, n))
+			}
+		} else if git.IsRepo(src) {
+			add(src)
+		}
 	}
-	return NewLayout(filepath.Join(home, "code", "features")), nil
+	return clones, errors.Join(errs...)
 }
 
 // Dir is the directory of feature name.
@@ -66,7 +87,7 @@ func RepoDir(l Layout, name, repo string) string { return filepath.Join(Dir(l, n
 // baseRef is where repo's feature branches start: origin's default branch, as
 // its base clone knows it.
 func baseRef(ctx context.Context, r Runner, l Layout, repo string) string {
-	return "origin/" + git.DefaultBranch(ctx, r, filepath.Join(l.Base, repo))
+	return "origin/" + git.DefaultBranch(ctx, r, l.RepoPath(repo))
 }
 
 // Exists reports whether feature name exists.
@@ -113,12 +134,17 @@ func gitDirs(dir string) ([]string, error) {
 	return repos, nil
 }
 
-// BaseRepos lists the base clones.
+// BaseRepos lists the base clones' names, sorted.
 func BaseRepos(l Layout) ([]string, error) {
-	repos, err := gitDirs(l.Base)
+	clones, err := l.baseClones()
 	if err != nil {
 		return nil, fmt.Errorf("base repos: %w", err)
 	}
+	repos := make([]string, 0, len(clones))
+	for name := range clones {
+		repos = append(repos, name)
+	}
+	sort.Strings(repos)
 	return repos, nil
 }
 
@@ -134,8 +160,8 @@ func Repos(l Layout, name string) ([]string, error) {
 // CheckRepos verifies every repo has a base clone.
 func CheckRepos(l Layout, repos []string) error {
 	for _, r := range repos {
-		if !git.IsRepo(filepath.Join(l.Base, r)) {
-			return fmt.Errorf("%q in %s: %w", r, l.Base, ErrNoBaseClone)
+		if l.RepoPath(r) == "" {
+			return fmt.Errorf("%q (repos come from %s): %w", r, strings.Join(l.Sources, ", "), ErrNoBaseClone)
 		}
 	}
 	return nil

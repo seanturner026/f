@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"path/filepath"
 	"sync"
 
 	"go.opentelemetry.io/otel/attribute"
@@ -29,9 +28,9 @@ const (
 func AddRepo(ctx context.Context, r Runner, l Layout, name, repo string) (result AddResult, base string, err error) {
 	ctx, span := tracing.Start(ctx, "add repo", attribute.String("repo", repo))
 	defer func() { span.SetAttributes(attribute.String("add.result", string(result))); tracing.End(span, err) }()
-	src := filepath.Join(l.Base, repo)
+	src := l.RepoPath(repo)
 	dst := RepoDir(l, name, repo)
-	if !git.IsRepo(src) {
+	if src == "" {
 		return "", "", fmt.Errorf("%q: %w", repo, ErrNoBaseClone)
 	}
 	if _, err := os.Stat(dst); err == nil {
@@ -139,7 +138,7 @@ func Unmerged(ctx context.Context, r Runner, l Layout, name string, known []mode
 func unmergedIn(ctx context.Context, r Runner, l Layout, name, repo string, known []model.PR) []string {
 	var problems []string
 	wt := RepoDir(l, name, repo)
-	if !git.IsRepo(filepath.Join(l.Base, repo)) {
+	if l.RepoPath(repo) == "" {
 		return nil // base clone deleted: the worktree's history is gone with it
 	}
 	if n, err := git.ChangedFiles(ctx, r, wt); err != nil {

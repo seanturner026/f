@@ -87,8 +87,8 @@ func Restore(ctx context.Context, r Runner, l Layout, name string) error {
 func relink(ctx context.Context, r Runner, l Layout, dir string, repos []string) {
 	var wg sync.WaitGroup
 	for _, repo := range repos {
-		src := filepath.Join(l.Base, repo)
-		if !git.IsRepo(src) {
+		src := l.RepoPath(repo)
+		if src == "" {
 			continue // base clone deleted: nothing to link to
 		}
 		wg.Add(1)
@@ -143,8 +143,8 @@ func EmptyTrash(ctx context.Context, r Runner, l Layout, olderThan time.Duration
 		}
 		keepBranch := Exists(l, t.Name) || slices.ContainsFunc(all[:i], func(n Trashed) bool { return n.Name == t.Name })
 		for _, repo := range repos {
-			src := filepath.Join(l.Base, repo)
-			if !git.IsRepo(src) {
+			src := l.RepoPath(repo)
+			if src == "" {
 				continue
 			}
 			_ = git.PruneWorktrees(ctx, r, src)

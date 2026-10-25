@@ -14,7 +14,7 @@ what each part is; this covers how to use it.
 | nvim | Review: one live CodeDiff tab per repo, comments for the agent (`nvim/f.lua`) |
 | beads (`bd`) | The plan: one issue per feature, child issues for steps |
 
-A feature is `~/code/features/.features/<name>/`: one worktree per
+A feature is `<home>/.features/<name>/` (`home` in `~/.config/f/config.json`): one worktree per
 repo (branch `<name>`), `AGENTS.md`, and `.context/` (local state, written only
 by `f`).
 
@@ -174,7 +174,7 @@ Comment on the **right** side of a diff (the real file). Comments are saved in
 
 ## Beads
 
-- One db for everything: `~/code/features/.beads`.
+- One db for everything: `<home>/.beads`.
 - Each feature's issue id is in `.context/feature.json`; its `AGENTS.md` tells
   the agent how to plan steps under it.
 - Useful: `bd ready` (what's unblocked), `bd list --status closed` (what you
@@ -204,8 +204,10 @@ the real files, are blocked with a reason.
 3. Claude Code `/config`: turn **Copy on select** on.
 4. nvim `init.lua`: `require("f").setup()`.
 5. Herdr config (in dotfiles): `ctrl+space` popup running `f`, sidebar hidden.
-6. Base clones in `~/code/features/` (one dir per repo).
-7. `cd ~/code/features && bd metrics off && bd init --prefix f --skip-agents --skip-hooks`.
+6. `~/.config/f/config.json`: `home` (where features live, default `~/code/features`) and
+   `repos` (the clones you can pick: paths, or `dir/*`), e.g.
+   `{"home": "~/code/features", "repos": ["~/code/github/me/f", "~/code/github/me/dotfiles"]}`.
+7. `cd <home> && bd metrics off && bd init --prefix f --skip-agents --skip-hooks`.
 8. `~/.config/f/guard.json` with machine-specific allow/default profile.
 
 ## Troubleshooting

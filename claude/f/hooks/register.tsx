@@ -126,34 +126,13 @@ async function openFeature($: $, name: string, repos: string[]): Promise<string>
   return res.code === 0 ? summarize(out, `opened ${name}`) : out || `f ${name} failed`
 }
 
-async function subdirs($: $, dir: string, keep: (name: string) => Promise<boolean>): Promise<string[]> {
-  try {
-    const entries = await $.fs.list(dir)
-    const names: string[] = []
-    for (const e of entries) if ((e.kind === 'dir' || e.isLink) && !e.name.startsWith('.') && (await keep(e.name))) names.push(e.name)
-    return names.sort()
-  } catch {
-    return []
-  }
+// featureNames and baseRepos ask f: its config says where features and repos live.
+async function lines($: $, args: string[]): Promise<string[]> {
+  const res = await f($, args)
+  return res.code === 0 ? res.stdout.split('\n').filter(Boolean) : []
 }
-
-async function base($: $): Promise<string> {
-  return (await $.env.get('F_BASE')) || `${await $.env.get('HOME')}/code/features`
-}
-
-const featureNames = async ($: $) => subdirs($, `${await base($)}/.features`, async () => true)
-
-async function baseRepos($: $): Promise<string[]> {
-  const root = await base($)
-  return subdirs($, root, async n => {
-    try {
-      await $.fs.stat(`${root}/${n}/.git`)
-      return true
-    } catch {
-      return false
-    }
-  })
-}
+const featureNames = ($: $) => lines($, ['features'])
+const baseRepos = ($: $) => lines($, ['repos'])
 
 const asOptions = (values: string[]): PickOption[] => values.map(v => ({ value: v, label: v }))
 

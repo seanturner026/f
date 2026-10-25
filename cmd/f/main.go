@@ -223,6 +223,21 @@ func main() {
 				},
 			},
 			{
+				// Called by the Claude Code mod's /f picker: what f offers, from its config.
+				Name:   "repos",
+				Hidden: true,
+				Action: func(ctx context.Context, c *cli.Command) error {
+					repos, err := feature.BaseRepos(d.layout)
+					printLines(repos)
+					return err
+				},
+			},
+			{
+				Name:   "features",
+				Hidden: true,
+				Action: func(ctx context.Context, c *cli.Command) error { printLines(feature.List(d.layout)); return nil },
+			},
+			{
 				// Called by the Claude Code mod (claude/f) before a turn: wait for f setup.
 				Name:   "setup-wait",
 				Hidden: true,
