@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# pi-style footer: "~/dir (branch)", then cache · cost · context · model • effort, then the f feature's PRs.
+# pi-style footer: "~/dir (branch)" (outside features), then cache · cost · context · model • effort, then the f feature's PRs.
 in=$(cat)
 # \x1f, not tab: read merges empty tab-separated fields and shifts the rest.
 IFS=$'\x1f' read -r dir root r w hit cost pct size model effort < <(jq -r '[
@@ -21,7 +21,8 @@ branch=$(git -C "$dir" branch --show-current 2>/dev/null)
 left=$(printf 'R%s W%s%s $%.3f %s%%/%s' "$(human "$r")" "$(human "$w")" "${hit:+ CH$hit}" "$cost" "$pct" "$(human "$size")")
 
 dim=$'\033[2m' off=$'\033[0m'
-printf '%s%s%s%s\n' "$dim" "${dir/#$HOME/~}" "${branch:+ ($branch)}" "$off"
+# In a feature the prompt border already names it: skip the path line there.
+[ -f "$root/.context/feature.json" ] || printf '%s%s%s%s\n' "$dim" "${dir/#$HOME/~}" "${branch:+ ($branch)}" "$off"
 # Inline, not right-aligned: the status row is narrower than $COLUMNS, so padding pushed the model off-screen.
 printf '%s%s   %s%s%s\n' "$dim" "$left" "$model" "${effort:+ • $effort}" "$off"
 
