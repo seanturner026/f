@@ -198,9 +198,9 @@ the real files, are blocked with a reason.
 
 ## Setup on a new machine
 
-1. Clone this repo and run `./install.sh` (links Claude Code + pi config + nvim
-   module, installs `f`).
-2. `herdr integration install claude` (and `pi` if you use `F_AGENT=pi`).
+1. Clone this repo and run `just install` (links Claude Code config + nvim
+   module, installs `f`, loads the launchd sync).
+2. `just herdr-integration`.
 3. Claude Code `/config`: turn **Copy on select** on.
 4. nvim `init.lua`: `require("f").setup()`.
 5. Herdr config (in dotfiles): `ctrl+space` popup running `f`, sidebar hidden.

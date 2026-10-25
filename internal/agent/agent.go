@@ -29,7 +29,7 @@ func Kind() string {
 }
 
 // ClaudeDir holds the Claude Code setup (settings.json, statusline, the f mod):
-// F_CLAUDE_DIR, else ~/.claude/f (install.sh links the repo's claude/ there).
+// F_CLAUDE_DIR, else ~/.claude/f (just link puts the repo's claude/ there).
 func ClaudeDir() string {
 	if d := os.Getenv("F_CLAUDE_DIR"); d != "" {
 		return d

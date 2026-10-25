@@ -10,12 +10,11 @@ My Claude Code and pi config plus `f`, the multi-repo feature workspace CLI. Wha
 
 ## Verify
 
-- Go: `go build ./... && go vet ./... && go test ./...` (run `go fmt ./...` first).
-- Extensions: `node --test agent/extensions/repo-instructions/gate.test.ts agent/extensions/idle-retry/idle-retry.test.ts`. Tests live in an extension's subdirectory: pi loads every top-level `.ts` in `extensions/` as an extension.
+- `just check`: go fmt, build, vet, test, and `claude plugin validate claude/f`.
 
 ## Deploy
 
-- `install.sh` symlinks `agent/` into `~/.pi/agent` and `nvim/f.lua` into nvim, so edits are live after `/reload` in pi (or restarting nvim).
+- `just install` (see `just` for every recipe) symlinks `claude/` into `~/.claude/f` and `nvim/f.lua` into nvim, so edits are live (the mod reloads itself; restart nvim).
 - Go changes need `go install ./cmd/f`.
 - `agent/AGENTS.md` is my global pi rules (every pi session), not instructions for this repo.
 

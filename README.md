@@ -7,8 +7,9 @@ around them (Herdr + nvim + beads). Claude Code is the default agent; `F_AGENT=p
 ## Install
 
 ```bash
-./install.sh                     # link Claude Code + pi config + nvim module, go install ./cmd/f
-herdr integration install claude # herdr agent-state (busy/idle marks); `pi` too if you use F_AGENT=pi
+just install            # link Claude Code config + nvim module, go install ./cmd/f, launchd sync
+just herdr-integration  # Herdr agent-state hooks for Claude Code (busy/idle marks)
+just                    # every recipe (checks, sync-now, trace, ...)
 ```
 
 ## Layout
