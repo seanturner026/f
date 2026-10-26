@@ -26,7 +26,8 @@ by `f`).
    (repo tabs say "setting up"). Type your first prompt; if you send it before
    they're ready, the agent shows "setting up worktrees… (n/m)" and starts when they
    are. It becomes the goal and the beads issue description. Use `@` to
-   reference files across repos.
+   reference files across repos. Started from a feature's shell tab, that feature
+   goes back to its chat tab.
 2. **Direction**: the agent asks questions, then proposes. Approve or steer.
 3. **Review**: `opt+3…` repo tabs show a live CodeDiff of the whole feature.
    `<leader>pr` toggles to *just the agent's last run*. Comment with `<leader>pc`,

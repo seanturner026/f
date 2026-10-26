@@ -533,6 +533,26 @@ func FocusTab(ctx context.Context, r Runner, key string) error {
 	return nil
 }
 
+// BackToChat focuses the chat tab of the workspace f runs in, if f runs in
+// its shell tab: leaving for another feature shouldn't leave this one there.
+func BackToChat(ctx context.Context, r Runner) error {
+	ws, here := os.Getenv("HERDR_WORKSPACE_ID"), os.Getenv("HERDR_TAB_ID")
+	if ws == "" || here == "" {
+		return nil
+	}
+	tabs, err := listTabs(ctx, r, ws)
+	if err != nil {
+		return err
+	}
+	if findTab(tabs, keyShell) != here {
+		return nil
+	}
+	if id := findTab(tabs, keyChat); id != "" {
+		return call(ctx, r, nil, "tab", "focus", id)
+	}
+	return nil
+}
+
 func findTab(tabs []tab, key string) string {
 	keyed := false
 	for _, t := range tabs {

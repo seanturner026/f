@@ -323,6 +323,7 @@ func launch(ctx context.Context, d deps, name string, reopen bool) error {
 		if err != nil {
 			return err
 		}
+		_ = herdr.BackToChat(ctx, d.run)
 		result, err := herdr.OpenWorkspace(ctx, d.run, name, dir, repos, chat)
 		if err != nil {
 			return err

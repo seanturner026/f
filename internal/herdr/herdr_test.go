@@ -283,6 +283,30 @@ func TestFocusTab(t *testing.T) {
 	}
 }
 
+func TestBackToChat(t *testing.T) {
+	tabs := `{"result":{"tabs":[{"tab_id":"t1","label":"c:chat"},{"tab_id":"t2","label":"v:nvim"},{"tab_id":"t6","label":"t:shell"}]}}`
+	tests := []struct {
+		name, here, want string
+	}{
+		{name: "from the shell tab", here: "t6", want: "t1"},
+		{name: "from another tab", here: "t2", want: ""},
+		{name: "outside Herdr", here: "", want: ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("HERDR_WORKSPACE_ID", "w2")
+			t.Setenv("HERDR_TAB_ID", tt.here)
+			r := &focusRunner{tabs: tabs}
+			if err := herdr.BackToChat(context.Background(), r); err != nil {
+				t.Fatal(err)
+			}
+			if r.focused != tt.want {
+				t.Errorf("focused %q, want %q", r.focused, tt.want)
+			}
+		})
+	}
+}
+
 type pickerRunner struct{ opens, failFirst int }
 
 func (r *pickerRunner) Run(_ context.Context, _, _ string, args ...string) (string, error) {
