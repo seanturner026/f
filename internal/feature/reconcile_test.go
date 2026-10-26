@@ -238,6 +238,29 @@ func TestReconcileNewCommitsKept(t *testing.T) {
 	}
 }
 
+func TestReconcileSquashAfterMainEditedSameFile(t *testing.T) {
+	f := newSyncFixture(t)
+	f.mainMoves("a.txt", "1\n2\n3\n4\n5\n")
+	git(t, f.wt, "fetch", "-q", "origin")
+	git(t, f.wt, "reset", "-q", "--hard", "origin/main")
+	head := f.commit("a.txt", "1\n2\n3\n4\n5\nfeat\n")
+	f.mainMoves("a.txt", "main\n1\n2\n3\n4\n5\n") // the squash will hold both changes
+	pr := merged(head)
+	pr.MergeOID = f.squash("feat")
+	wantSummary(t, f.reconcile(pr), "app synced: feat=reset")
+}
+
+func TestReconcileReportsUnrecognizedMerge(t *testing.T) {
+	f := newSyncFixture(t)
+	head := f.commit("b.txt", "pr\n")
+	f.mainMoves("b.txt", "not the pr\n") // GitHub says merged; main has something else
+	res := f.reconcile(merged(head))
+	wantSummary(t, res, "app needs sync:")
+	if !strings.Contains(res[0].Detail, "#1 merged") {
+		t.Errorf("detail = %q, want it to name #1", res[0].Detail)
+	}
+}
+
 func TestReconcileLeavesUnsafeRepos(t *testing.T) {
 	t.Run("uncommitted changes", func(t *testing.T) {
 		f := newSyncFixture(t)

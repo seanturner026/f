@@ -208,7 +208,7 @@ func unsaved(ctx context.Context, r Runner, wt, base, rev string, prs []model.PR
 	if err != nil {
 		return len(left)
 	}
-	k := git.MergedPrefix(ctx, r, wt, base, mainRefs(ctx, r, wt, base, prs), own)
+	k := git.MergedPrefix(ctx, r, wt, mainRefs(ctx, r, wt, base, prs), own)
 	merged := map[string]bool{}
 	for _, c := range own[:k] {
 		merged[c] = true

@@ -39,7 +39,7 @@ by `f`).
 6. **Merged**: the repo resets to main by itself (on open, `r` in prs, `/sync`, or tell
    the agent "merged"), so more work in the feature starts a fresh PR. Squash merges are
    recognized by content: merged stack branches are reset or deleted, the rest rebased
-   onto main and pushed.
+   onto main and pushed. A merged PR whose commits it can't find in main shows as `✗`.
 7. **Done**: when PRs merge, `ctrl-x` the feature in the picker. The beads
    issue closes with the PR links. It only
    asks first about uncommitted files or commits that are neither pushed nor merged

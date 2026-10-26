@@ -138,6 +138,7 @@ func reconcileRepo(ctx context.Context, r Runner, l Layout, name, repo string, p
 
 	// Plan, without touching anything.
 	var stack []stackBranch
+	var missed []string // merged PRs whose commits are on a branch but not recognized in base
 	changes, below := false, res.Base
 	for _, b := range names {
 		sb := stackBranch{name: b, old: git.RevParse(ctx, r, wt, "refs/heads/"+b)}
@@ -152,15 +153,20 @@ func reconcileRepo(ctx context.Context, r Runner, l Layout, name, repo string, p
 		below = sb.old
 		sb.fresh = own
 		if merged := mergedPRs(prs, repo, name, b); len(merged) > 0 {
-			if k := git.MergedPrefix(ctx, r, wt, res.Base, refs, own); k > 0 {
+			if k := git.MergedPrefix(ctx, r, wt, refs, own); k > 0 {
 				sb.merged, sb.fresh, changes = merged[0], own[k:], true
 			} else if i := slices.IndexFunc(merged, func(p *model.PR) bool { return p.HeadOID == sb.old }); i >= 0 && len(own) == 0 && sb.old != baseSHA {
 				sb.merged, changes = merged[i], true // merged with a merge commit: behind main, catch up
+			} else {
+				missed = append(missed, unrecognized(ctx, r, wt, res.Base, baseSHA, sb.old, merged)...)
 			}
 		}
 		stack = append(stack, sb)
 	}
 	if !changes {
+		if len(missed) > 0 {
+			res.Action, res.Detail = SyncNeeded, strings.Join(missed, "; ")
+		}
 		return res
 	}
 	if n, err := git.ChangedFiles(ctx, r, wt); err != nil || n > 0 {
@@ -245,8 +251,20 @@ func reconcileRepo(ctx context.Context, r Runner, l Layout, name, repo string, p
 	if push {
 		problems = append(problems, publish(ctx, r, wt, name, repo, prs, stack, &res, kept)...)
 	}
-	res.Action, res.Detail = SyncDone, strings.Join(problems, "; ")
+	res.Action, res.Detail = SyncDone, strings.Join(append(problems, missed...), "; ")
 	return res
+}
+
+// unrecognized describes merged PRs whose head is still on branch (at tip) but
+// not in base, though no commit of it was recognized as merged by content.
+func unrecognized(ctx context.Context, r Runner, wt, base, baseSHA, tip string, merged []*model.PR) []string {
+	var out []string
+	for _, p := range merged {
+		if p.HeadOID != "" && git.IsAncestor(ctx, r, wt, p.HeadOID, tip) && !git.IsAncestor(ctx, r, wt, p.HeadOID, baseSHA) {
+			out = append(out, fmt.Sprintf("#%d merged, but its commits aren't recognized as in %s; reset the branch by hand", p.Number, base))
+		}
+	}
+	return out
 }
 
 // publish pushes rebased branches, moves open PRs off merged bases, and

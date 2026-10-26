@@ -279,25 +279,17 @@ func Unpushed(ctx context.Context, r Runner, wt, rev, base string) ([]string, er
 }
 
 // InBase reports whether everything rev changed since it forked from base is
-// already in base's history: each file it touched has the same content at rev
-// as at one of refs (base itself, or a squash-merge commit in base's history,
-// which also covers files that main changed again later). This is how a
-// squash-merged branch is recognized: its commits never become ancestors of base.
-func InBase(ctx context.Context, r Runner, wt, base, rev string, refs []string) bool {
-	mb, err := r.Run(ctx, wt, "git", "merge-base", base, rev)
-	if err != nil {
-		return false
-	}
-	files, err := r.Run(ctx, wt, "git", "diff", "--no-renames", "--name-only", mb, rev)
-	if err != nil {
-		return false
-	}
-	if files == "" {
-		return true
-	}
+// already in base's history: merging rev into one of refs (base itself, or a
+// squash-merge commit in base's history) changes nothing. This is how a
+// squash-merged branch is recognized: its commits never become ancestors of
+// base, and main may have changed the same files before or after the merge.
+func InBase(ctx context.Context, r Runner, wt, rev string, refs []string) bool {
 	for _, ref := range refs {
-		args := append([]string{"diff", "--quiet", "--no-renames", ref, rev, "--"}, strings.Split(files, "\n")...)
-		if _, err := r.Run(ctx, wt, "git", args...); err == nil {
+		merged, err := r.Run(ctx, wt, "git", "merge-tree", "--write-tree", ref, rev)
+		if err != nil {
+			continue // conflicts: not in ref
+		}
+		if tree, err := r.Run(ctx, wt, "git", "rev-parse", ref+"^{tree}"); err == nil && merged == tree {
 			return true
 		}
 	}
@@ -307,9 +299,9 @@ func InBase(ctx context.Context, r Runner, wt, base, rev string, refs []string) 
 // MergedPrefix returns how many of commits (oldest first, on top of base's
 // history) are already in base by content (see InBase): the commits after
 // them were added since the merge.
-func MergedPrefix(ctx context.Context, r Runner, wt, base string, refs, commits []string) int {
+func MergedPrefix(ctx context.Context, r Runner, wt string, refs, commits []string) int {
 	for k := len(commits); k > 0; k-- {
-		if InBase(ctx, r, wt, base, commits[k-1], refs) {
+		if InBase(ctx, r, wt, commits[k-1], refs) {
 			return k
 		}
 	}
