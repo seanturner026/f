@@ -11,6 +11,7 @@ import (
 
 	"go.opentelemetry.io/otel/attribute"
 
+	"github.com/seanturner026/f/internal/beads"
 	"github.com/seanturner026/f/internal/feature"
 	"github.com/seanturner026/f/internal/herdr"
 	"github.com/seanturner026/f/internal/model"
@@ -34,7 +35,7 @@ func syncAll(ctx context.Context, d deps) error {
 	_ = feature.EmptyTrash(ctx, d.run, d.layout, feature.TrashRetention) // removed features past restoring
 	_ = tracing.Trim(tracing.Path(), time.Now().Add(-tracing.Retention))
 	d.run = &oneBD{Runner: d.run}
-	ctx = feature.WithRunOnce(ctx)
+	ctx = beads.WithSnapshot(feature.WithRunOnce(ctx))
 	var wg sync.WaitGroup
 	slots := make(chan struct{}, syncAllParallel)
 	for _, name := range feature.List(d.layout) {

@@ -3,6 +3,7 @@ package beads_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -106,4 +107,43 @@ func TestLinkedPRs(t *testing.T) {
 	if beads.LinkedPRs("") != nil {
 		t.Error("empty ref: want no PRs")
 	}
+}
+
+func TestStepsFromSnapshot(t *testing.T) {
+	list := `[{"id":"f-a.2","title":"two","status":"open","parent":"f-a","dependencies":[{"depends_on_id":"f-a","type":"parent-child"},{"depends_on_id":"f-a.1","type":"blocks"}]},
+		{"id":"f-a.1","title":"one","status":"closed","parent":"f-a","external_ref":"https://github.com/o/r/pull/1"},
+		{"id":"f-b.1","title":"other","status":"open","parent":"f-b"},
+		{"id":"f-a","title":"feature","status":"open"}]`
+	r := &countRunner{fakeRunner: fakeRunner{out: map[string]string{"list": list}}}
+	snap := beads.WithSnapshot(ctx)
+	got, err := beads.Steps(snap, r, "/base", "f-a")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []model.Step{
+		{ID: "f-a.2", Title: "two", Status: "open", BlockedBy: []string{"f-a.1"}},
+		{ID: "f-a.1", Title: "one", Status: "closed", PRs: []string{"https://github.com/o/r/pull/1"}},
+	}
+	if fmt.Sprint(got) != fmt.Sprint(want) {
+		t.Errorf("got %+v, want %+v", got, want)
+	}
+	if other, _ := beads.Steps(snap, r, "/base", "f-b"); len(other) != 1 {
+		t.Errorf("f-b steps = %+v, want 1", other)
+	}
+	if none, _ := beads.Steps(snap, r, "/base", "f-c"); len(none) != 0 {
+		t.Errorf("f-c steps = %+v, want none", none)
+	}
+	if r.calls != 1 {
+		t.Errorf("bd calls = %d, want 1 for the whole snapshot", r.calls)
+	}
+}
+
+type countRunner struct {
+	fakeRunner
+	calls int
+}
+
+func (c *countRunner) Run(ctx context.Context, dir, name string, args ...string) (string, error) {
+	c.calls++
+	return c.fakeRunner.Run(ctx, dir, name, args...)
 }
