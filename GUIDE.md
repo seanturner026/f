@@ -110,7 +110,7 @@ The statusline shows the feature's PRs with CI, like pi's footer.
 | `/plan` | As in pi, but in a sidebar that updates as the plan changes; replaces Claude Code's `/plan` (shift+tab still reaches plan mode) |
 
 The guard, goal, checkpoints and PR recording work as in pi. Herdr's busy/idle
-marks need `herdr integration install claude`. A Glass sound plays when Claude finishes (`Stop` hook in `claude/settings.json`; any `/System/Library/Sounds/*.aiff` works). Mouse selection copies when
+marks need `herdr integration install claude`. Herdr plays its Done sound when Claude finishes. Mouse selection copies when
 **Copy on select** is on in `/config`; hold Shift for Herdr's own selection.
 
 ### pi (`F_AGENT=pi`)
@@ -162,7 +162,7 @@ Comment on the **right** side of a diff (the real file). Comments are saved in
 | `f` | Picker |
 | `f add [repo…]` | Add repos to this feature (+ Herdr tabs, before shell). From your shell in Herdr it returns at once and sets them up in the background (the agent gets them with your next prompt); run by the agent it waits |
 | `f prs [-r] [-c] [-n] [-w]` | PRs: from saved state; `-r` refresh live, `-c` copy, `-n` don't open browser, `-w` live view (the prs tab) |
-| `f sync --all` | What launchd runs every 30 min: PR/CI and plan refresh for every feature; post-merge resets wait for the one you're in or a busy agent; never pushes; the agent gets a note with its next prompt. Log: `~/Library/Logs/f-sync.log` |
+| `f sync --all` | What launchd runs every 30 min (skipped after 30 min without keyboard/mouse input, e.g. asleep): PR/CI and plan refresh for every feature; post-merge resets wait for the one you're in or a busy agent; never pushes; the agent gets a note with its next prompt. Log: `~/Library/Logs/f-sync.log` |
 | `f sync` | Same as `/sync`. Also fast-forwards the source clone of each repo with a merged PR (only if it's on its default branch with no local changes), so clones stay current and the `f` repo redeploys itself. Leaves repos with uncommitted changes or conflicts alone (says so). Never pushes the default branch or branches outside the feature |
 | `f ci fix` | Send failing checks + failed-job logs to the feature's agent (clipboard if it isn't reachable) |
 | `f restore [name]` | Bring back a removed feature (worktrees, branches, uncommitted files), reopen its beads issue and open it. No name: list the trash. Kept 14 days; `f sync --all` deletes older ones, branches included. A name in the trash can't be reused until then |

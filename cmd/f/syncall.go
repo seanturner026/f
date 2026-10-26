@@ -3,6 +3,8 @@ package main
 import (
 	"context"
 	"fmt"
+	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -19,6 +21,9 @@ import (
 // (never pushing) unless you're in it or its pi is running. pi gets a note
 // about anything it changed. Logs one line per change to stdout (launchd log).
 func syncAll(ctx context.Context, d deps) error {
+	if idleTime(ctx, d.run) > syncAllInterval {
+		return nil // away or asleep (launchd fires in dark wake): the first run after you're back catches up
+	}
 	focused := ""
 	if !d.noHerdr {
 		focused, _ = herdr.FocusedWorkspace(ctx, d.run) // "" if Herdr isn't running
@@ -30,6 +35,29 @@ func syncAll(ctx context.Context, d deps) error {
 		syncAllFeature(ctx, d, name, focused, stamp)
 	}
 	return nil
+}
+
+// syncAllInterval is launchd's StartInterval for f sync --all (justfile).
+const syncAllInterval = 30 * time.Minute
+
+var hidIdle = regexp.MustCompile(`"HIDIdleTime" = (\d+)`)
+
+// idleTime is how long since the last keyboard or mouse input (0 if unknown).
+func idleTime(ctx context.Context, r feature.Runner) time.Duration {
+	out, err := r.Run(ctx, "", "ioreg", "-c", "IOHIDSystem", "-d", "4")
+	if err != nil {
+		return 0
+	}
+	return parseIdle(out)
+}
+
+func parseIdle(ioreg string) time.Duration {
+	m := hidIdle.FindStringSubmatch(ioreg)
+	if m == nil {
+		return 0
+	}
+	ns, _ := strconv.ParseInt(m[1], 10, 64)
+	return time.Duration(ns)
 }
 
 // syncAllFeature is syncAll's work for one feature, as its own span.

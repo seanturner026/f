@@ -3,6 +3,7 @@ package main
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/seanturner026/f/internal/feature"
 	"github.com/seanturner026/f/internal/model"
@@ -66,6 +67,23 @@ func TestSyncLines(t *testing.T) {
 			got := syncLines([]feature.SyncResult{tt.res}, false)
 			if strings.Join(got, "\n") != strings.Join(tt.want, "\n") {
 				t.Errorf("syncLines =\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(tt.want, "\n"))
+			}
+		})
+	}
+}
+
+func TestParseIdle(t *testing.T) {
+	tests := []struct {
+		name, out string
+		want      time.Duration
+	}{
+		{name: "idle", out: `    | |     "HIDIdleTime" = 15342341791`, want: 15342341791},
+		{name: "missing", out: "nothing here", want: 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := parseIdle(tt.out); got != tt.want {
+				t.Errorf("got %v, want %v", got, tt.want)
 			}
 		})
 	}
