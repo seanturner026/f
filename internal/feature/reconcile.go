@@ -121,7 +121,10 @@ func reconcileRepo(ctx context.Context, r Runner, l Layout, name, repo string, p
 	if len(names) > 1 && !push {
 		return res // background: rewriting a stack means pushing it
 	}
-	if err := git.Fetch(ctx, r, wt); err != nil {
+	unlock := lockRepo(repo)
+	err = git.Fetch(ctx, r, wt)
+	unlock()
+	if err != nil {
 		res.Action, res.Detail = SyncNeeded, err.Error()
 		return res
 	}

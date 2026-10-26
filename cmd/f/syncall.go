@@ -6,6 +6,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"go.opentelemetry.io/otel/attribute"
@@ -17,9 +18,10 @@ import (
 )
 
 // syncAll is the periodic sync (launchd, every 30 min): for every feature,
-// refresh PRs/CI and beads progress, and reconcile repos whose PR merged
-// (never pushing) unless you're in it or its pi is running. pi gets a note
-// about anything it changed. Logs one line per change to stdout (launchd log).
+// syncAllParallel at a time, refresh PRs/CI and beads progress, and reconcile
+// repos whose PR merged (never pushing) unless you're in it or its pi is
+// running. pi gets a note about anything it changed. Logs one line per change
+// to stdout (launchd log).
 func syncAll(ctx context.Context, d deps) error {
 	if idleTime(ctx, d.run) > syncAllInterval {
 		return nil // away or asleep (launchd fires in dark wake): the first run after you're back catches up
@@ -31,10 +33,35 @@ func syncAll(ctx context.Context, d deps) error {
 	stamp := time.Now().Format(time.DateTime)
 	_ = feature.EmptyTrash(ctx, d.run, d.layout, feature.TrashRetention) // removed features past restoring
 	_ = tracing.Trim(tracing.Path(), time.Now().Add(-tracing.Retention))
+	d.run = &oneBD{Runner: d.run}
+	var wg sync.WaitGroup
+	slots := make(chan struct{}, syncAllParallel)
 	for _, name := range feature.List(d.layout) {
-		syncAllFeature(ctx, d, name, focused, stamp)
+		slots <- struct{}{}
+		wg.Go(func() {
+			defer func() { <-slots }()
+			syncAllFeature(ctx, d, name, focused, stamp)
+		})
 	}
+	wg.Wait()
 	return nil
+}
+
+// syncAllParallel is how many features f sync --all syncs at once.
+const syncAllParallel = 4
+
+// oneBD runs bd commands one at a time: they share one embedded Dolt database.
+type oneBD struct {
+	feature.Runner
+	mu sync.Mutex
+}
+
+func (o *oneBD) Run(ctx context.Context, dir, name string, args ...string) (string, error) {
+	if name == "bd" {
+		o.mu.Lock()
+		defer o.mu.Unlock()
+	}
+	return o.Runner.Run(ctx, dir, name, args...)
 }
 
 // syncAllInterval is launchd's StartInterval for f sync --all (justfile).

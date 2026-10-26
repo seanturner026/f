@@ -2,6 +2,7 @@ package feature
 
 import (
 	"context"
+	"sync"
 
 	"go.opentelemetry.io/otel/attribute"
 
@@ -34,6 +35,7 @@ func UpdateSources(ctx context.Context, r Runner, l Layout, name string, prs []m
 func updateSource(ctx context.Context, r Runner, repo, src string) string {
 	ctx, span := tracing.Start(ctx, "update source", attribute.String("repo", repo))
 	defer span.End()
+	defer lockRepo(repo)()
 	branch := git.DefaultBranch(ctx, r, src)
 	if branch == "" || git.CurrentBranch(ctx, r, src) != branch {
 		return "" // someone's working in the clone: leave it
@@ -52,4 +54,16 @@ func updateSource(ctx context.Context, r Runner, repo, src string) string {
 		return ""
 	}
 	return branch
+}
+
+var repoLocks sync.Map // repo name → *sync.Mutex
+
+// lockRepo serializes fetches and source updates of repo within this process:
+// f sync --all syncs features concurrently, and their worktrees share the
+// base clone's refs. Returns the unlock.
+func lockRepo(repo string) func() {
+	m, _ := repoLocks.LoadOrStore(repo, &sync.Mutex{})
+	mu := m.(*sync.Mutex)
+	mu.Lock()
+	return mu.Unlock
 }
