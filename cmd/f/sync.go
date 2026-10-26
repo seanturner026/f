@@ -40,6 +40,7 @@ func syncFeature(ctx context.Context, d deps, explicit string, background bool) 
 
 // reconcileLines refreshes PRs, runs Reconcile, and describes the results for display.
 func reconcileLines(ctx context.Context, d deps, name string, stackSync bool) ([]string, error) {
+	ctx = feature.WithRunOnce(ctx)
 	state, _, err := feature.RefreshPRs(ctx, d.run, d.layout, name)
 	if err != nil {
 		return nil, err

@@ -50,3 +50,29 @@ func TestUpdateSourcesLeavesDirtyClone(t *testing.T) {
 		t.Errorf("dirty source clone moved to %s", got)
 	}
 }
+
+// fetchCounter counts git fetches and runs every command for real.
+type fetchCounter struct{ fetches int }
+
+func (c *fetchCounter) Run(ctx context.Context, dir, name string, args ...string) (string, error) {
+	if name == "git" && len(args) > 0 && args[0] == "fetch" {
+		c.fetches++
+	}
+	return shell.Exec{}.Run(ctx, dir, name, args...)
+}
+
+func TestSyncFetchesOncePerRun(t *testing.T) {
+	f := newSyncFixture(t)
+	head := f.commit("b.txt", "two\n")
+	f.merge("squash")
+	prs := []model.PR{merged(head)}
+	c := &fetchCounter{}
+	ctx := feature.WithRunOnce(context.Background())
+	feature.UpdateSources(ctx, c, f.l, "feat", prs)
+	if _, err := feature.Reconcile(ctx, c, f.l, "feat", prs, false); err != nil {
+		t.Fatal(err)
+	}
+	if c.fetches != 1 {
+		t.Errorf("fetches = %d, want 1 (source clone and worktree share refs)", c.fetches)
+	}
+}
