@@ -21,7 +21,7 @@ My Claude Code and pi config plus `f`, the multi-repo feature workspace CLI. Wha
 
 ## Conventions
 
-- One owner per fact; copies are for display only, never for decisions: plan steps → beads (`state.json` `plan` is a cache), PRs merged or not → GitHub (`state.json` `prs` is a cache), code → the worktrees. A beads step linked to PRs (`external_ref`, space-separated URLs) is closed by `f` when GitHub says they all merged (`closeMergedSteps`).
+- One owner per fact; copies are for display only, never for decisions: plan steps → beads (`state.json` `plan` is a cache), PRs merged or not → GitHub (`state.json` `prs` is a cache; `merged_earlier` keeps merged PRs whose branches sync dropped, for display only via `State.AllPRs`), code → the worktrees. A beads step linked to PRs (`external_ref`, space-separated URLs) is closed by `f` when GitHub says they all merged (`closeMergedSteps`).
 - Base clones come from `Layout.Sources` (`~/.config/f/config.json` `repos`), anywhere on disk: find one with `Layout.RepoPath`, never `<Base>/<repo>`. `Base` is f's home (`.features`, trash, beads). The mod lists features and repos with the hidden `f features` / `f repos`.
 - `f` is the only writer of a feature's `.context/`; pi (`agent/extensions/`) and nvim (`nvim/f.lua`) read it or call `f`.
 - Change `state.json` with `feature.UpdateState` (it locks), never `SaveState` alone.

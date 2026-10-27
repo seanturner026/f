@@ -108,7 +108,7 @@ func finishRemoveArgs(d deps, name string) []string {
 	args := []string{"finish-remove", "--name", name}
 	if info, _ := feature.LoadInfo(d.layout, name); info.Issue != "" {
 		state, _ := feature.LoadState(d.layout, name)
-		args = append(args, "--issue", info.Issue, "--reason", closeReason(state.PRs))
+		args = append(args, "--issue", info.Issue, "--reason", closeReason(state.AllPRs()))
 	}
 	return args
 }

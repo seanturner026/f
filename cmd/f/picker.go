@@ -82,7 +82,7 @@ func pickerRows(ctx context.Context, d deps) []pickerRow {
 		state, _ := feature.LoadState(d.layout, name)
 		rows = append(rows, pickerRow{
 			name: name, current: name == current, status: toFeatureStatus(s, running),
-			prs: state.PRs, plan: state.Plan,
+			prs: state.AllPRs(), plan: state.Plan,
 		})
 	}
 	// The workspace you're in first (where you are), then what needs you.

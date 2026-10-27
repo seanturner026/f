@@ -189,3 +189,29 @@ func TestUpdateStateConcurrentWritersKeepEachOthersFields(t *testing.T) {
 		t.Errorf("PRs = %d, want 20 (no update lost)", len(s.PRs))
 	}
 }
+
+func TestRefreshPRsKeepsMergedHistory(t *testing.T) {
+	l := newLayout(t, "feat", "argocd")
+	merged := model.PR{Repo: "argocd", Number: 3, URL: "u3", Status: model.PRStatusMerged}
+	if err := feature.RecordPR(l, "feat", merged); err != nil {
+		t.Fatal(err)
+	}
+	// f sync dropped #3's branch: the live lookup now only finds #4.
+	run := perRepoRunner{"/argocd": `[{"number":4,"state":"OPEN","url":"u4"}]`}
+	for range 2 { // a second refresh mustn't add #3 again
+		if _, _, err := feature.RefreshPRs(context.Background(), run, l, "feat"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	s, _ := feature.LoadState(l, "feat")
+	if len(s.PRs) != 1 || s.PRs[0].Number != 4 {
+		t.Errorf("PRs = %+v, want only #4 (sync decides from these)", s.PRs)
+	}
+	var all []int
+	for _, p := range s.AllPRs() {
+		all = append(all, p.Number)
+	}
+	if !reflect.DeepEqual(all, []int{4, 3}) {
+		t.Errorf("AllPRs = %v, want [4 3]", all)
+	}
+}

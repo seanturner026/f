@@ -50,6 +50,9 @@ type PR struct {
 	Checks   []Check  `json:"checks,omitempty"`    // CI checks on the head commit
 }
 
+// Same reports whether p and o are the same pull request.
+func (p PR) Same(o PR) bool { return p.Repo == o.Repo && p.Number == o.Number }
+
 // CheckState is a CI check's outcome.
 type CheckState string
 

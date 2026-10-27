@@ -497,7 +497,7 @@ func prs(ctx context.Context, d deps, explicit string, opts prsOptions) error {
 	}
 
 	if opts.asJSON {
-		out := prsOutput{PRs: state.PRs, RefreshedAt: state.PRsRefreshedAt, Errors: map[string]string{}}
+		out := prsOutput{PRs: state.AllPRs(), RefreshedAt: state.PRsRefreshedAt, Errors: map[string]string{}}
 		for repo, e := range errs {
 			out.Errors[repo] = e.Error()
 		}
@@ -506,7 +506,7 @@ func prs(ctx context.Context, d deps, explicit string, opts prsOptions) error {
 	if opts.copy {
 		return copyPRs(state.PRs)
 	}
-	printPRs(d, name, state.PRs, errs)
+	printPRs(d, name, state.AllPRs(), errs)
 	if !opts.refresh && errs == nil {
 		info("as of %s ago (-r to refresh)", time.Since(state.PRsRefreshedAt).Round(time.Second))
 	}

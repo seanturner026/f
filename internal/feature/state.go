@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"syscall"
@@ -27,11 +28,19 @@ var ErrBadPRURL = errors.New("not a GitHub pull request URL")
 type State struct {
 	PRs            []model.PR `json:"prs"`
 	PRsRefreshedAt time.Time  `json:"prs_refreshed_at,omitzero"`
-	Plan           model.Plan `json:"plan,omitzero"` // beads progress, synced after each pi run
+	// MergedEarlier are merged PRs a refresh no longer finds (f sync dropped
+	// their branches). Display only: sync must not act on them again.
+	MergedEarlier []model.PR `json:"merged_earlier,omitempty"`
+	Plan          model.Plan `json:"plan,omitzero"` // beads progress, synced after each pi run
 	// SyncNotes tell pi what a background f sync changed (e.g. a repo reset to
 	// main after its PR merged); the f extension hands them over on the next prompt.
 	SyncNotes []string `json:"sync_notes,omitempty"`
 	Setup     *Setup   `json:"setup,omitempty"` // repos still being added in the background
+}
+
+// AllPRs is PRs plus MergedEarlier: every PR the feature has had, for display.
+func (s State) AllPRs() []model.PR {
+	return append(slices.Clone(s.PRs), s.MergedEarlier...)
 }
 
 // AddSyncNotes queues notes for pi.
@@ -156,6 +165,11 @@ func RefreshPRs(ctx context.Context, r Runner, l Layout, name string) (State, ma
 				live = append(live, p)
 			}
 		}
+		for _, p := range s.PRs {
+			if p.Status == model.PRStatusMerged && !slices.ContainsFunc(live, p.Same) {
+				s.MergedEarlier = append(s.MergedEarlier, p)
+			}
+		}
 		s.PRs, s.PRsRefreshedAt = live, time.Now()
 	})
 	if err != nil {
@@ -169,7 +183,7 @@ func RecordPR(l Layout, name string, pr model.PR) error {
 	_, err := UpdateState(l, name, func(s *State) {
 		kept := s.PRs[:0]
 		for _, p := range s.PRs {
-			if p.Repo != pr.Repo || p.Number != pr.Number {
+			if !p.Same(pr) {
 				kept = append(kept, p)
 			}
 		}
