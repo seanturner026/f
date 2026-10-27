@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"slices"
 	"strings"
 	"sync"
 
@@ -227,10 +228,17 @@ func RepoPRs(ctx context.Context, r Runner, dir, repo, branch string) ([]model.P
 		listed <- res{prs, err}
 	}()
 	prs, err := StackPRs(ctx, r, dir, repo)
+	l := <-listed
 	if errors.Is(err, ErrNotInStack) || (err == nil && len(prs) == 0) {
 		// No stack, or none of its branches submitted yet (a plain gh pr create).
-		l := <-listed
 		return l.prs, l.err
+	}
+	// The stack shows one PR per branch; earlier PRs from the feature branch
+	// (merged, then reused for the next PR) only come from the list.
+	for _, p := range l.prs {
+		if !slices.ContainsFunc(prs, p.Same) {
+			prs = append(prs, p)
+		}
 	}
 	return prs, err
 }

@@ -118,6 +118,19 @@ func TestRepoPRs(t *testing.T) {
 			},
 		},
 		{
+			name: "stack plus earlier PRs from the feature branch",
+			runner: cmdRunner{
+				"stack":       `{"trunk":"main","branches":[{"name":"feat","pr":{"number":42,"url":"u42","state":"OPEN"}}]}`,
+				"pr view u42": `{"number":42,"state":"OPEN","title":"now","url":"u42","headRefName":"feat","baseRefName":"main"}`,
+				"pr list": `[{"number":42,"state":"OPEN","title":"now","url":"u42","headRefName":"feat","baseRefName":"main"},
+					{"number":40,"state":"MERGED","title":"before","url":"u40","headRefName":"feat","baseRefName":"main"}]`,
+			},
+			want: []model.PR{
+				{Repo: "r", Number: 42, Title: "now", URL: "u42", Status: model.PRStatusOpen, Head: "feat", Base: "main", Stack: 1},
+				{Repo: "r", Number: 40, Title: "before", URL: "u40", Status: model.PRStatusMerged, Head: "feat", Base: "main"},
+			},
+		},
+		{
 			name:   "no stack: falls back to the feature branch",
 			runner: cmdRunner{"stack": "ERR", "pr list": `[{"number":7,"state":"OPEN","title":"t","url":"u7","headRefName":"feat","baseRefName":"main"}]`},
 			want:   []model.PR{{Repo: "r", Number: 7, Title: "t", URL: "u7", Status: model.PRStatusOpen, Head: "feat", Base: "main"}},

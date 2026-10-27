@@ -40,7 +40,13 @@ type State struct {
 
 // AllPRs is PRs plus MergedEarlier: every PR the feature has had, for display.
 func (s State) AllPRs() []model.PR {
-	return append(slices.Clone(s.PRs), s.MergedEarlier...)
+	all := slices.Clone(s.PRs)
+	for _, p := range s.MergedEarlier {
+		if !slices.ContainsFunc(s.PRs, p.Same) { // a lookup can find it again
+			all = append(all, p)
+		}
+	}
+	return all
 }
 
 // AddSyncNotes queues notes for pi.
