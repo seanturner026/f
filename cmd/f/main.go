@@ -256,6 +256,17 @@ func main() {
 				},
 			},
 			{
+				// Started detached by the picker as it exits, for the features it removed.
+				Name:   "close-workspaces",
+				Hidden: true,
+				Action: func(ctx context.Context, c *cli.Command) error {
+					for _, name := range c.Args().Slice() {
+						_ = herdr.CloseWorkspace(ctx, d.run, name)
+					}
+					return nil
+				},
+			},
+			{
 				// The f Herdr plugin's open-picker action (ctrl+space).
 				Name:   "open-picker",
 				Hidden: true,

@@ -9,7 +9,6 @@ import (
 	"github.com/seanturner026/f/internal/beads"
 	"github.com/seanturner026/f/internal/feature"
 	"github.com/seanturner026/f/internal/github"
-	"github.com/seanturner026/f/internal/herdr"
 	"github.com/seanturner026/f/internal/model"
 )
 
@@ -115,13 +114,10 @@ func finishRemoveArgs(d deps, name string) []string {
 }
 
 // finishRemove is `f finish-remove`, the slow part of removing a feature: re-link
-// its worktrees in the trash dir, close its Herdr workspace and its beads issue
-// (if bd won't, e.g. plan steps still open, note why and leave it open).
+// its worktrees in the trash dir and close its beads issue (if bd won't, e.g.
+// plan steps still open, note why and leave it open).
 func finishRemove(ctx context.Context, d deps, dir, name, issue, reason string) error {
 	err := feature.Relink(ctx, d.run, d.layout, dir)
-	if !d.noHerdr {
-		_ = herdr.CloseWorkspace(ctx, d.run, name)
-	}
 	if issue != "" {
 		_, cerr := closeOrNote(ctx, d, issue, name, reason)
 		err = errors.Join(err, cerr)

@@ -86,7 +86,7 @@ picker too.
 | Key | Does |
 |---|---|
 | `enter` | Jump to the feature (recreates its workspace if closed) |
-| `ctrl-x` | Remove the feature (to the trash for 14 days: `f restore <name>`) and close its workspace, instantly and without asking |
+| `ctrl-x` | Remove the feature (to the trash for 14 days: `f restore <name>`) and close its workspace once the picker exits; instant, no questions, so remove several and then pick one |
 | `esc` / `ctrl-space` | Close |
 
 Columns: `●` marks the workspace you're in (listed first, with the cursor on it) ·

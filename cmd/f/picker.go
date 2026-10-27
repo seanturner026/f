@@ -110,6 +110,13 @@ func attention(r pickerRow) int {
 // reopens with a status line.
 func pickFeature(ctx context.Context, d deps) (string, error) {
 	msg := ""
+	var removed []string
+	// Closing a workspace can move Herdr's focus and take the popup with it.
+	defer func() {
+		if len(removed) > 0 && !d.noHerdr {
+			startDetached(ctx, append([]string{"close-workspaces"}, removed...)...)
+		}
+	}()
 	for {
 		rows := pickerRows(ctx, d)
 		if len(rows) == 0 {
@@ -143,6 +150,7 @@ func pickFeature(ctx context.Context, d deps) (string, error) {
 		case "ctrl-x":
 			if name != "" {
 				msg = removeFeature(ctx, d, name)
+				removed = append(removed, name)
 			}
 		}
 	}
