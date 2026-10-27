@@ -142,11 +142,11 @@ export const register: Register = on => {
 
   on('session.start', async ($, e, next) => {
     const commands = [
-      { name: 'prs', description: "Refresh this feature's PRs and open the open ones in the browser" },
-      { name: 'prc', description: "Copy this feature's PRs as url: title lines (stacks numbered)" },
+      { name: 'prs', description: "Refresh this feature's PRs and open the open ones in the browser", immediate: true as const },
+      { name: 'prc', description: "Copy this feature's PRs as url: title lines (stacks numbered)", immediate: true as const },
       { name: 'sync', description: 'After a PR merges: reset its repo to main (or rebase newer commits onto it)' },
       { name: 'ci', description: "Send this feature's failing CI checks (with logs): find the cause, propose a fix, don't push" },
-      { name: 'f', description: 'Open a feature, or start one: /f [name] [repo...]', argumentHint: '[name] [repo...]' },
+      { name: 'f', description: 'Open a feature, or start one: /f [name] [repo...]', argumentHint: '[name] [repo...]', immediate: true as const },
       { name: 'code', description: 'Copy code block(s) from the last reply, unwrapped: /code [n]', argumentHint: '[n]' },
       { name: 'slack', description: 'Copy the last reply formatted for Slack (*bold*, plain headings and links)' },
     ]

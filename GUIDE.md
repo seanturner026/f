@@ -105,7 +105,7 @@ The statusline shows the feature's PRs with CI, like pi's footer.
 
 | Command | Does |
 |---|---|
-| `/prs`, `/prc`, `/sync`, `/ci`, `/code [n]`, `/slack` | As in pi; none of them reach the model except `/ci` |
+| `/prs`, `/prc`, `/sync`, `/ci`, `/code [n]`, `/slack` | As in pi; none of them reach the model except `/ci`. `/prs`, `/prc` and `/f` run at once, even mid-turn; the rest wait for the turn to end |
 | `/f [name] [repo…]` | As in pi; no tab completion: a bare `/f` picks a feature, a new name picks repos |
 | `/plan` | As in pi, but in a sidebar that updates as the plan changes; replaces Claude Code's `/plan` (shift+tab still reaches plan mode) |
 
