@@ -179,68 +179,6 @@ func TestPRs(t *testing.T) {
 	}
 }
 
-func TestUnmerged(t *testing.T) {
-	const merged = `[{"number":1,"state":"MERGED","url":"u","headRefOid":"abc"}]`
-	tests := []struct {
-		name   string
-		runner fakeRunner
-		known  []model.PR // nil: live gh lookup
-		want   []string
-	}{
-		{
-			name:   "clean and untouched",
-			runner: fakeRunner{"git status": "", "git rev-list": "0"},
-			want:   nil,
-		},
-		{
-			name:   "merged at head",
-			runner: fakeRunner{"git status": "", "git rev-list": "2", "gh pr list": merged, "git rev-parse HEAD": "abc"},
-			want:   nil,
-		},
-		{
-			name:   "uncommitted",
-			runner: fakeRunner{"git status": " M a\n?? b", "git rev-list": "0"},
-			want:   []string{"argocd: 2 uncommitted change(s)"},
-		},
-		{
-			name:   "commits without merged PR",
-			runner: fakeRunner{"git status": "", "git rev-list": "c1\nc2\nc3", "git cherry": "+ c1\n+ c2\n+ c3", "gh pr list": "[]", "git rev-parse HEAD": "abc"},
-			want:   []string{"argocd: 3 commit(s) not pushed or merged"},
-		},
-		{
-			name:   "saved PR merged at head: no gh call",
-			runner: fakeRunner{"git status": "", "git rev-list": "2", "git rev-parse HEAD": "abc"},
-			known:  []model.PR{{Repo: "argocd", Status: model.PRStatusMerged, HeadOID: "abc"}},
-			want:   nil,
-		},
-		{
-			name:   "saved PR still open: unmerged",
-			runner: fakeRunner{"git status": "", "git rev-list": "c1\nc2", "git cherry": "+ c1\n+ c2", "git rev-parse HEAD": "abc"},
-			known:  []model.PR{{Repo: "argocd", Status: model.PRStatusOpen, HeadOID: "abc"}},
-			want:   []string{"argocd: 2 commit(s) not pushed or merged"},
-		},
-		{
-			name:   "saved PR merged but commits after it",
-			runner: fakeRunner{"git status": "", "git rev-list": "c1\nc2\nc3", "git cherry": "+ c1\n+ c2\n+ c3", "git rev-parse HEAD": "def", "git merge-base": "ERR"},
-			known:  []model.PR{{Repo: "argocd", Status: model.PRStatusMerged, HeadOID: "abc"}},
-			want:   []string{"argocd: 3 commit(s) not pushed or merged"},
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			l := newLayout(t, "feat", "argocd")
-			tt.runner["git symbolic-ref"] = "origin/main"
-			got, err := feature.Unmerged(context.Background(), tt.runner, l, "feat", tt.known)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if strings.Join(got, "|") != strings.Join(tt.want, "|") {
-				t.Errorf("got %q, want %q", got, tt.want)
-			}
-		})
-	}
-}
-
 func TestComments(t *testing.T) {
 	l := newLayout(t, "feat", "argocd")
 	tests := []struct {
@@ -288,12 +226,11 @@ func TestRemoveWithDeletedBaseClone(t *testing.T) {
 	if err := os.RemoveAll(filepath.Join(l.Base, "gone")); err != nil {
 		t.Fatal(err)
 	}
-	ctx := context.Background()
-	problems, err := feature.Unmerged(ctx, fakeRunner{}, l, "feat", nil)
-	if err != nil || len(problems) != 0 {
-		t.Fatalf("Unmerged = %v, %v; want nothing (no history left to lose)", problems, err)
+	dir, err := feature.Remove(l, "feat")
+	if err != nil {
+		t.Fatal(err)
 	}
-	if err := feature.Remove(ctx, fakeRunner{}, l, "feat"); err != nil {
+	if err := feature.Relink(context.Background(), fakeRunner{}, l, dir); err != nil {
 		t.Fatal(err)
 	}
 	if feature.Exists(l, "feat") {

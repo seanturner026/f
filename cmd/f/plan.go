@@ -2,12 +2,14 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
 	"github.com/seanturner026/f/internal/beads"
 	"github.com/seanturner026/f/internal/feature"
 	"github.com/seanturner026/f/internal/github"
+	"github.com/seanturner026/f/internal/herdr"
 	"github.com/seanturner026/f/internal/model"
 )
 
@@ -101,32 +103,29 @@ func planSyncFeature(ctx context.Context, d deps, name string) error {
 	return feature.SavePlan(d.layout, name, plan)
 }
 
-// issueUpdateInBackground prepares the beads update for a feature about to be
-// removed (reading its info and PRs now, while they exist) and returns a func
-// that runs it detached (`f close-issue`): close it with its merged PRs, or,
-// with force, note the unmerged work and leave it open.
-func issueUpdateInBackground(ctx context.Context, d deps, name string, force bool, problems []string) func() {
-	info, _ := feature.LoadInfo(d.layout, name)
-	if info.Issue == "" {
-		return func() {}
-	}
-	args := []string{"close-issue", "--issue", info.Issue, "--name", name}
-	if force {
-		args = append(args, "--note", "f feature removed with unmerged work: "+strings.Join(problems, "; "))
-	} else {
+// finishRemoveArgs are the `f finish-remove` args for a feature about to be
+// removed, read now while its files are in place.
+func finishRemoveArgs(d deps, name string) []string {
+	args := []string{"finish-remove", "--name", name}
+	if info, _ := feature.LoadInfo(d.layout, name); info.Issue != "" {
 		state, _ := feature.LoadState(d.layout, name)
-		args = append(args, "--reason", closeReason(state.PRs))
+		args = append(args, "--issue", info.Issue, "--reason", closeReason(state.PRs))
 	}
-	return func() { startDetached(ctx, args...) }
+	return args
 }
 
-// closeIssueCmd is `f close-issue`: close the issue with reason (if bd won't,
-// e.g. plan steps still open, note why and leave it open), or just add note.
-func closeIssueCmd(ctx context.Context, d deps, issue, name, reason, note string) error {
-	if note != "" {
-		return beads.Note(ctx, d.run, d.layout.Base, issue, note)
+// finishRemove is `f finish-remove`, the slow part of removing a feature: re-link
+// its worktrees in the trash dir, close its Herdr workspace and its beads issue
+// (if bd won't, e.g. plan steps still open, note why and leave it open).
+func finishRemove(ctx context.Context, d deps, dir, name, issue, reason string) error {
+	err := feature.Relink(ctx, d.run, d.layout, dir)
+	if !d.noHerdr {
+		_ = herdr.CloseWorkspace(ctx, d.run, name)
 	}
-	_, err := closeOrNote(ctx, d, issue, name, reason)
+	if issue != "" {
+		_, cerr := closeOrNote(ctx, d, issue, name, reason)
+		err = errors.Join(err, cerr)
+	}
 	return err
 }
 

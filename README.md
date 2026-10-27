@@ -71,6 +71,6 @@ One beads db for all features: `<home>/.beads` (local, metrics off).
   merged. Steps without PRs are closed by hand.
 - The picker shows progress (`3/5 done · next: …`), synced after each agent turn.
 - Cleanup closes the issue (with merged PR links). If plan steps are still
-  open, or the feature was removed with unmerged work, it stays open with a note.
+  open, it stays open with a note.
 - History: `bd list --status closed`.
 

@@ -244,15 +244,15 @@ func main() {
 				Action: func(ctx context.Context, c *cli.Command) error { return setupWait(ctx, d) },
 			},
 			{
-				// Started by the picker after removing a feature (bd is slow).
-				Name:   "close-issue",
+				// Started detached by the picker after moving a feature to the trash.
+				Name:   "finish-remove",
 				Hidden: true,
 				Flags: []cli.Flag{
-					&cli.StringFlag{Name: "issue"}, &cli.StringFlag{Name: "name"},
-					&cli.StringFlag{Name: "reason"}, &cli.StringFlag{Name: "note"},
+					&cli.StringFlag{Name: "dir"}, &cli.StringFlag{Name: "name"},
+					&cli.StringFlag{Name: "issue"}, &cli.StringFlag{Name: "reason"},
 				},
 				Action: func(ctx context.Context, c *cli.Command) error {
-					return closeIssueCmd(ctx, d, c.String("issue"), c.String("name"), c.String("reason"), c.String("note"))
+					return finishRemove(ctx, d, c.String("dir"), c.String("name"), c.String("issue"), c.String("reason"))
 				},
 			},
 			{

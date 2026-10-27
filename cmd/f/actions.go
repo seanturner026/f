@@ -573,18 +573,6 @@ func printPRs(d deps, name string, list []model.PR, errs map[string]error) {
 	}
 }
 
-// removeWithWorkspace moves the feature to the trash (f restore brings it
-// back) and closes its Herdr workspace.
-func removeWithWorkspace(ctx context.Context, d deps, name string) error {
-	if err := feature.Remove(ctx, d.run, d.layout, name); err != nil {
-		return err
-	}
-	if !d.noHerdr {
-		_ = herdr.CloseWorkspace(ctx, d.run, name)
-	}
-	return nil
-}
-
 // restore brings back a removed feature, reopens its beads issue, and opens
 // it. With no name it lists the trash.
 func restore(ctx context.Context, d deps, name string) error {

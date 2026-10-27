@@ -380,106 +380,25 @@ func TestReconcileStack(t *testing.T) {
 	})
 }
 
-func TestUnmergedSquashMerged(t *testing.T) {
-	tests := []struct {
-		name  string
-		setup func(f *syncFixture) []model.PR
-		want  string
-	}{
-		{
-			name: "squash-merged, remote branch deleted",
-			setup: func(f *syncFixture) []model.PR {
-				f.commit("b.txt", "pr\n")
-				return []model.PR{stackPR(1, "feat", "main", model.PRStatusMerged, f.squash("feat"))}
-			},
-		},
-		{
-			name: "squash-merged stack, checked out at the top",
-			setup: func(f *syncFixture) []model.PR {
-				f.commit("b.txt", "bottom\n")
-				f.branch("feat-staging")
-				f.commit("c.txt", "staging\n")
-				m1, m2 := f.squash("feat"), f.squash("feat-staging")
-				f.mainMoves("c.txt", "changed again\n")
-				return []model.PR{stackPR(1, "feat", "main", model.PRStatusMerged, m1), stackPR(2, "feat-staging", "feat", model.PRStatusMerged, m2)}
-			},
-		},
-		{
-			// Saved before PRs recorded merge_oid, and main changed the file
-			// since: content differs, but it's the same patch (git cherry).
-			name: "one-commit squash, no merge commit saved, main moved on",
-			setup: func(f *syncFixture) []model.PR {
-				f.commit("b.txt", "pr\n")
-				f.squash("feat")
-				f.mainMoves("b.txt", "changed again\n")
-				return []model.PR{stackPR(1, "feat", "main", model.PRStatusMerged, "")}
-			},
-		},
-		{
-			name: "commit after the merge",
-			setup: func(f *syncFixture) []model.PR {
-				f.commit("b.txt", "pr\n")
-				m := f.squash("feat")
-				f.commit("c.txt", "new\n")
-				return []model.PR{stackPR(1, "feat", "main", model.PRStatusMerged, m)}
-			},
-			want: "app: 1 commit(s) not pushed or merged",
-		},
-		{
-			name: "unmerged, pushed",
-			setup: func(f *syncFixture) []model.PR {
-				f.commit("b.txt", "pr\n")
-				git(f.t, f.wt, "push", "-q", "origin", "feat")
-				return []model.PR{stackPR(1, "feat", "main", model.PRStatusOpen, "")}
-			},
-		},
-		{
-			name: "unmerged, not pushed",
-			setup: func(f *syncFixture) []model.PR {
-				f.commit("b.txt", "pr\n")
-				f.commit("c.txt", "pr\n")
-				return []model.PR{}
-			},
-			want: "app: 2 commit(s) not pushed or merged",
-		},
-		{
-			name: "dirty",
-			setup: func(f *syncFixture) []model.PR {
-				f.commit("b.txt", "pr\n")
-				m := f.squash("feat")
-				write(f.t, filepath.Join(f.wt, "wip.txt"), "wip\n")
-				return []model.PR{stackPR(1, "feat", "main", model.PRStatusMerged, m)}
-			},
-			want: "app: 1 uncommitted change(s)",
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			f := newSyncFixture(t)
-			prs := tt.setup(f)
-			git(t, f.wt, "fetch", "-q", "--prune", "origin")
-			got, err := feature.Unmerged(context.Background(), &ghFake{}, f.l, "feat", prs)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if s := strings.Join(got, "|"); s != tt.want {
-				t.Errorf("Unmerged = %q, want %q", s, tt.want)
-			}
-		})
-	}
-}
-
 func TestRemoveRestoreExpire(t *testing.T) {
 	ctx := context.Background()
 	f := newSyncFixture(t)
 	head := f.commit("b.txt", "work\n")
-	write(t, filepath.Join(f.wt, "dirty.txt"), "uncommitted\n") // Remove doesn't refuse: callers check Unmerged
+	write(t, filepath.Join(f.wt, "dirty.txt"), "uncommitted\n") // Remove doesn't refuse: Restore brings it back
 	base := filepath.Join(f.l.Base, "app")
 	run := shell.Exec{}
 
-	if err := feature.Remove(ctx, run, f.l, "feat"); err != nil {
-		t.Fatal(err)
+	remove := func() {
+		t.Helper()
+		dir, err := feature.Remove(f.l, "feat")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := feature.Relink(ctx, run, f.l, dir); err != nil {
+			t.Fatal(err)
+		}
 	}
+	remove()
 	if feature.Exists(f.l, "feat") || len(feature.List(f.l)) != 0 {
 		t.Fatal("feature still listed")
 	}
@@ -506,9 +425,7 @@ func TestRemoveRestoreExpire(t *testing.T) {
 		t.Errorf("restore over a live feature: err = %v", err)
 	}
 
-	if err := feature.Remove(ctx, run, f.l, "feat"); err != nil {
-		t.Fatal(err)
-	}
+	remove()
 	if err := feature.EmptyTrash(ctx, run, f.l, feature.TrashRetention); err != nil {
 		t.Fatal(err)
 	}

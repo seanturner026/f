@@ -37,24 +37,30 @@ type Trashed struct {
 // TrashDir holds removed features until they expire (EmptyTrash).
 func TrashDir(l Layout) string { return filepath.Join(l.Features, ".trash") }
 
-// Remove moves a feature into the trash, instantly: its directory is renamed
-// and its worktrees re-linked there (git worktree repair), so its branches
-// and uncommitted files are kept. Restore brings it back; EmptyTrash deletes
-// it for good after TrashRetention. Check Unmerged first: Remove doesn't
-// refuse dirty worktrees.
-func Remove(ctx context.Context, r Runner, l Layout, name string) error {
-	repos, err := Repos(l, name)
-	if err != nil {
-		return err
-	}
+// Remove moves a feature into the trash, instantly: its directory is renamed,
+// branches and uncommitted files included, and the trash entry's directory is
+// returned. Relink it next. Restore brings it back; EmptyTrash deletes it for
+// good after TrashRetention.
+func Remove(l Layout, name string) (string, error) {
 	if err := os.MkdirAll(TrashDir(l), 0o755); err != nil {
-		return fmt.Errorf("remove %s: %w", name, err)
+		return "", fmt.Errorf("remove %s: %w", name, err)
 	}
 	dst := filepath.Join(TrashDir(l), name+"-"+time.Now().Format(trashStamp))
 	if err := os.Rename(Dir(l, name), dst); err != nil {
-		return fmt.Errorf("remove %s: %w", name, err)
+		return "", fmt.Errorf("remove %s: %w", name, err)
 	}
-	relink(ctx, r, l, dst, repos)
+	return dst, nil
+}
+
+// Relink re-links a trash entry's worktrees to their base clones (git
+// worktree repair): until then, EmptyTrash's prune would drop git's records
+// of them and Restore couldn't bring them back.
+func Relink(ctx context.Context, r Runner, l Layout, dir string) error {
+	repos, err := gitDirs(dir)
+	if err != nil {
+		return err
+	}
+	relink(ctx, r, l, dir, repos)
 	return nil
 }
 

@@ -7,8 +7,6 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"go.opentelemetry.io/otel/attribute"
-
 	"github.com/seanturner026/f/internal/feature"
 	"github.com/seanturner026/f/internal/herdr"
 	"github.com/seanturner026/f/internal/model"
@@ -240,41 +238,14 @@ func orNone(s string) string {
 	return s
 }
 
-// removeFeature removes a feature and its Herdr workspace. If it has unmerged
-// work, it lists it and asks first. Returns a status line for the picker.
+// removeFeature moves a feature to the trash without asking (f restore brings
+// it back); `f finish-remove` does the slow rest detached. Returns a status line.
 func removeFeature(ctx context.Context, d deps, name string) string {
-	// Saved PRs and local git only: no fetch, no gh (a live re-check took
-	// seconds and rarely changed the answer). Removal is restorable anyway.
-	state, _ := feature.LoadState(d.layout, name)
-	known := state.PRs
-	if known == nil {
-		known = []model.PR{}
-	}
-	checkCtx, span := tracing.Start(ctx, "picker close check", attribute.String("feature", name))
-	problems, err := feature.Unmerged(checkCtx, d.run, d.layout, name, known)
-	tracing.End(span, err)
+	args := finishRemoveArgs(d, name) // reads the feature's files before they move
+	dir, err := feature.Remove(d.layout, name)
 	if err != nil {
-		return red(fmt.Sprintf("%s: %v", name, err))
-	}
-	force := false
-	if len(problems) > 0 {
-		// Confirm inside fzf: reading the terminal directly after fzf exits is
-		// unreliable in Herdr's popup.
-		keep, remove := "keep it", fmt.Sprintf("remove anyway (f restore %s brings it back for 14 days)", name)
-		header := name + " has unmerged work:\n  " + strings.Join(problems, "\n  ")
-		choice, err := runFzf([]string{keep, remove}, "--prompt=remove? ", "--header="+header,
-			"--header-first", "--no-sort", "--bind=ctrl-space:abort")
-		if err != nil || len(choice) == 0 || choice[0] != remove {
-			return "kept " + name
-		}
-		force = true
-	}
-	// The beads issue is closed (or noted) in the background: bd takes ~0.5s.
-	// Read what it needs now, before the feature's files are gone.
-	issue := issueUpdateInBackground(ctx, d, name, force, problems)
-	if err := removeWithWorkspace(ctx, d, name); err != nil {
 		return red(err.Error())
 	}
-	issue()
+	startDetached(ctx, append(args, "--dir", dir)...)
 	return green("removed "+name) + dim(" (f restore "+name+" within 14 days)")
 }

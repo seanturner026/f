@@ -42,10 +42,9 @@ by `f`).
    recognized by content: merged stack branches are reset or deleted, the rest rebased
    onto main and pushed. A merged PR whose commits it can't find in main shows as `✗`.
 7. **Done**: when PRs merge, `ctrl-x` the feature in the picker. The beads
-   issue closes with the PR links. It only
-   asks first about uncommitted files or commits that are neither pushed nor merged
-   (local check, no GitHub: about a second). Removed features go to the trash with
-   their branches and uncommitted files: `f restore <name>` within 14 days.
+   issue closes with the PR links. It doesn't ask: removed features go to the trash
+   with their branches and uncommitted files, so `f restore <name>` within 14 days
+   undoes it.
 
 Big multi-step work (e.g. ACK across tf/argocd/prod/ops): start one
 feature with all the repos, ask the agent to **plan it in beads** (child issues +
@@ -87,7 +86,7 @@ picker too.
 | Key | Does |
 |---|---|
 | `enter` | Jump to the feature (recreates its workspace if closed) |
-| `ctrl-x` | Remove the feature (to the trash for 14 days: `f restore <name>`) and close its workspace. Asks if work would be lost |
+| `ctrl-x` | Remove the feature (to the trash for 14 days: `f restore <name>`) and close its workspace, instantly and without asking |
 | `esc` / `ctrl-space` | Close |
 
 Columns: `●` marks the workspace you're in (listed first, with the cursor on it) ·
@@ -181,8 +180,8 @@ Comment on the **right** side of a diff (the real file). Comments are saved in
   the agent how to plan steps under it.
 - Useful: `bd ready` (what's unblocked), `bd list --status closed` (what you
   finished), `bd show <id>`, `bd children <id>`.
-- Removing a feature with open steps or unmerged work leaves its issue open
-  with a note, so nothing silently disappears.
+- Removing a feature with open steps leaves its issue open with a note, so
+  nothing silently disappears.
 
 ## Guard
 
