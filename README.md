@@ -2,7 +2,9 @@
 
 My config for Claude Code and [pi](https://pi.dev), and the feature-workspace setup
 around them (Herdr + nvim + beads). Claude Code is the default agent; `F_AGENT=pi` picks pi.
-**Day-to-day use: [GUIDE.md](GUIDE.md).** Design history: [PLAN.md](PLAN.md).
+**Day-to-day use: [GUIDE.md](GUIDE.md).**
+
+![Who owns what: Herdr, f, beads](docs/separation-of-concerns.svg)
 
 ## Install
 
@@ -16,10 +18,10 @@ just                    # every recipe (checks, sync-now, trace, ...)
 ## Layout
 
 - `claude/`: Claude Code (linked to `~/.claude/f`): the `f` mod (`claude/f/`), statusline, settings
-- `agent/`: pi config (settings, AGENTS.md, prompts, extensions, skills, themes)
+- `agent/`: pi config (settings, prompts, extensions, skills, themes)
 - `cmd/f/`: `f`, the multi-repo feature workspace CLI (`f --help`)
 - `mockups/`: HTML layout mockups
-- `docs/separation-of-concerns.excalidraw`: who owns what (Herdr, f, beads, the agent, nvim)
+- `docs/separation-of-concerns.excalidraw` (+ `.svg` export): who owns what (Herdr, f, beads, the agent, nvim)
 
 ## f
 
