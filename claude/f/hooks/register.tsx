@@ -10,8 +10,9 @@
  * - PRs: refreshed after each turn, `gh pr create` output recorded (`f prs --add`);
  *   claude/statusline.sh draws them.
  * - The feature is the session's root: Bash `cd` moves Claude Code's cwd, unlike pi's.
- * - Commands that never reach the model: /prs /prc /sync /plan /f /code /slack.
- *   /ci sends failing checks to the model. /plan replaces Claude Code's (shift+tab still reaches plan mode).
+ * - Commands that never reach the model: /prs /prc /sync /plan /steps /f /code /slack.
+ *   /ci sends failing checks to the model. /plan replaces Claude Code's (shift+tab still reaches plan mode);
+ *   /steps is the same but runs mid-turn: a built-in's name can't be made immediate.
  * - Quieter chrome: no "Worked for …" line, no hint/mode row under the prompt while idle.
  */
 import { atom, read, update } from 'claude-code'
@@ -56,6 +57,19 @@ async function featureInfo($: $): Promise<FeatureInfo | undefined> {
 // claude/statusline.sh draws them on its next refresh.
 async function refreshPRs($: $) {
   if (await featureInfo($)) await f($, ['prs', '--json', '-r'])
+}
+
+// togglePlan opens the plan pane with the last plan drawn, then refreshes it
+// from beads (bd is slow), or closes it.
+async function togglePlan($: $, command: string) {
+  if ((await $.ui.panes()).some(p => p.id === PLAN_PANE)) {
+    await $.ui.close({ id: PLAN_PANE })
+    return { text: 'plan hidden' }
+  }
+  if (!(await featureInfo($))) return { text: 'not in an f feature' }
+  await $.ui.open({ id: PLAN_PANE, title: 'Plan' })
+  background($, () => refreshPlan($))
+  return { text: `plan in the sidebar, updated as it changes (/${command} again to hide)` }
 }
 
 // refreshPlan redraws the plan pane, if it's open, from beads.
@@ -146,6 +160,7 @@ export const register: Register = on => {
       { name: 'prc', description: "Copy this feature's PRs as url: title lines (stacks numbered)", immediate: true as const },
       { name: 'sync', description: 'After a PR merges: reset its repo to main (or rebase newer commits onto it)' },
       { name: 'ci', description: "Send this feature's failing CI checks (with logs): find the cause, propose a fix, don't push" },
+      { name: 'steps', description: "Show/hide this feature's beads plan in the sidebar (like /plan, but runs mid-turn)", immediate: true as const },
       { name: 'f', description: 'Open a feature, or start one: /f [name] [repo...]', argumentHint: '[name] [repo...]', immediate: true as const },
       { name: 'code', description: 'Copy code block(s) from the last reply, unwrapped: /code [n]', argumentHint: '[n]' },
       { name: 'slack', description: 'Copy the last reply formatted for Slack (*bold*, plain headings and links)' },
@@ -255,18 +270,8 @@ export const register: Register = on => {
   })
 
   // Answers without next: Claude Code's own /plan never runs.
-  on('command.run', { command: 'plan' }, async $ => {
-    if ((await $.ui.panes()).some(p => p.id === PLAN_PANE)) {
-      await $.ui.close({ id: PLAN_PANE })
-      return { text: 'plan hidden' }
-    }
-    if (!(await featureInfo($))) return { text: 'not in an f feature' }
-    const res = await f($, ['plan', 'show', '--tree'])
-    if (res.code !== 0) return { text: res.stderr.trim() || 'f plan show failed' }
-    await update($, plan, () => res.stdout.trimEnd())
-    await $.ui.open({ id: PLAN_PANE, title: 'Plan' })
-    return { text: 'plan in the sidebar, updated as it changes (/plan again to hide)' }
-  })
+  on('command.run', { command: 'plan' }, async $ => togglePlan($, 'plan'))
+  on('command.run', { command: 'steps' }, async $ => togglePlan($, 'steps'))
 
   on('command.run', { command: 'ci' }, async $ => {
     if (!(await featureInfo($))) return { text: 'not in an f feature' }
@@ -358,7 +363,7 @@ export const register: Register = on => {
   on('ui.render', { component: 'Pane', requestId: PLAN_PANE }, async ($, e) => {
     const { Box, Text } = $.ui.resolve(e)
     const text = await read($, plan)
-    if (!text) return <Text dimColor>no plan</Text>
+    if (!text) return <Text dimColor>loading…</Text>
     // Tree lines dim, the mark colored by status, the title wrapping in its own column.
     // Fixed-width columns that never shrink: a Text's trailing spaces get
     // collapsed, and a squeezed column wraps (tree lines split across rows).
