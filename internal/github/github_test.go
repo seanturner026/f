@@ -111,6 +111,7 @@ func TestRepoPRs(t *testing.T) {
 				"stack":       stack,
 				"pr view u41": `{"number":41,"state":"MERGED","title":"auth","url":"u41","headRefName":"auth","baseRefName":"main"}`,
 				"pr view u42": `{"number":42,"state":"OPEN","title":"api","url":"u42","isDraft":true,"headRefName":"api","baseRefName":"auth"}`,
+				"pr list":     `[]`,
 			},
 			want: []model.PR{
 				{Repo: "r", Number: 41, Title: "auth", URL: "u41", Status: model.PRStatusMerged, Head: "auth", Base: "main", Stack: 1},
@@ -134,6 +135,15 @@ func TestRepoPRs(t *testing.T) {
 			name:   "no stack: falls back to the feature branch",
 			runner: cmdRunner{"stack": "ERR", "pr list": `[{"number":7,"state":"OPEN","title":"t","url":"u7","headRefName":"feat","baseRefName":"main"}]`},
 			want:   []model.PR{{Repo: "r", Number: 7, Title: "t", URL: "u7", Status: model.PRStatusOpen, Head: "feat", Base: "main"}},
+		},
+		{
+			name: "stack fine but the branch list fails",
+			runner: cmdRunner{
+				"stack":       `{"trunk":"main","branches":[{"name":"feat","pr":{"number":42,"url":"u42","state":"OPEN"}}]}`,
+				"pr view u42": `{"number":42,"state":"OPEN","url":"u42","headRefName":"feat"}`,
+				"pr list":     "ERR",
+			},
+			wantErr: true,
 		},
 		{
 			name:    "stack PR lookup fails",

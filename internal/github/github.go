@@ -233,6 +233,9 @@ func RepoPRs(ctx context.Context, r Runner, dir, repo, branch string) ([]model.P
 		// No stack, or none of its branches submitted yet (a plain gh pr create).
 		return l.prs, l.err
 	}
+	if err == nil && l.err != nil {
+		return nil, l.err // a partial list would drop PRs: the caller keeps its cached ones
+	}
 	// The stack shows one PR per branch; earlier PRs from the feature branch
 	// (merged, then reused for the next PR) only come from the list.
 	for _, p := range l.prs {

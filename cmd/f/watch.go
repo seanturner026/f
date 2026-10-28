@@ -13,6 +13,7 @@ import (
 
 	"github.com/seanturner026/f/internal/feature"
 	"github.com/seanturner026/f/internal/model"
+	"github.com/seanturner026/f/internal/tracing"
 )
 
 // The PRs tab (`f prs --watch`) shows each repo's PRs and their checks, and
@@ -118,6 +119,8 @@ func watchPRs(ctx context.Context, d deps, name string) error {
 
 	repos, _ := feature.Repos(d.layout, name)
 	state, _ := feature.LoadState(d.layout, name)
+	self, _ := os.Executable()
+	built := modTime(self)
 	var (
 		errs        map[string]error
 		lastPoll    time.Time
@@ -176,6 +179,13 @@ func watchPRs(ctx context.Context, d deps, name string) error {
 			}
 			continue
 		case <-tick.C:
+		}
+
+		// A new f was installed: run it, so old code doesn't keep saving state.
+		if m := modTime(self); !built.IsZero() && !m.IsZero() && !m.Equal(built) {
+			restore()
+			tracing.Finish(ctx)
+			return syscall.Exec(self, os.Args, os.Environ())
 		}
 
 		// Someone else (pi) updated the state: take it; a new PR settles like a push.
