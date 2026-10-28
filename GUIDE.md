@@ -134,7 +134,7 @@ marks need `herdr integration install claude`. Herdr plays its Done sound when C
 | `/plan` | Show/hide the feature's beads plan above the input: in progress, ready, blocked (← waits on), done count. Full list: `f plan show` |
 | `/prc` | Copy the feature's open PRs as `url: title` lines (same as `!!f prs -c`) |
 | `/ci` | Send failing checks + failed-job logs to pi: it finds the cause and proposes a fix, no push until you OK |
-| `/remember [what]` | Save a preference as a rule in `agent/AGENTS.md` |
+| `/remember [what]` | Save a preference as a rule in `~/.pi/agent/AGENTS.md` |
 | `/reload` | Pick up changed extensions, rules, keybindings |
 | `ctrl+d` (empty editor) / `/quit` | Quit pi (session is saved; `f <name>` continues it) |
 
