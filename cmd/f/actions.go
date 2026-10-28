@@ -113,10 +113,14 @@ func start(ctx context.Context, d deps, name string, repos []string) error {
 			return nil
 		}
 		tracing.Rename(ctx, "f picker")
-		picked, err := pickFeature(ctx, d)
+		picked, create, err := pickFeature(ctx, d)
 		if err != nil || picked == "" {
 			return err
 		}
+		if create {
+			return start(ctx, d, picked, nil)
+		}
+		_, _ = feature.SetFlagged(d.layout, picked, false, false)
 		if err := refreshInfo(d, picked); err != nil {
 			return err
 		}
@@ -129,6 +133,7 @@ func start(ctx context.Context, d deps, name string, repos []string) error {
 	}
 	if feature.Exists(d.layout, name) {
 		tracing.Rename(ctx, "f open")
+		_, _ = feature.SetFlagged(d.layout, name, false, false)
 		if err := refreshInfo(d, name); err != nil {
 			return err
 		}
@@ -513,22 +518,40 @@ func prs(ctx context.Context, d deps, explicit string, opts prsOptions) error {
 	if opts.noOpen {
 		return nil
 	}
+	_, err = openPRs(state.PRs)
+	return err
+}
+
+// openPRs opens the active PRs in the browser and returns how many.
+func openPRs(prs []model.PR) (int, error) {
 	var urls []string
-	for _, p := range state.PRs {
+	for _, p := range prs {
 		if p.Status.IsActive() {
 			urls = append(urls, p.URL)
 		}
 	}
 	if len(urls) > 0 {
 		if err := exec.Command("open", urls...).Run(); err != nil {
-			return fmt.Errorf("open browser: %w", err)
+			return 0, fmt.Errorf("open browser: %w", err)
 		}
 	}
-	return nil
+	return len(urls), nil
 }
 
 // copyPRs puts the active PRs (or all, if none are active) on the clipboard.
 func copyPRs(prs []model.PR) error {
+	text, n, err := copyPRsQuietly(prs)
+	if err != nil || n == 0 {
+		info("no PRs")
+		return err
+	}
+	fmt.Print(text)
+	ok("copied %d PR(s)", n)
+	return nil
+}
+
+// copyPRsQuietly is copyPRs without output: the copied text and how many PRs.
+func copyPRsQuietly(prs []model.PR) (string, int, error) {
 	var active []model.PR
 	for _, p := range prs {
 		if p.Status.IsActive() {
@@ -539,16 +562,10 @@ func copyPRs(prs []model.PR) error {
 		active = prs
 	}
 	if len(active) == 0 {
-		info("no PRs")
-		return nil
+		return "", 0, nil
 	}
 	text := model.PRClipboard(active)
-	if err := copyToClipboard(text); err != nil {
-		return err
-	}
-	fmt.Print(text)
-	ok("copied %d PR(s)", len(active))
-	return nil
+	return text, len(active), copyToClipboard(text)
 }
 
 func printPRs(d deps, name string, list []model.PR, errs map[string]error) {
@@ -586,12 +603,20 @@ func restore(ctx context.Context, d deps, name string) error {
 		}
 		return nil
 	}
+	if err := restoreFeature(ctx, d, name); err != nil {
+		return err
+	}
+	fmt.Println(green("restored " + name))
+	return start(ctx, d, name, nil)
+}
+
+// restoreFeature brings back a removed feature and reopens its beads issue.
+func restoreFeature(ctx context.Context, d deps, name string) error {
 	if err := feature.Restore(ctx, d.run, d.layout, name); err != nil {
 		return err
 	}
 	if info, _ := feature.LoadInfo(d.layout, name); info.Issue != "" {
 		_ = beads.Reopen(ctx, d.run, d.layout.Base, info.Issue) // fails if it was left open: fine
 	}
-	fmt.Println(green("restored " + name))
-	return start(ctx, d, name, nil)
+	return nil
 }

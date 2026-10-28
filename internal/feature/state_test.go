@@ -215,3 +215,18 @@ func TestRefreshPRsKeepsMergedHistory(t *testing.T) {
 		t.Errorf("AllPRs = %v, want [4 3]", all)
 	}
 }
+
+func TestSetFlagged(t *testing.T) {
+	l := newLayout(t, "feat", "argocd")
+	for i, want := range []bool{true, false} {
+		if got, err := feature.SetFlagged(l, "feat", false, true); err != nil || got != want {
+			t.Fatalf("toggle %d = %v, %v; want %v", i, got, err, want)
+		}
+	}
+	if _, err := feature.SetFlagged(l, "feat", true, false); err != nil {
+		t.Fatal(err)
+	}
+	if s, _ := feature.LoadState(l, "feat"); !s.Flagged {
+		t.Error("flag not saved")
+	}
+}

@@ -87,6 +87,11 @@ picker too.
 |---|---|
 | `enter` | Jump to the feature (recreates its workspace if closed) |
 | `ctrl-x` | Remove the feature (to the trash for 14 days: `f restore <name>`) and close its workspace once the picker exits; instant, no questions, so remove several and then pick one |
+| `ctrl-n` | New feature: type its name in the search box first. Arrows (or `ctrl-j`/`ctrl-k`) still move the cursor |
+| `ctrl-u` | Flag/unflag the feature as needing you: `◆`, sorted with "needs you"; opening it clears the flag |
+| `ctrl-o` / `ctrl-y` | Open the feature's open PRs in the browser / copy its PRs (like `/prc`), without leaving the picker |
+| `ctrl-s` | Sync the feature in the background (as `f sync` does after a merge) |
+| `ctrl-t` | Trash: pick a removed feature to restore (it reappears in the picker) |
 | `esc` / `ctrl-space` | Close |
 
 Columns: `●` marks the workspace you're in (listed first, with the cursor on it) ·

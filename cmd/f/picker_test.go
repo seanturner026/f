@@ -38,4 +38,7 @@ func TestAttention(t *testing.T) {
 	if got, want := attention(pickerRow{status: statusIdle}), statusRank[statusIdle]; got != want {
 		t.Errorf("idle: attention = %d, want %d", got, want)
 	}
+	if got, want := attention(pickerRow{status: statusClosed, flagged: true}), statusRank[statusNeedsYou]; got != want {
+		t.Errorf("closed but flagged: attention = %d, want %d (needs you)", got, want)
+	}
 }

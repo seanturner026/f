@@ -20,7 +20,7 @@ import (
 const help = `f: one agent session (Claude Code, or pi with F_AGENT=pi) across several repos, each on its own worktree.
 
   f <name>         start a feature (pick repos), or reopen it
-  f                picker: what needs you → jump there (ctrl-x remove)
+  f                picker: what needs you → jump there (ctrl-n new, ctrl-x remove, ctrl-u flag, ctrl-o/y PRs, ctrl-s sync, ctrl-t trash)
   f add [repo...]  add repos to this feature
   f resume         after a Herdr restart: restart the agent, nvim, prs in every feature workspace
   f prs [-r] [-c]  this feature's PRs (-r refresh, -c copy, -w live view)

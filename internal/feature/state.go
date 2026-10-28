@@ -31,7 +31,9 @@ type State struct {
 	// MergedEarlier are merged PRs a refresh no longer finds (f sync dropped
 	// their branches). Display only: sync must not act on them again.
 	MergedEarlier []model.PR `json:"merged_earlier,omitempty"`
-	Plan          model.Plan `json:"plan,omitzero"` // beads progress, synced after each pi run
+	// Flagged is the picker's "needs me" mark (ctrl-u); opening the feature clears it.
+	Flagged bool       `json:"flagged,omitempty"`
+	Plan    model.Plan `json:"plan,omitzero"` // beads progress, synced after each pi run
 	// SyncNotes tell pi what a background f sync changed (e.g. a repo reset to
 	// main after its PR merged); the f extension hands them over on the next prompt.
 	SyncNotes []string `json:"sync_notes,omitempty"`
@@ -47,6 +49,18 @@ func (s State) AllPRs() []model.PR {
 		}
 	}
 	return all
+}
+
+// SetFlagged sets (or, with toggle, flips) the feature's picker flag and
+// returns its new value.
+func SetFlagged(l Layout, name string, flagged, toggle bool) (bool, error) {
+	s, err := UpdateState(l, name, func(s *State) {
+		if toggle {
+			flagged = !s.Flagged
+		}
+		s.Flagged = flagged
+	})
+	return s.Flagged, err
 }
 
 // AddSyncNotes queues notes for pi.

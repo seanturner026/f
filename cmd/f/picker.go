@@ -60,6 +60,7 @@ var ciStyle = map[model.CIState]func(string) string{
 type pickerRow struct {
 	name    string
 	current bool // the workspace you're in (under the popup)
+	flagged bool // marked "needs me" with ctrl-u
 	status  featureStatus
 	prs     []model.PR
 	plan    model.Plan
@@ -81,7 +82,7 @@ func pickerRows(ctx context.Context, d deps) []pickerRow {
 		s, running := agents[feature.Dir(d.layout, name)]
 		state, _ := feature.LoadState(d.layout, name)
 		rows = append(rows, pickerRow{
-			name: name, current: name == current, status: toFeatureStatus(s, running),
+			name: name, current: name == current, flagged: state.Flagged, status: toFeatureStatus(s, running),
 			prs: state.AllPRs(), plan: state.Plan,
 		})
 	}
@@ -95,20 +96,24 @@ func pickerRows(ctx context.Context, d deps) []pickerRow {
 	return rows
 }
 
-// attention ranks a row: lower needs you sooner. Failing CI counts as much as
-// pi asking you something.
+// attention ranks a row: lower needs you sooner. Failing CI and your own flag
+// count as much as pi asking you something.
 func attention(r pickerRow) int {
 	rank := statusRank[r.status]
-	if state, _ := model.CI(r.prs); state == model.CIFailing {
+	if state, _ := model.CI(r.prs); state == model.CIFailing || r.flagged {
 		rank = min(rank, statusRank[statusNeedsYou])
 	}
 	return rank
 }
 
+// pickerKeys are the picker's keys besides ⏎ (open) and ctrl-n (new).
+const pickerKeys = "ctrl-x,ctrl-u,ctrl-o,ctrl-y,ctrl-s,ctrl-t"
+
 // pickFeature is the control center: features ordered by what needs you.
-// ENTER returns the chosen feature; ctrl-x removes one, then the picker
-// reopens with a status line.
-func pickFeature(ctx context.Context, d deps) (string, error) {
+// ENTER returns the chosen feature; ctrl-n returns the typed name with create
+// set. The other keys act on the highlighted feature, then the picker reopens
+// with a status line.
+func pickFeature(ctx context.Context, d deps) (name string, create bool, err error) {
 	msg := ""
 	var removed []string
 	// Closing a workspace can move Herdr's focus and take the popup with it.
@@ -123,37 +128,111 @@ func pickFeature(ctx context.Context, d deps) (string, error) {
 			if msg != "" {
 				fmt.Println(msg)
 			}
-			return "", nil
+			return "", false, nil
 		}
 		titles, lines := pickerTable(rows)
-		header := []string{dim("⏎ open · ctrl-x remove"), "", titles}
+		header := []string{dim("⏎ open · ctrl-n new (type its name) · ctrl-x remove · ctrl-u flag · ctrl-o/y open/copy PRs · ctrl-s sync · ctrl-t trash"), "", titles}
 		if msg != "" {
 			header = append([]string{msg}, header...)
 		}
 		// Full-screen (fast in Herdr's popup); ctrl-space closes it, like it opened.
-		// The cursor starts on the top row: the feature you're in.
+		// The cursor starts on the top row: the feature you're in. ctrl-n's
+		// become prints the query even when it matches no feature.
 		_, wait := tracing.Start(ctx, "picker wait") // you choosing, not f working
 		out, err := runFzf(lines, "--ansi", "--delimiter=\t", "--with-nth=2..",
-			"--expect=ctrl-x", "--bind=ctrl-space:abort", "--prompt=feature> ",
-			"--header="+strings.Join(header, "\n"))
+			"--expect="+pickerKeys, "--bind=ctrl-space:abort", `--bind=ctrl-n:become(printf 'ctrl-n\n%s\n' {q})`,
+			"--prompt=feature> ", "--header="+strings.Join(header, "\n"))
 		wait.End()
 		if err != nil || len(out) == 0 {
-			return "", err
+			return "", false, err
 		}
 		key, name := out[0], ""
 		if len(out) > 1 {
 			name, _, _ = strings.Cut(out[1], "\t")
 		}
-		switch key {
-		case "":
-			return name, nil
-		case "ctrl-x":
-			if name != "" {
-				msg = removeFeature(ctx, d, name)
-				removed = append(removed, name)
+		if key == "" {
+			return name, false, nil
+		}
+		if key == "ctrl-n" {
+			if name = strings.TrimSpace(name); name == "" {
+				msg = red("type the new feature's name, then ctrl-n")
+				continue
 			}
+			return name, true, nil
+		}
+		if name == "" && key != "ctrl-t" {
+			continue
+		}
+		msg = pickerAction(ctx, d, key, name)
+		if key == "ctrl-x" {
+			removed = append(removed, name)
 		}
 	}
+}
+
+// pickerAction runs a picker key on feature name and returns a status line.
+func pickerAction(ctx context.Context, d deps, key, name string) string {
+	state, _ := feature.LoadState(d.layout, name)
+	switch key {
+	case "ctrl-x":
+		return removeFeature(ctx, d, name)
+	case "ctrl-u":
+		flagged, err := feature.SetFlagged(d.layout, name, false, true)
+		switch {
+		case err != nil:
+			return red(err.Error())
+		case flagged:
+			return "flagged " + name
+		}
+		return "unflagged " + name
+	case "ctrl-o":
+		n, err := openPRs(state.PRs)
+		switch {
+		case err != nil:
+			return red(err.Error())
+		case n == 0:
+			return name + ": no open PRs"
+		}
+		return fmt.Sprintf("opened %d PR(s) of %s", n, name)
+	case "ctrl-y":
+		_, n, err := copyPRsQuietly(state.AllPRs())
+		switch {
+		case err != nil:
+			return red(err.Error())
+		case n == 0:
+			return name + ": no PRs"
+		}
+		return fmt.Sprintf("copied %d PR(s) of %s", n, name)
+	case "ctrl-s":
+		syncInBackground(ctx, name)
+		return "syncing " + name + " in the background"
+	case "ctrl-t":
+		return restoreFromTrash(ctx, d)
+	}
+	return ""
+}
+
+// restoreFromTrash lets you pick a removed feature and restores it (with its
+// beads issue reopened); it then shows up in the picker.
+func restoreFromTrash(ctx context.Context, d deps) string {
+	trash := feature.Trash(d.layout)
+	if len(trash) == 0 {
+		return "trash is empty"
+	}
+	items := make([]string, len(trash))
+	for i, t := range trash {
+		items[i] = t.Name + "\t" + t.Name + "  " + dim("removed "+feature.TrashAge(t))
+	}
+	out, err := runFzf(items, "--ansi", "--delimiter=\t", "--with-nth=2..", "--prompt=restore> ",
+		"--header=⏎ restore · esc back", "--bind=ctrl-space:abort")
+	if err != nil || len(out) == 0 {
+		return ""
+	}
+	name, _, _ := strings.Cut(out[0], "\t")
+	if err := restoreFeature(ctx, d, name); err != nil {
+		return red(err.Error())
+	}
+	return green("restored " + name)
 }
 
 // pickerColumn is a column of the picker table, in display order.
@@ -172,6 +251,7 @@ var columnTitle = [numColumns]string{colFeature: "FEATURE", colPi: "PI", colCI: 
 
 const (
 	currentMark = "● " // marks the workspace you're in
+	flagMark    = "◆ " // marks a feature flagged "needs me"
 	noValue     = "—"
 )
 
@@ -214,8 +294,11 @@ func pickerTable(rows []pickerRow) (string, []string) {
 	lines := make([]string, len(rows))
 	for i, r := range rows {
 		mark := "  "
-		if r.current {
+		switch {
+		case r.current:
 			mark = green(currentMark)
+		case r.flagged:
+			mark = color("33", flagMark)
 		}
 		ci, _ := model.CI(r.prs)
 		style := [numColumns]func(string) string{
