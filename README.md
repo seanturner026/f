@@ -28,8 +28,9 @@ worktree (`f -h` for commands).
 
 - Per machine, `~/.config/f/config.json` says where features live (`home`,
   default `~/code/features`; `F_BASE` overrides) and which repos you can pick
-  (`repos`: paths, or `dir/*` for every repo in dir; default `<home>/*`):
-  `{"home": "~/code/features", "repos": ["~/code/features/*", "~/code/github/me/dotfiles"]}`.
+  (`repos`: paths, or `dir/*` for every repo in dir; default `<home>/*`), plus
+  optional `agent_rules` for every feature's AGENTS.md:
+  `{"home": "~/code/features", "repos": ["~/code/work/*", "~/code/github/me/dotfiles"], "agent_rules": ["CI logs: `x logs <id>`"]}`.
 - Features live in `<home>/.features/<name>/<repo>` (branch = name). Feature
   state is local-only in `<feature>/.context/` (`feature.json`, PRs, comments),
   written only by `f`.

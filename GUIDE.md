@@ -191,7 +191,7 @@ filtered copies of `~/.aws/config`, `~/.aws/credentials`, and the kubeconfig
 Commands naming a denied profile/context/prod EKS cluster, or pointing back at
 the real files, are blocked with a reason.
 
-- Allowed now: profiles without `admin`/`prod` (plus `team-eks-admin`),
+- Allowed now: profiles without `admin`/`prod` (plus any `allow_profiles` in `guard.json`),
   contexts without `prod` (dev, staging, minikube).
 - Change rules: edit `~/.config/f/guard.json`, then restart the chat tab (pi: `/reload`).
 - SSO expired? Run `aws sso login` yourself (the agent's filtered config shares the
@@ -209,6 +209,7 @@ the real files, are blocked with a reason.
 6. `~/.config/f/config.json`: `home` (where features live, default `~/code/features`) and
    `repos` (the clones you can pick: paths, or `dir/*`), e.g.
    `{"home": "~/code/features", "repos": ["~/code/github/me/f", "~/code/github/me/dotfiles"]}`.
+   Optional `agent_rules`: extra lines for every feature's AGENTS.md (e.g. how to read your CI's logs).
 7. `cd <home> && bd metrics off && bd init --prefix f --skip-agents --skip-hooks && rm -rf .git .gitignore && git config --global beads.role maintainer`.
    The db is Dolt, not git; a git repo at `<home>` would hide feature worktrees from Claude Code's `@` picker.
 8. `~/.config/f/guard.json` with machine-specific allow/default profile.

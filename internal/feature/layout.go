@@ -39,6 +39,8 @@ type Layout struct {
 	Base     string   // f's home: .features (and its trash), the beads db
 	Features string   // feature directories
 	Sources  []string // base clones: a repo's path, or dir/* for every repo in dir
+	// AgentRules are machine-specific rules for every feature's AGENTS.md (Config).
+	AgentRules []string
 }
 
 // NewLayout returns the layout rooted at base, offering the repos in it.

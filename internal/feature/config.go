@@ -9,13 +9,15 @@ import (
 	"strings"
 )
 
-// Config is ~/.config/f/config.json, per machine: where f keeps features, and
-// which repos it offers for them.
+// Config is ~/.config/f/config.json, per machine: where f keeps features,
+// which repos it offers for them, and rules every feature's AGENTS.md adds.
 //
-//	{"home": "~/code/features", "repos": ["~/code/work/*", "~/code/f"]}
+//	{"home": "~/code/features", "repos": ["~/code/work/*", "~/code/f"],
+//	 "agent_rules": ["CI runs on X: read failures with `x logs <id>`."]}
 type Config struct {
-	Home  string   `json:"home"`  // default ~/code/features
-	Repos []string `json:"repos"` // repo paths, or dir/* for every repo in dir; default <home>/*
+	Home       string   `json:"home"`        // default ~/code/features
+	Repos      []string `json:"repos"`       // repo paths, or dir/* for every repo in dir; default <home>/*
+	AgentRules []string `json:"agent_rules"` // appended to the Rules of each feature's AGENTS.md
 }
 
 // DefaultLayout reads the config ($F_BASE overrides its home).
@@ -36,6 +38,7 @@ func DefaultLayout() (Layout, error) {
 		home = env
 	}
 	l := NewLayout(home)
+	l.AgentRules = cfg.AgentRules
 	if len(cfg.Repos) > 0 {
 		l.Sources = nil
 		for _, r := range cfg.Repos {

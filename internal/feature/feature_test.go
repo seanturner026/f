@@ -103,6 +103,7 @@ func TestResolve(t *testing.T) {
 
 func TestSync(t *testing.T) {
 	l := newLayout(t, "feat", "argocd", "ops")
+	l.AgentRules = []string{"Read CI logs with `x logs <id>`."}
 	if err := os.WriteFile(filepath.Join(feature.Dir(l, "feat"), "argocd", "CLAUDE.md"), nil, 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -128,7 +129,7 @@ func TestSync(t *testing.T) {
 				t.Errorf("info = %+v", saved)
 			}
 			raw, _ := os.ReadFile(feature.AgentsMDPath(l, "feat"))
-			for _, want := range []string{"# Feature: feat", "`argocd/` (instructions: `argocd/CLAUDE.md`)", "- `ops/`\n"} {
+			for _, want := range []string{"# Feature: feat", "`argocd/` (instructions: `argocd/CLAUDE.md`)", "- `ops/`\n", "- Read CI logs with `x logs <id>`.\n"} {
 				if !strings.Contains(string(raw), want) {
 					t.Errorf("AGENTS.md missing %q", want)
 				}

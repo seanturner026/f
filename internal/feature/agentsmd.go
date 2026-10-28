@@ -33,10 +33,10 @@ This session works across these git worktrees, all on branch ` + "`{{.Name}}`" +
 - Run git commands inside the relevant repo directory; this root is not a git repo.
 - Open PRs ready for review, not as drafts: ` + "`gh stack submit --open`" + ` (with ` + "`--auto`" + ` it makes drafts otherwise), ` + "`gh pr create`" + ` without ` + "`--draft`" + `. Draft only if I ask, or say why first (e.g. it can't merge yet).
 - When a PR has merged (I'll say so), run ` + "`f sync`" + `, not ` + "`gh stack sync`" + ` (squash merges leave merged commits it can't recognize): it resets merged branches to main or deletes them, keeps commits added after a merge, rebases the rest onto main, force-pushes them (with lease), and re-inits the stack.
-- PR checks that run on Depot CI: see why they failed with ` + "`depot ci diagnose --run <id>`" + ` or ` + "`depot ci logs <run-or-job-id>`" + ` (IDs are in the check's link); ` + "`gh run view`" + ` can't read them.
 - PRs are always a gh stack per repo, starting at branch ` + "`{{.Name}}`" + ` (f already ran ` + "`gh stack init {{.Name}}`" + `; run it if ` + "`gh stack view`" + ` says there's no stack). One change: commit on ` + "`{{.Name}}`" + `. More: ` + "`gh stack add {{.Name}}-<topic>`" + ` for each next PR. Open/update PRs with ` + "`gh stack submit --open`" + `. Follow the repo's instructions on merge order.
 - ` + "`.context/`" + ` holds feature state managed by ` + "`f`" + ` (e.g. ` + "`.context/state.json`" + ` lists this feature's PRs). Read it when useful; don't edit it.
-{{if .Issue}}
+{{range .Rules}}- {{.}}
+{{end}}{{if .Issue}}
 ## Plan (beads)
 
 This feature is beads issue ` + "`{{.Issue}}`" + `. For multi-step work, plan the steps as child issues and work through them:
@@ -68,7 +68,7 @@ func writeAgentsMD(l Layout, info Info) error {
 		return fmt.Errorf("write AGENTS.md: %w", err)
 	}
 	defer f.Close()
-	if err := agentsTmpl.Execute(f, map[string]any{"Name": info.Name, "Goal": goal, "Repos": repos, "Issue": info.Issue}); err != nil {
+	if err := agentsTmpl.Execute(f, map[string]any{"Name": info.Name, "Goal": goal, "Repos": repos, "Issue": info.Issue, "Rules": l.AgentRules}); err != nil {
 		return fmt.Errorf("write AGENTS.md: %w", err)
 	}
 	return writeClaudeMD(l, info.Name, repos)

@@ -68,7 +68,17 @@ function featureInfo(cwd: string): FeatureInfo | undefined {
 }
 
 // The f layout (internal/feature: DefaultLayout): base clones and features.
-const BASE = process.env.F_BASE || join(homedir(), "code", "features");
+const BASE = process.env.F_BASE || configHome() || join(homedir(), "code", "features");
+
+// configHome is ~/.config/f/config.json's "home", if set.
+function configHome(): string | undefined {
+	try {
+		const home = (JSON.parse(readFileSync(join(homedir(), ".config", "f", "config.json"), "utf-8")) as { home?: string }).home;
+		return home?.startsWith("~/") ? join(homedir(), home.slice(2)) : home || undefined;
+	} catch {
+		return undefined;
+	}
+}
 
 function subdirs(dir: string, keep: (name: string) => boolean = () => true): string[] {
 	try {
