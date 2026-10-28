@@ -92,6 +92,7 @@ picker too.
 | `ctrl-o` / `ctrl-y` | Open the feature's open PRs in the browser / copy its PRs (like `/prc`), without leaving the picker |
 | `ctrl-s` | Sync the feature in the background (as `f sync` does after a merge) |
 | `ctrl-t` | Trash: pick a removed feature to restore (it reappears in the picker) |
+| `?` / `ctrl-/` | Show/hide these keys in a panel beside the list |
 | `esc` / `ctrl-space` | Close |
 
 Columns: `●` marks the workspace you're in (listed first, with the cursor on it) ·

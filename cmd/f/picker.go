@@ -109,6 +109,22 @@ func attention(r pickerRow) int {
 // pickerKeys are the picker's keys besides ⏎ (open) and ctrl-n (new).
 const pickerKeys = "ctrl-x,ctrl-u,ctrl-o,ctrl-y,ctrl-s,ctrl-t"
 
+// pickerHelp is the side panel ? (or ctrl-/) toggles. No single quotes: it's
+// passed to the shell inside them.
+const pickerHelp = `keys
+
+⏎       open
+ctrl-n  new: type its name first
+ctrl-x  remove (f restore undoes)
+ctrl-u  flag/unflag as needing you
+ctrl-o  open its PRs in the browser
+ctrl-y  copy its PRs
+ctrl-s  sync in the background
+ctrl-t  trash: restore a feature
+esc     close
+
+? or ctrl-/ hides this`
+
 // pickFeature is the control center: features ordered by what needs you.
 // ENTER returns the chosen feature; ctrl-n returns the typed name with create
 // set. The other keys act on the highlighted feature, then the picker reopens
@@ -131,7 +147,7 @@ func pickFeature(ctx context.Context, d deps) (name string, create bool, err err
 			return "", false, nil
 		}
 		titles, lines := pickerTable(rows)
-		header := []string{dim("⏎ open · ctrl-n new (type its name) · ctrl-x remove · ctrl-u flag · ctrl-o/y open/copy PRs · ctrl-s sync · ctrl-t trash"), "", titles}
+		header := []string{dim("⏎ open · ? keys"), "", titles}
 		if msg != "" {
 			header = append([]string{msg}, header...)
 		}
@@ -141,6 +157,8 @@ func pickFeature(ctx context.Context, d deps) (name string, create bool, err err
 		_, wait := tracing.Start(ctx, "picker wait") // you choosing, not f working
 		out, err := runFzf(lines, "--ansi", "--delimiter=\t", "--with-nth=2..",
 			"--expect="+pickerKeys, "--bind=ctrl-space:abort", `--bind=ctrl-n:become(printf 'ctrl-n\n%s\n' {q})`,
+			"--preview=printf '%s' '"+pickerHelp+"'", "--preview-window=right,36,hidden,border-left",
+			"--bind=?:toggle-preview,ctrl-/:toggle-preview",
 			"--prompt=feature> ", "--header="+strings.Join(header, "\n"))
 		wait.End()
 		if err != nil || len(out) == 0 {

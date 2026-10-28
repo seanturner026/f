@@ -2,6 +2,7 @@ package main
 
 import (
 	"regexp"
+	"strings"
 	"testing"
 
 	"github.com/seanturner026/f/internal/model"
@@ -40,5 +41,11 @@ func TestAttention(t *testing.T) {
 	}
 	if got, want := attention(pickerRow{status: statusClosed, flagged: true}), statusRank[statusNeedsYou]; got != want {
 		t.Errorf("closed but flagged: attention = %d, want %d (needs you)", got, want)
+	}
+}
+
+func TestPickerHelpQuotable(t *testing.T) {
+	if strings.Contains(pickerHelp, "'") {
+		t.Error("pickerHelp has a single quote: it's passed to the shell inside them")
 	}
 }
