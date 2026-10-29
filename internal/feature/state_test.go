@@ -216,6 +216,24 @@ func TestRefreshPRsKeepsMergedHistory(t *testing.T) {
 	}
 }
 
+func TestRefreshPRsPartialFailureDoesNotDuplicate(t *testing.T) {
+	l := newLayout(t, "feat", "f")
+	// The stack names a PR gh can't view; the branch list still finds #1.
+	run := fakeRunner{
+		"gh stack view": `{"trunk":"main","branches":[{"name":"feat","pr":{"number":6,"url":"u6","state":"MERGED"}}]}`,
+		"gh pr view u6": "ERR",
+		"gh pr list":    `[{"number":1,"state":"MERGED","url":"u1","headRefName":"feat","baseRefName":"main"}]`,
+	}
+	for range 3 {
+		if _, _, err := feature.RefreshPRs(context.Background(), run, l, "feat"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if s, _ := feature.LoadState(l, "feat"); len(s.PRs) != 1 {
+		t.Errorf("PRs = %+v, want #1 once", s.PRs)
+	}
+}
+
 func TestSetFlagged(t *testing.T) {
 	l := newLayout(t, "feat", "argocd")
 	for i, want := range []bool{true, false} {

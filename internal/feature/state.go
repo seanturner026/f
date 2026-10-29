@@ -181,7 +181,8 @@ func RefreshPRs(ctx context.Context, r Runner, l Layout, name string) (State, ma
 	}
 	s, err := UpdateState(l, name, func(s *State) {
 		for _, p := range s.PRs {
-			if errs[p.Repo] != nil {
+			// A failed repo can still return some PRs (e.g. the branch list, not the stack).
+			if errs[p.Repo] != nil && !slices.ContainsFunc(live, p.Same) {
 				live = append(live, p)
 			}
 		}
