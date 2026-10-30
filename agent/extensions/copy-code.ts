@@ -5,8 +5,9 @@
  *
  *   /code      one block: copy it; several: pick one (or all)
  *   /code 2    copy block 2
- *   /slack     the whole reply, converted for Slack's message box (*bold*,
- *              headings as bold lines, links as "text (url)"); code untouched
+ *   /slack     the reply's quoted draft (or the whole reply), converted for
+ *              Slack's message box (*bold*, headings as bold lines, links as
+ *              "text (url)"); code untouched
  */
 import { spawnSync } from "node:child_process";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
@@ -32,6 +33,23 @@ function inlineToSlack(line: string): string {
 			.replace(/~~(.+?)~~/g, "~$1~")
 			.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (_m, text: string, url: string) => (text === url ? url : `${text} (${url})`))
 	);
+}
+
+/** slackText is what /slack copies: the reply's longest blockquote (a drafted
+ * message, without its "> " markers) if it has one, else the whole reply. */
+export function slackText(markdown: string): string {
+	let best: string[] = [];
+	let cur: string[] = [];
+	for (const line of [...markdown.split("\n"), ""]) {
+		const q = line.match(/^ {0,3}> ?(.*)$/);
+		if (q) {
+			cur.push(q[1]);
+			continue;
+		}
+		if (cur.length > best.length) best = cur;
+		cur = [];
+	}
+	return toSlack(best.length ? best.join("\n") : markdown);
 }
 
 /** toSlack converts markdown to what Slack's message box renders. Fenced
@@ -86,11 +104,11 @@ function copy(text: string): boolean {
 
 export default function (pi: ExtensionAPI) {
 	pi.registerCommand("slack", {
-		description: "Copy the last reply formatted for Slack (*bold*, plain headings and links; code untouched)",
+		description: "Copy the last reply's quoted draft (or all of it) formatted for Slack",
 		handler: async (_args, ctx) => {
 			const text = lastAssistantText(ctx.sessionManager.getBranch());
 			if (!text) return ctx.ui.notify("no reply to copy", "info");
-			if (!copy(toSlack(text))) return ctx.ui.notify("pbcopy failed", "error");
+			if (!copy(slackText(text))) return ctx.ui.notify("pbcopy failed", "error");
 			ctx.ui.notify("copied for Slack", "info");
 		},
 	});

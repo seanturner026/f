@@ -19,7 +19,7 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
 import type { Pick, PickOption } from '../types'
-import { codeBlocks, toSlack } from './markdown'
+import { codeBlocks, slackText } from './markdown'
 
 type $ = EngineInterface
 type FeatureInfo = { name: string; root: string; repos: string[]; goal?: string; issue?: string }
@@ -163,7 +163,7 @@ export const register: Register = on => {
       { name: 'steps', description: "Show/hide this feature's beads plan in the sidebar (like /plan, but runs mid-turn)", immediate: true as const },
       { name: 'f', description: 'Open a feature, or start one: /f [name] [repo...]', argumentHint: '[name] [repo...]', immediate: true as const },
       { name: 'code', description: 'Copy code block(s) from the last reply, unwrapped: /code [n]', argumentHint: '[n]' },
-      { name: 'slack', description: 'Copy the last reply formatted for Slack (*bold*, plain headings and links)' },
+      { name: 'slack', description: "Copy the last reply's quoted draft (or all of it) formatted for Slack" },
     ]
     for (const c of commands) await $.command.register(c)
 
@@ -320,7 +320,7 @@ export const register: Register = on => {
   on('command.run', { command: 'slack' }, async $ => {
     const text = await lastReply($)
     if (!text) return { text: 'no reply to copy' }
-    return { text: await copy($, toSlack(text), 'copied for Slack') }
+    return { text: await copy($, slackText(text), 'copied for Slack') }
   })
 
   // --- drawing -------------------------------------------------------------------

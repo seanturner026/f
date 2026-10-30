@@ -128,7 +128,7 @@ marks need `herdr integration install claude`. Herdr plays its Done sound when C
 | `!!f prs -c` | Copy PR links (`!!` = run without sending output to the model) |
 | `/prs` | Refresh PRs, open the open ones in the browser |
 | `/code [n]` | Copy code block(s) from the last reply exactly as written (no wrap/indent); several: pick one or all. `/copy` (ctrl+x) copies the whole reply |
-| `/slack` | Copy the last reply formatted for Slack: `*bold*`, headings as bold lines, `•` bullets, links as `text (url)`; code untouched |
+| `/slack` | Copy the last reply formatted for Slack, just its quoted (`>`) draft if it has one: `*bold*`, headings as bold lines, `•` bullets, links as `text (url)`; code untouched |
 | `/f <name> [repo…]` | Open a feature or start one without leaving chat (tab completes names and repos; asks for repos if new and none given) |
 | `/sync` | After a PR merges: merged branches are reset to main (the feature branch) or deleted (stack branches), commits added after a merge are kept, the rest of the stack is rebased onto main, force-pushed (with lease) and its PRs moved to base `main`; one line per branch. Also runs (without pushing; stacks wait) when you open the feature and on `r` in the prs tab |
 | `/plan` | Show/hide the feature's beads plan above the input: in progress, ready, blocked (← waits on), done count. Full list: `f plan show` |
