@@ -22,6 +22,23 @@ function inlineToSlack(line: string): string {
 	);
 }
 
+/** slackText is what /slack copies: the reply's longest blockquote (a drafted
+ * message, without its "> " markers) if it has one, else the whole reply. */
+export function slackText(markdown: string): string {
+	let best: string[] = [];
+	let cur: string[] = [];
+	for (const line of [...markdown.split("\n"), ""]) {
+		const q = line.match(/^ {0,3}> ?(.*)$/);
+		if (q) {
+			cur.push(q[1]);
+			continue;
+		}
+		if (cur.length > best.length) best = cur;
+		cur = [];
+	}
+	return toSlack(best.length ? best.join("\n") : markdown);
+}
+
 /** toSlack converts markdown to what Slack's message box renders. Fenced
  * blocks and `inline code` are left as they are (Slack renders both). */
 export function toSlack(markdown: string): string {
