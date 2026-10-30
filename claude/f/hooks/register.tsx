@@ -156,7 +156,7 @@ export const register: Register = on => {
 
   on('session.start', async ($, e, next) => {
     const commands = [
-      { name: 'prs', description: "Refresh this feature's PRs and open the open ones in the browser", immediate: true as const },
+      { name: 'prs', description: "Open this feature's open PRs in the browser (saved list; refreshed after)", immediate: true as const },
       { name: 'prc', description: "Copy this feature's PRs as url: title lines (stacks numbered)", immediate: true as const },
       { name: 'sync', description: 'After a PR merges: reset its repo to main (or rebase newer commits onto it)' },
       { name: 'ci', description: "Send this feature's failing CI checks (with logs): find the cause, propose a fix, don't push" },
@@ -252,7 +252,9 @@ export const register: Register = on => {
 
   on('command.run', { command: 'prs' }, async $ => {
     if (!(await featureInfo($))) return { text: 'not in an f feature' }
-    const res = await f($, ['prs', '-r'])
+    // Saved PRs open at once (a live lookup is several slow gh calls); refresh after.
+    const res = await f($, ['prs'])
+    background($, () => refreshPRs($))
     return { text: res.code === 0 ? 'opened PRs' : res.stderr.trim() || 'f prs failed' }
   })
 

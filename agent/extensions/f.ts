@@ -178,10 +178,10 @@ export default function (pi: ExtensionAPI) {
 	});
 
 	pi.registerCommand("prs", {
-		description: "Refresh this feature's PRs and open the open ones in the browser",
+		description: "Open this feature's open PRs in the browser (as last saved)",
 		handler: async (_args, ctx) => {
 			if (!featureInfo(ctx.cwd)) return ctx.ui.notify("not in an f feature", "warning");
-			const res = await f(ctx, "prs", "-r");
+			const res = await f(ctx, "prs"); // saved PRs: a live lookup is several slow gh calls
 			if (res.code !== 0) ctx.ui.notify(res.stderr.trim() || "f prs failed", "error");
 			await renderPRs(ctx, false);
 		},
