@@ -150,11 +150,12 @@ marks need `herdr integration install claude`. Herdr plays its Done sound when C
 | `gf` | Open the file in a normal tab |
 | `g?` | All CodeDiff keys |
 | `<leader>pr` | Whole feature ↔ since the agent's last run |
+| `<leader>pp` | Pick what the review tab shows: the whole feature or one open PR of the repo's stack (Snacks picker with a diff-stat preview). The checked-out PR stays live; lower ones show their committed branch. Nothing is checked out, so the agent isn't disturbed |
 | `<leader>pc` | Comment on line/selection (normal or visual) |
 | `<leader>pl` | List pending comments (quickfix) |
 | `<leader>ps` | Send comments to the agent |
 | `:PiClear` | Discard pending comments |
-| `:PiReview [repo]` | Reopen a repo's CodeDiff (no repo: all, as nvim tabs) |
+| `:PiReview [repo]` | Reopen a repo's CodeDiff (no repo: all, as nvim tabs); `:PiReview pr` is `<leader>pp` |
 
 Comment on the **right** side of a diff (the real file). Comments are saved in
 `.context/comments.json`, so they survive closing nvim.

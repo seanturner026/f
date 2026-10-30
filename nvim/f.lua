@@ -7,6 +7,7 @@
 --   :PiClear            discard all
 --   :PiReview [repo]    live CodeDiff for one repo (or a tab per repo)
 --   :PiReviewToggle     in a review tab: whole feature ↔ since pi's last run <leader>pr
+--   :PiReview pr        in a review tab: pick the whole feature or one stacked PR <leader>pp
 --
 -- Works inside an `f` feature: <base>/.features/<feature>/<repo>/...
 -- pi is found via `herdr agent list`: the pi agent whose cwd is the feature root.
@@ -384,6 +385,8 @@ local function watch_bases()
   end))
 end
 
+local review_pick -- below; :PiReview pr opens it
+
 -- :PiReview [repo]: with a repo (as in f's Herdr repo tabs), just that repo
 -- (waiting for changes if there are none yet); without, every repo in the
 -- feature, one nvim tab each.
@@ -394,6 +397,9 @@ local function review(opts)
   end
   watch_bases()
   local only = opts and opts.args or ""
+  if only == "pr" and not vim.tbl_contains(repos, "pr") then
+    return review_pick()
+  end
   if only ~= "" then
     if not vim.tbl_contains(repos, only) then
       return vim.notify("PiReview: no repo " .. only .. " in this feature", vim.log.levels.WARN)
@@ -440,6 +446,105 @@ local function review_toggle()
   end)
 end
 
+-- Open PRs of repo in the feature, from state.json (f keeps it fresh), bottom
+-- of the stack first.
+local function open_prs(root, repo)
+  local fd = io.open(root .. "/.context/state.json")
+  if not fd then
+    return {}
+  end
+  local ok, state = pcall(vim.json.decode, fd:read("*a"))
+  fd:close()
+  local prs = {}
+  for _, p in ipairs(ok and type(state.prs) == "table" and state.prs or {}) do
+    if p.repo == repo and (p.status == "open" or p.status == "draft") and p.head and p.base then
+      table.insert(prs, p)
+    end
+  end
+  table.sort(prs, function(a, b)
+    return (a.stack_pos or 0) == (b.stack_pos or 0) and a.number < b.number or (a.stack_pos or 0) < (b.stack_pos or 0)
+  end)
+  return prs
+end
+
+-- branch_ref: a local branch if there is one (stack branches), else origin's.
+local function branch_ref(dir, name)
+  if git(dir, "rev-parse", "-q", "--verify", "refs/heads/" .. name).code == 0 then
+    return name
+  end
+  return "origin/" .. name
+end
+
+-- pr_target: what CodeDiff compares for p. The checked-out PR diffs the work
+-- tree (live); others their committed head. Both from where the branch left its base.
+local function pr_target(dir, p, current)
+  local head = p.head == current and "HEAD" or branch_ref(dir, p.head)
+  local mb = git(dir, "merge-base", branch_ref(dir, p.base), head)
+  if mb.code ~= 0 then
+    return nil
+  end
+  local base = vim.trim(mb.stdout)
+  return p.head == current and base or base .. " " .. head, head
+end
+
+-- :PiReview pr (<leader>pp) in a review tab: pick what the tab shows, the
+-- whole feature or one PR of the repo's stack. Nothing is checked out.
+function review_pick()
+  local tab = vim.api.nvim_get_current_tabpage()
+  local ok_repo, repo = pcall(vim.api.nvim_tabpage_get_var, tab, "pi_repo")
+  if not ok_repo then
+    return vim.notify("PiReview: not a review tab", vim.log.levels.WARN)
+  end
+  local root = feature_of(nil)
+  local dir = root .. "/" .. repo
+  local _, shown = pcall(vim.api.nvim_tabpage_get_var, tab, "pi_rev")
+  local current = vim.trim(git(dir, "branch", "--show-current").stdout or "")
+  local prs = open_prs(root, repo)
+  local items = { { text = "whole feature (vs " .. FEATURE:gsub("%.%.%.$", "") .. ")", rev = FEATURE, preview = { text = "Everything this feature changed in " .. repo .. "." } } }
+  for _, p in ipairs(prs) do
+    local rev, head = pr_target(dir, p, current)
+    if rev then
+      local stat = vim.trim(git(dir, "diff", "--stat", p.head == current and rev or rev:gsub(" ", "..")).stdout or "")
+      table.insert(items, {
+        text = ("%s#%d %s%s"):format(p.stack_pos and p.stack_pos > 0 and ("%d/%d "):format(p.stack_pos, #prs) or "", p.number, p.title or "", p.head == current and "  (checked out)" or ""),
+        rev = rev,
+        preview = { text = table.concat({ "#" .. p.number .. " " .. (p.title or ""), p.url or "", p.base .. " → " .. (head == "HEAD" and p.head .. " (work tree, live)" or p.head), "", stat ~= "" and stat or "no changes" }, "\n") },
+      })
+    end
+  end
+  for _, it in ipairs(items) do
+    it.text = (it.rev == shown and "● " or "  ") .. it.text
+  end
+
+  local function go(item)
+    if not item or item.rev == shown then
+      return
+    end
+    open_codediff(root, { repo }, item.rev, function()
+      if vim.api.nvim_tabpage_is_valid(tab) then
+        vim.cmd("tabclose " .. vim.api.nvim_tabpage_get_number(tab))
+      end
+      vim.notify(repo .. ": " .. vim.trim(item.text:gsub("^●", "")))
+    end)
+  end
+
+  local ok_snacks, Snacks = pcall(require, "snacks")
+  if ok_snacks and Snacks.picker then
+    return Snacks.picker.pick({
+      title = "review " .. repo,
+      items = items,
+      format = "text",
+      preview = "preview",
+      layout = { preset = "default" },
+      confirm = function(picker, item)
+        picker:close()
+        go(item)
+      end,
+    })
+  end
+  vim.ui.select(items, { prompt = "review " .. repo, format_item = function(it) return it.text end }, go)
+end
+
 M._repos = feature_repos -- for tests
 
 function M.setup()
@@ -469,6 +574,7 @@ function M.setup()
   vim.keymap.set("n", "<leader>ps", "<cmd>PiSend<cr>", { desc = "[P]i [S]end comments" })
   vim.keymap.set("n", "<leader>pl", "<cmd>PiComments<cr>", { desc = "[P]i [L]ist comments" })
   vim.keymap.set("n", "<leader>pr", "<cmd>PiReviewToggle<cr>", { desc = "[P]i [R]eview: feature ↔ last run" })
+  vim.keymap.set("n", "<leader>pp", "<cmd>PiReview pr<cr>", { desc = "[P]i review: [P]ick a stacked PR" })
 end
 
 
