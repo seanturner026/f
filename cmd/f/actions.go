@@ -538,11 +538,11 @@ func openPRs(prs []model.PR) (int, error) {
 	return len(urls), nil
 }
 
-// copyPRs puts the active PRs (or all, if none are active) on the clipboard.
+// copyPRs puts the active PRs on the clipboard.
 func copyPRs(prs []model.PR) error {
 	text, n, err := copyPRsQuietly(prs)
 	if err != nil || n == 0 {
-		info("no PRs")
+		info("no open PRs")
 		return err
 	}
 	fmt.Print(text)
@@ -557,9 +557,6 @@ func copyPRsQuietly(prs []model.PR) (string, int, error) {
 		if p.Status.IsActive() {
 			active = append(active, p)
 		}
-	}
-	if len(active) == 0 {
-		active = prs
 	}
 	if len(active) == 0 {
 		return "", 0, nil

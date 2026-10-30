@@ -118,7 +118,7 @@ ctrl-n  new: type its name first
 ctrl-x  remove (f restore undoes)
 ctrl-u  flag/unflag as needing you
 ctrl-o  open its PRs in the browser
-ctrl-y  copy its PRs
+ctrl-y  copy its open PRs
 ctrl-s  sync in the background
 ctrl-t  trash: restore a feature
 esc     close
@@ -213,12 +213,12 @@ func pickerAction(ctx context.Context, d deps, key, name string) string {
 		}
 		return fmt.Sprintf("opened %d PR(s) of %s", n, name)
 	case "ctrl-y":
-		_, n, err := copyPRsQuietly(state.AllPRs())
+		_, n, err := copyPRsQuietly(state.PRs)
 		switch {
 		case err != nil:
 			return red(err.Error())
 		case n == 0:
-			return name + ": no PRs"
+			return name + ": no open PRs"
 		}
 		return fmt.Sprintf("copied %d PR(s) of %s", n, name)
 	case "ctrl-s":
