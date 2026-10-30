@@ -186,7 +186,8 @@ func reconcileRepo(ctx context.Context, r Runner, l Layout, name, repo string, p
 	tip, moved := baseSHA, false // moved: something below the current branch changed
 	for i, sb := range stack {
 		switch {
-		case sb.merged == nil && !moved:
+		// Without commits of its own (e.g. reset by an earlier sync) it just follows what's below.
+		case sb.merged == nil && !moved && len(sb.fresh) > 0:
 			tip = sb.old // untouched, and nothing below it changed
 			if err := git.Checkout(ctx, r, wt, tip, true); err != nil {
 				restore()

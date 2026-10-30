@@ -366,6 +366,32 @@ func TestReconcileStack(t *testing.T) {
 		}
 	})
 
+	t.Run("next merged after the bottom was reset", func(t *testing.T) {
+		f := newSyncFixture(t)
+		f.commit("b.txt", "bottom\n")
+		f.branch("feat-staging")
+		f.commit("c.txt", "staging\n")
+		f.branch("feat-production")
+		f.commit("d.txt", "production\n")
+		gh := &ghFake{stack: stack}
+		m1 := f.squash("feat")
+		prs := []model.PR{
+			stackPR(1, "feat", "main", model.PRStatusMerged, m1),
+			stackPR(2, "feat-staging", "feat", model.PRStatusOpen, ""),
+			stackPR(3, "feat-production", "feat-staging", model.PRStatusOpen, ""),
+		}
+		wantSummary(t, f.reconcileWith(gh, true, prs...), "app synced: feat=reset feat-staging=rebased feat-production=rebased")
+		// feat now sits at the old main, with nothing of its own.
+		prs[1].Status, prs[1].MergeOID = model.PRStatusMerged, f.squash("feat-staging")
+		f.reconcileWith(gh, true, prs...)
+		if got, want := git(t, f.wt, "merge-base", "feat-production", "origin/main"), git(t, f.wt, "rev-parse", "origin/main"); got != want {
+			t.Errorf("feat-production is based on %s, want the current main %s (with feat-staging's squash)", got, want)
+		}
+		if n := git(t, f.wt, "rev-list", "--count", "origin/main..feat-production"); n != "1" {
+			t.Errorf("feat-production is %s commits ahead of main, want 1 (its own)", n)
+		}
+	})
+
 	t.Run("background leaves stacks alone", func(t *testing.T) {
 		f := newSyncFixture(t)
 		f.commit("b.txt", "bottom\n")
