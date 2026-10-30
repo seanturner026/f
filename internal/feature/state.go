@@ -31,7 +31,7 @@ type State struct {
 	// MergedEarlier are merged PRs a refresh no longer finds (f sync dropped
 	// their branches). Display only: sync must not act on them again.
 	MergedEarlier []model.PR `json:"merged_earlier,omitempty"`
-	// Flagged is the picker's "needs me" mark (ctrl-u); opening the feature clears it.
+	// Flagged is the picker's "unread" mark (ctrl-u); opening the feature, or its agent doing anything, clears it.
 	Flagged bool       `json:"flagged,omitempty"`
 	Plan    model.Plan `json:"plan,omitzero"` // beads progress, synced after each pi run
 	// SyncNotes tell pi what a background f sync changed (e.g. a repo reset to
@@ -44,7 +44,7 @@ type State struct {
 func (s State) AllPRs() []model.PR {
 	all := slices.Clone(s.PRs)
 	for _, p := range s.MergedEarlier {
-		if !slices.ContainsFunc(s.PRs, p.Same) { // a lookup can find it again
+		if !slices.ContainsFunc(all, p.Same) { // a lookup can find it again
 			all = append(all, p)
 		}
 	}
@@ -187,7 +187,7 @@ func RefreshPRs(ctx context.Context, r Runner, l Layout, name string) (State, ma
 			}
 		}
 		for _, p := range s.PRs {
-			if p.Status == model.PRStatusMerged && !slices.ContainsFunc(live, p.Same) {
+			if p.Status == model.PRStatusMerged && !slices.ContainsFunc(live, p.Same) && !slices.ContainsFunc(s.MergedEarlier, p.Same) {
 				s.MergedEarlier = append(s.MergedEarlier, p)
 			}
 		}

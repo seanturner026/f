@@ -234,6 +234,14 @@ func TestRefreshPRsPartialFailureDoesNotDuplicate(t *testing.T) {
 	}
 }
 
+func TestAllPRsDedupesMergedEarlier(t *testing.T) {
+	p := model.PR{Repo: "f", Number: 3, URL: "u3", Status: model.PRStatusMerged}
+	s := feature.State{MergedEarlier: []model.PR{p, p, p}}
+	if got := s.AllPRs(); len(got) != 1 {
+		t.Errorf("AllPRs = %+v, want #3 once", got)
+	}
+}
+
 func TestSetFlagged(t *testing.T) {
 	l := newLayout(t, "feat", "argocd")
 	for i, want := range []bool{true, false} {

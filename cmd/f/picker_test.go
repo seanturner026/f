@@ -18,7 +18,7 @@ func TestPickerTable(t *testing.T) {
 	titles, lines := pickerTable(rows)
 
 	want := []string{
-		"  FEATURE      PI       CI        PRS       PLAN",
+		"  FEATURE      AGENT    CI        PRS       PLAN",
 		"install-ack\t  install-ack  idle     —         1 merged  —",
 		"webapp\t● webapp       working  ✗ argocd  1 open    —",
 	}
@@ -39,8 +39,29 @@ func TestAttention(t *testing.T) {
 	if got, want := attention(pickerRow{status: statusIdle}), statusRank[statusIdle]; got != want {
 		t.Errorf("idle: attention = %d, want %d", got, want)
 	}
-	if got, want := attention(pickerRow{status: statusClosed, flagged: true}), statusRank[statusNeedsYou]; got != want {
-		t.Errorf("closed but flagged: attention = %d, want %d (needs you)", got, want)
+	if got, want := attention(pickerRow{status: statusUnread}), statusRank[statusNeedsYou]; got != want {
+		t.Errorf("unread: attention = %d, want %d (needs you)", got, want)
+	}
+}
+
+func TestWithUnread(t *testing.T) {
+	tests := []struct {
+		status featureStatus
+		unread bool
+		want   featureStatus
+		read   bool
+	}{
+		{statusIdle, false, statusIdle, false},
+		{statusIdle, true, statusUnread, false},
+		{statusClosed, true, statusUnread, false},
+		{statusWorking, true, statusWorking, true},
+		{statusDone, true, statusDone, true},
+		{statusNeedsYou, true, statusNeedsYou, true},
+	}
+	for _, tt := range tests {
+		if got, read := withUnread(tt.status, tt.unread); got != tt.want || read != tt.read {
+			t.Errorf("withUnread(%s, %v) = %s, %v; want %s, %v", tt.status, tt.unread, got, read, tt.want, tt.read)
+		}
 	}
 }
 

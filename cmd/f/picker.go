@@ -13,22 +13,24 @@ import (
 	"github.com/seanturner026/f/internal/tracing"
 )
 
-// featureStatus is what the picker shows for a feature's pi.
+// featureStatus is what the picker shows for a feature's agent.
 type featureStatus string
 
 const (
-	statusNeedsYou featureStatus = "needs you" // pi asked a question / wants approval
-	statusDone     featureStatus = "done"      // pi finished a turn you haven't seen
+	statusNeedsYou featureStatus = "needs you" // the agent asked a question / wants approval
+	statusUnread   featureStatus = "unread"    // marked with ctrl-u
+	statusDone     featureStatus = "done"      // the agent finished a turn you haven't seen
 	statusWorking  featureStatus = "working"
 	statusIdle     featureStatus = "idle"
-	statusClosed   featureStatus = "closed" // no pi running
+	statusClosed   featureStatus = "closed" // no agent running
 )
 
 // statusRank orders the picker: what needs you first.
-var statusRank = map[featureStatus]int{statusNeedsYou: 0, statusDone: 1, statusWorking: 2, statusIdle: 3, statusClosed: 4}
+var statusRank = map[featureStatus]int{statusNeedsYou: 0, statusUnread: 0, statusDone: 1, statusWorking: 2, statusIdle: 3, statusClosed: 4}
 
 var statusStyle = map[featureStatus]func(string) string{
 	statusNeedsYou: func(s string) string { return color("33", s) }, // yellow
+	statusUnread:   green,
 	statusDone:     green,
 	statusWorking:  func(s string) string { return color("36", s) }, // cyan
 	statusIdle:     dim,
@@ -60,13 +62,12 @@ var ciStyle = map[model.CIState]func(string) string{
 type pickerRow struct {
 	name    string
 	current bool // the workspace you're in (under the popup)
-	flagged bool // marked "needs me" with ctrl-u
 	status  featureStatus
 	prs     []model.PR
 	plan    model.Plan
 }
 
-// pickerRows gathers each feature's pi status and whether it's the current
+// pickerRows gathers each feature's agent status and whether it's the current
 // workspace (from Herdr, if available) and saved PRs and plan, ordered by what
 // needs attention.
 func pickerRows(ctx context.Context, d deps) []pickerRow {
@@ -81,8 +82,12 @@ func pickerRows(ctx context.Context, d deps) []pickerRow {
 	for _, name := range feature.List(d.layout) {
 		s, running := agents[feature.Dir(d.layout, name)]
 		state, _ := feature.LoadState(d.layout, name)
+		status, read := withUnread(toFeatureStatus(s, running), state.Flagged)
+		if read {
+			_, _ = feature.SetFlagged(d.layout, name, false, false)
+		}
 		rows = append(rows, pickerRow{
-			name: name, current: name == current, flagged: state.Flagged, status: toFeatureStatus(s, running),
+			name: name, current: name == current, status: status,
 			prs: state.AllPRs(), plan: state.Plan,
 		})
 	}
@@ -96,11 +101,23 @@ func pickerRows(ctx context.Context, d deps) []pickerRow {
 	return rows
 }
 
-// attention ranks a row: lower needs you sooner. Failing CI and your own flag
-// count as much as pi asking you something.
+// withUnread shows a ctrl-u mark as "unread" while the agent is idle or
+// closed. Any live status wins and means you've been back: read clears it.
+func withUnread(s featureStatus, unread bool) (shown featureStatus, read bool) {
+	switch {
+	case !unread:
+		return s, false
+	case s == statusIdle || s == statusClosed:
+		return statusUnread, false
+	}
+	return s, true
+}
+
+// attention ranks a row: lower needs you sooner. Failing CI counts as much as
+// the agent asking you something.
 func attention(r pickerRow) int {
 	rank := statusRank[r.status]
-	if state, _ := model.CI(r.prs); state == model.CIFailing || r.flagged {
+	if state, _ := model.CI(r.prs); state == model.CIFailing {
 		rank = min(rank, statusRank[statusNeedsYou])
 	}
 	return rank
@@ -116,7 +133,7 @@ const pickerHelp = `keys
 ⏎       open
 ctrl-n  new: type its name first
 ctrl-x  remove (f restore undoes)
-ctrl-u  flag/unflag as needing you
+ctrl-u  mark unread / read
 ctrl-o  open its PRs in the browser
 ctrl-y  copy its open PRs
 ctrl-s  sync in the background
@@ -195,14 +212,14 @@ func pickerAction(ctx context.Context, d deps, key, name string) string {
 	case "ctrl-x":
 		return removeFeature(ctx, d, name)
 	case "ctrl-u":
-		flagged, err := feature.SetFlagged(d.layout, name, false, true)
+		unread, err := feature.SetFlagged(d.layout, name, false, true)
 		switch {
 		case err != nil:
 			return red(err.Error())
-		case flagged:
-			return "flagged " + name
+		case unread:
+			return "marked " + name + " unread"
 		}
-		return "unflagged " + name
+		return "marked " + name + " read"
 	case "ctrl-o":
 		n, err := openPRs(state.PRs)
 		switch {
@@ -258,18 +275,17 @@ type pickerColumn int
 
 const (
 	colFeature pickerColumn = iota
-	colPi
+	colAgent
 	colCI
 	colPRs
 	colPlan
 	numColumns
 )
 
-var columnTitle = [numColumns]string{colFeature: "FEATURE", colPi: "PI", colCI: "CI", colPRs: "PRS", colPlan: "PLAN"}
+var columnTitle = [numColumns]string{colFeature: "FEATURE", colAgent: "AGENT", colCI: "CI", colPRs: "PRS", colPlan: "PLAN"}
 
 const (
 	currentMark = "● " // marks the workspace you're in
-	flagMark    = "◆ " // marks a feature flagged "needs me"
 	noValue     = "—"
 )
 
@@ -285,7 +301,7 @@ func pickerTable(rows []pickerRow) (string, []string) {
 	for i, r := range rows {
 		cells[i] = [numColumns]string{
 			colFeature: r.name,
-			colPi:      string(r.status),
+			colAgent:   string(r.status),
 			colCI:      orNone(model.CISummary(r.prs)),
 			colPRs:     orNone(model.PRSummary(r.prs)),
 			colPlan:    orNone(model.PlanSummary(r.plan)),
@@ -312,16 +328,13 @@ func pickerTable(rows []pickerRow) (string, []string) {
 	lines := make([]string, len(rows))
 	for i, r := range rows {
 		mark := "  "
-		switch {
-		case r.current:
+		if r.current {
 			mark = green(currentMark)
-		case r.flagged:
-			mark = color("33", flagMark)
 		}
 		ci, _ := model.CI(r.prs)
 		style := [numColumns]func(string) string{
 			colFeature: bold,
-			colPi:      statusStyle[r.status],
+			colAgent:   statusStyle[r.status],
 			colCI:      ciStyle[ci],
 			colPRs:     func(s string) string { return s },
 			colPlan:    dim,
