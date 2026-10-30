@@ -164,7 +164,7 @@ Comment on the **right** side of a diff (the real file). Comments are saved in
 | Command | Does |
 |---|---|
 | `f <name>` | Start a feature, or reopen it (continues the agent's session; restarts any of its tabs that are back at a bare shell) |
-| `f resume` | After quitting WezTerm/Herdr: Herdr restores the layout as bare shells; this restarts the agent (`--continue`), nvim, review, and prs in every feature workspace. Shell tabs and anything still running are left alone |
+| `f resume` | After quitting WezTerm/Herdr: Herdr restores the layout as bare shells; this restarts the agent (`--continue`), nvim, review, and prs in every feature workspace. Shell tabs and anything still running are left alone. Needs `[session] resume_agents_on_restore = false` in Herdr's config: Herdr's own resume starts a bare `claude --resume` (no statusline, no f mod) first |
 | `f` | Picker |
 | `f add [repo…]` | Add repos to this feature (+ Herdr tabs, before shell). From your shell in Herdr it returns at once and sets them up in the background (the agent gets them with your next prompt); run by the agent it waits |
 | `f prs [-r] [-c] [-n] [-w]` | PRs: from saved state; `-r` refresh live, `-c` copy, `-n` don't open browser, `-w` live view (the prs tab) |
