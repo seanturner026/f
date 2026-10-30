@@ -38,7 +38,7 @@ worktree (`f -h` for commands).
   written only by `f`.
 - Inside Herdr each feature gets a workspace: `chat · nvim · <repo>… · prs · shell`,
   each repo tab a live CodeDiff (`<leader>pr` toggles whole feature ↔ the agent's last
-  run); `prs` is `f prs --watch` (PRs + checks, polls GitHub only while checks
+  run, `<leader>pp` picks one PR of the stack); `prs` is `f prs --watch` (PRs + checks, polls GitHub only while checks
   run or just after a push). Outside Herdr, the agent starts in the current terminal.
 - Done features are removed from the picker (`ctrl-x`; `f restore` for 14 days).
 - Every `f` run is traced to `~/.cache/f/traces.jsonl` (OTLP/JSON, 7 days): `f trace`
