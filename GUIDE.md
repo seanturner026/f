@@ -89,7 +89,7 @@ picker too.
 | `ctrl-x` | Remove the feature (to the trash for 14 days: `f restore <name>`) and close its workspace once the picker exits; instant, no questions, so remove several and then pick one |
 | `ctrl-n` | New feature: type its name in the search box first. Arrows (or `ctrl-j`/`ctrl-k`) still move the cursor |
 | `ctrl-u` | Flag/unflag the feature as needing you: `◆`, sorted with "needs you"; opening it clears the flag |
-| `ctrl-o` / `ctrl-y` | Open the feature's open PRs in the browser / copy its PRs (like `/prc`), without leaving the picker |
+| `ctrl-o` / `ctrl-y` | Open the feature's open PRs in the browser / copy them (like `/prc`), without leaving the picker |
 | `ctrl-s` | Sync the feature in the background (as `f sync` does after a merge) |
 | `ctrl-t` | Trash: pick a removed feature to restore (it reappears in the picker) |
 | `?` / `ctrl-/` | Show/hide these keys in a panel beside the list |
@@ -167,7 +167,7 @@ Comment on the **right** side of a diff (the real file). Comments are saved in
 | `f resume` | After quitting WezTerm/Herdr: Herdr restores the layout as bare shells; this restarts the agent (`--continue`), nvim, review, and prs in every feature workspace. Shell tabs and anything still running are left alone. Needs `[session] resume_agents_on_restore = false` in Herdr's config: Herdr's own resume starts a bare `claude --resume` (no statusline, no f mod) first |
 | `f` | Picker |
 | `f add [repo…]` | Add repos to this feature (+ Herdr tabs, before shell). From your shell in Herdr it returns at once and sets them up in the background (the agent gets them with your next prompt); run by the agent it waits |
-| `f prs [-r] [-c] [-n] [-w]` | PRs: from saved state; `-r` refresh live, `-c` copy, `-n` don't open browser, `-w` live view (the prs tab) |
+| `f prs [-r] [-c] [-n] [-w]` | PRs: from saved state; `-r` refresh live, `-c` copy open ones, `-n` don't open browser, `-w` live view (the prs tab) |
 | `f sync --all` | What launchd runs every 30 min (skipped after 30 min without keyboard/mouse input, e.g. asleep): PR/CI and plan refresh for every feature; post-merge resets wait for the one you're in or a busy agent; never pushes; the agent gets a note with its next prompt. Log: `~/Library/Logs/f-sync.log` |
 | `f sync` | Same as `/sync`. Also fast-forwards the source clone of each repo with a merged PR (only if it's on its default branch with no local changes), so clones stay current and the `f` repo redeploys itself. Leaves repos with uncommitted changes or conflicts alone (says so). Never pushes the default branch or branches outside the feature |
 | `f ci fix` | Send failing checks + failed-job logs to the feature's agent (clipboard if it isn't reachable) |
