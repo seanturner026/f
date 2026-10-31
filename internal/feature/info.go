@@ -9,7 +9,7 @@ import (
 	"slices"
 )
 
-// Info describes a feature for everything outside f (pi extension, nvim):
+// Info describes a feature for everything outside f (the f mod, nvim):
 // <feature>/.context/feature.json. f is its only writer; readers use it to
 // detect a feature and find its repos without re-deriving the layout.
 type Info struct {

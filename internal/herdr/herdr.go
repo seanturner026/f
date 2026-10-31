@@ -177,8 +177,8 @@ func splitLabel(label string) (key, name string) {
 	return "", label
 }
 
-// reviewCommand runs nvim on one repo's live CodeDiff (:PiReview in nvim/f.lua).
-func reviewCommand(repo string) string { return "nvim -c " + shell.Quote("PiReview "+repo) }
+// reviewCommand runs nvim on one repo's live CodeDiff (:FReview in nvim/f.lua).
+func reviewCommand(repo string) string { return "nvim -c " + shell.Quote("FReview "+repo) }
 
 // OpenWorkspace focuses the workspace labelled label, or creates it in dir with
 // tabs: chat (the agent) · nvim · one review tab per repo · prs · shell.
@@ -438,15 +438,15 @@ const (
 	AgentUnknown AgentStatus = "unknown"
 )
 
-// Agent is a running pi in a Herdr pane.
+// Agent is a running Claude Code in a Herdr pane.
 type Agent struct {
 	Pane   string
 	Status AgentStatus
 	Cwd    string
 }
 
-// PiAgents lists running chat agents (pi or Claude Code).
-func PiAgents(ctx context.Context, r Runner) ([]Agent, error) {
+// ChatAgents lists running Claude Code agents.
+func ChatAgents(ctx context.Context, r Runner) ([]Agent, error) {
 	var resp struct {
 		Result struct {
 			Agents []struct {
@@ -462,16 +462,16 @@ func PiAgents(ctx context.Context, r Runner) ([]Agent, error) {
 	}
 	var out []Agent
 	for _, a := range resp.Result.Agents {
-		if a.Agent == agent.Pi || a.Agent == agent.Claude {
+		if a.Agent == agent.Claude {
 			out = append(out, Agent{Pane: a.Pane, Status: a.Status, Cwd: a.Cwd})
 		}
 	}
 	return out, nil
 }
 
-// AgentStatuses returns the status of each running pi agent, keyed by its cwd.
+// AgentStatuses returns the status of each running chat agent, keyed by its cwd.
 func AgentStatuses(ctx context.Context, r Runner) (map[string]AgentStatus, error) {
-	agents, err := PiAgents(ctx, r)
+	agents, err := ChatAgents(ctx, r)
 	if err != nil {
 		return nil, err
 	}
@@ -482,13 +482,13 @@ func AgentStatuses(ctx context.Context, r Runner) (map[string]AgentStatus, error
 	return out, nil
 }
 
-// ErrNoPi means no pi is running in the given directory.
-var ErrNoPi = errors.New("no agent running there")
+// ErrNoAgent means no chat agent is running in the given directory.
+var ErrNoAgent = errors.New("no agent running there")
 
-// PromptPi submits text to the pi running in dir (found by cwd, since Herdr
-// agent names are dropped when pi restarts).
-func PromptPi(ctx context.Context, r Runner, dir, text string) error {
-	agents, err := PiAgents(ctx, r)
+// PromptAgent submits text to the agent running in dir (found by cwd, since
+// Herdr agent names are dropped when it restarts).
+func PromptAgent(ctx context.Context, r Runner, dir, text string) error {
+	agents, err := ChatAgents(ctx, r)
 	if err != nil {
 		return err
 	}
@@ -500,7 +500,7 @@ func PromptPi(ctx context.Context, r Runner, dir, text string) error {
 			return nil
 		}
 	}
-	return fmt.Errorf("%s: %w", dir, ErrNoPi)
+	return fmt.Errorf("%s: %w", dir, ErrNoAgent)
 }
 
 // legacyNames finds tabs by name in workspaces made before tab keys.

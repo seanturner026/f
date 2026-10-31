@@ -1,7 +1,6 @@
 # f
 
-My config for Claude Code and [pi](https://pi.dev), and the feature-workspace setup
-around them (Herdr + nvim + beads). Claude Code is the default agent; `F_AGENT=pi` picks pi.
+My Claude Code config and the feature-workspace setup around it (Herdr + nvim + beads).
 **Day-to-day use: [GUIDE.md](GUIDE.md).**
 
 ![Who owns what: Herdr, f, beads](docs/separation-of-concerns.svg)
@@ -18,7 +17,6 @@ just                    # every recipe (checks, sync-now, trace, ...)
 ## Layout
 
 - `claude/`: Claude Code (linked to `~/.claude/f`): the `f` mod (`claude/f/`), statusline, settings
-- `agent/`: pi config (settings, prompts, extensions, skills, themes)
 - `cmd/f/`: `f`, the multi-repo feature workspace CLI (`f --help`)
 - `mockups/`: HTML layout mockups
 - `docs/separation-of-concerns.excalidraw` (+ `.svg` export): who owns what (Herdr, f, beads, the agent, nvim)
@@ -43,13 +41,13 @@ worktree (`f -h` for commands).
 - Done features are removed from the picker (`ctrl-x`; `f restore` for 14 days).
 - Every `f` run is traced to `~/.cache/f/traces.jsonl` (OTLP/JSON, 7 days): `f trace`
   opens it in Jaeger, `f trace stats` summarizes it.
-- Plumbing used by the agent (`claude/f/`, pi's `agent/extensions/f.ts`) and nvim (`nvim/f.lua`):
+- Plumbing used by the agent (`claude/f/`) and nvim (`nvim/f.lua`):
   `f goal`, `f comment`, `f checkpoint`, `f prs --json/--add`.
 
 ## Guard
 
 The agent never uses admin AWS profiles or production kube contexts
-(`claude/f/`, pi's `agent/extensions/guard.ts`; logic in `internal/guard`):
+(`claude/f/`; logic in `internal/guard`):
 
 - At start, `f creds` writes filtered copies of `~/.aws/config`,
   `~/.aws/credentials`, and the kubeconfig to `~/.cache/f/guard/` and points

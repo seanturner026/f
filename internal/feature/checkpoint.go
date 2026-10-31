@@ -13,15 +13,15 @@ import (
 )
 
 const (
-	// LastRunRef marks the code as it was before pi's most recent run that
+	// LastRunRef marks the code as it was before the agent's most recent run that
 	// changed code. Per-worktree, so features never collide.
 	LastRunRef = "refs/worktree/pi-last"
 	// pendingRef is the snapshot taken when a run starts.
 	pendingRef = "refs/worktree/pi-pending"
 )
 
-// CheckpointBegin snapshots every repo in the feature as a run starts. pi
-// waits for it before each prompt, so repos are snapshotted concurrently.
+// CheckpointBegin snapshots every repo in the feature as a run starts. The
+// agent waits for it before each prompt, so repos are snapshotted concurrently.
 func CheckpointBegin(ctx context.Context, r Runner, l Layout, name string) error {
 	repos, err := Repos(l, name)
 	if err != nil {
@@ -49,7 +49,7 @@ func CheckpointBegin(ctx context.Context, r Runner, l Layout, name string) error
 	return errors.Join(errs...)
 }
 
-// CheckpointEnd runs when pi finishes. For each repo whose code changed since
+// CheckpointEnd runs when the agent finishes. For each repo whose code changed since
 // CheckpointBegin, the run's starting snapshot becomes LastRunRef; repos the
 // run didn't touch keep their previous marker. Repos are checked concurrently.
 // Returns the changed repos.

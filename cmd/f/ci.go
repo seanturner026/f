@@ -24,7 +24,7 @@ type ciFailure struct {
 }
 
 // ciFix refreshes the feature's PRs, collects failing checks (with failed job
-// logs for GitHub Actions) and asks pi to find the cause and propose a fix
+// logs for GitHub Actions) and asks the agent to find the cause and propose a fix
 // without pushing. With print, it writes the prompt to stdout instead (/ci).
 func ciFix(ctx context.Context, d deps, explicit string, print bool) error {
 	name, err := resolve(d, explicit)
@@ -64,14 +64,14 @@ func ciFixPrompt(ctx context.Context, d deps, name string) (msg string, n int, e
 	return ciPrompt(failures), len(failures), nil
 }
 
-// sendCIFix sends the prompt to the feature's pi (via Herdr); if that fails
+// sendCIFix sends the prompt to the feature's agent (via Herdr); if that fails
 // the prompt is copied to the clipboard.
 func sendCIFix(ctx context.Context, d deps, name string) (int, error) {
 	msg, n, err := ciFixPrompt(ctx, d, name)
 	if err != nil || n == 0 {
 		return 0, err
 	}
-	if err := promptPiOrCopy(ctx, d, name, msg); err != nil {
+	if err := promptAgentOrCopy(ctx, d, name, msg); err != nil {
 		return n, fmt.Errorf("%w (prompt copied to clipboard)", err)
 	}
 	return n, nil
@@ -115,7 +115,7 @@ func fetchLogs(ctx context.Context, d deps, name string, failures []*ciFailure) 
 	wg.Wait()
 }
 
-// ciPrompt asks pi to diagnose and propose, grouped by PR.
+// ciPrompt asks the agent to diagnose and propose, grouped by PR.
 func ciPrompt(failures []*ciFailure) string {
 	var b strings.Builder
 	b.WriteString("CI is failing on this feature's PRs. For each failure: find the cause (read the code and the log; " +

@@ -148,7 +148,7 @@ func start(ctx context.Context, d deps, name string, repos []string) error {
 
 	tracing.Rename(ctx, "f start")
 	if len(repos) == 0 && !interactive() {
-		// fzf would wait forever for a terminal that isn't there (pi's !f).
+		// fzf would wait forever for a terminal that isn't there (the agent's /f).
 		return fmt.Errorf("new feature %q needs repos: f %s -r <repo> [-r <repo>...], or /f %s in chat (it asks)", name, name, name)
 	}
 	if len(repos) == 0 {
@@ -186,7 +186,7 @@ func start(ctx context.Context, d deps, name string, repos []string) error {
 	return launch(ctx, d, name, false)
 }
 
-// setupInBackground records repos as pending (so AGENTS.md, nvim and pi know
+// setupInBackground records repos as pending (so AGENTS.md, nvim and the agent know
 // them already) and starts `f setup` to add their worktrees.
 func setupInBackground(ctx context.Context, d deps, name string, repos []string) error {
 	if err := feature.BeginSetup(d.layout, name, repos); err != nil {
@@ -200,7 +200,7 @@ func setupInBackground(ctx context.Context, d deps, name string, repos []string)
 }
 
 // setup is `f setup`: add repos' worktrees (concurrently), then the beads
-// issue, and tell pi what's ready (or failed) with its next prompt. pi waits
+// issue, and tell the agent what's ready (or failed) with its next prompt. It waits
 // for it before a run (state.json "setup").
 func setup(ctx context.Context, d deps, name string, repos []string) error {
 	errs := make([]error, len(repos))
@@ -218,7 +218,7 @@ func setup(ctx context.Context, d deps, name string, repos []string) error {
 				_, errs[i] = feature.Sync(d.layout, name, "") // its instructions file, for AGENTS.md
 				agentsMD.Unlock()
 			}
-			_ = feature.FinishSetup(d.layout, name, repo) // progress for pi's "setting up (n/m)"
+			_ = feature.FinishSetup(d.layout, name, repo) // progress for the agent's "setting up (n/m)"
 		}()
 	}
 	wg.Wait()
@@ -237,7 +237,7 @@ func setup(ctx context.Context, d deps, name string, repos []string) error {
 	if len(ready) > 0 {
 		notes = append([]string{"worktrees ready (AGENTS.md lists them): " + strings.Join(ready, ", ")}, notes...)
 	}
-	// Notes first, then end setup: pi stops waiting when setup ends and takes
+	// Notes first, then end setup: the agent stops waiting when setup ends and takes
 	// the notes right after.
 	err := feature.AddSyncNotes(d.layout, name, notes...)
 	if endErr := feature.EndSetup(d.layout, name); err == nil {
@@ -246,7 +246,7 @@ func setup(ctx context.Context, d deps, name string, repos []string) error {
 	if _, syncErr := feature.Sync(d.layout, name, ""); err == nil { // drop failed repos from feature.json
 		err = syncErr
 	}
-	ensureIssue(ctx, d, name) // bd create: ~0.8s, after pi is unblocked
+	ensureIssue(ctx, d, name) // bd create: ~0.8s, after the agent is unblocked
 	return err
 }
 
@@ -351,7 +351,7 @@ func launch(ctx context.Context, d deps, name string, reopen bool) error {
 	return syscall.Exec(bin, append([]string{chat.Bin}, chat.Args...), os.Environ())
 }
 
-// resume restarts pi, nvim, review, and prs in every open feature workspace
+// resume restarts the agent, nvim, review, and prs in every open feature workspace
 // where they stopped (after a Herdr restart its layout is back, bare shells).
 func resume(ctx context.Context, d deps) error {
 	if d.noHerdr || !(herdr.Inside() || herdr.Available(ctx, d.run)) {
@@ -369,7 +369,7 @@ func resume(ctx context.Context, d deps) error {
 		n   int
 		err error
 	}
-	// pi takes a few seconds to start: do the workspaces concurrently.
+	// The agent takes a few seconds to start: do the workspaces concurrently.
 	results := map[string]*result{}
 	var wg sync.WaitGroup
 	for name, ws := range open {
@@ -430,7 +430,7 @@ func add(ctx context.Context, d deps, explicit string, repos []string) error {
 	if err := feature.CheckRepos(d.layout, repos); err != nil {
 		return err
 	}
-	// You typing in Herdr: return now and set up in the background. pi running
+	// You typing in Herdr: return now and set up in the background. The agent running
 	// f add (not a terminal) uses the repo right after, so it waits.
 	lazy := interactive() && !d.noHerdr && herdr.Inside()
 	if lazy {

@@ -9,7 +9,7 @@ import (
 	"strings"
 )
 
-// useColor: only when a person is looking. nvim, pi and launchd read f's
+// useColor: only when a person is looking. nvim, the agent and launchd read f's
 // output as text, where escape codes show up as junk ("^[[31merror:").
 var useColor = isTerminal(os.Stdout) && isTerminal(os.Stderr)
 

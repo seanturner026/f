@@ -1,5 +1,4 @@
-// Package agent is the coding agent f starts in a feature's chat tab: Claude
-// Code, or pi with F_AGENT=pi.
+// Package agent is the coding agent f starts in a feature's chat tab: Claude Code.
 package agent
 
 import (
@@ -8,24 +7,13 @@ import (
 	"regexp"
 )
 
-// Kinds, also the executables and Herdr's --kind values.
-const (
-	Pi     = "pi"
-	Claude = "claude"
-)
+// Claude is the executable and Herdr's --kind value.
+const Claude = "claude"
 
 // Command starts the agent: Bin with Args.
 type Command struct {
 	Bin  string
 	Args []string
-}
-
-// Kind is the agent f starts: Claude Code, or pi with F_AGENT=pi.
-func Kind() string {
-	if os.Getenv("F_AGENT") == Pi {
-		return Pi
-	}
-	return Claude
 }
 
 // ClaudeDir holds the Claude Code setup (settings.json, statusline, the f mod):
@@ -41,15 +29,11 @@ func ClaudeDir() string {
 // For is the command that opens feature name's chat in dir: a new session,
 // or the last one again with reopen (when there is one).
 func For(name, dir string, reopen bool) Command {
-	c := Command{Bin: Kind(), Args: []string{"--name", name}}
-	if c.Bin == Claude {
-		cd := ClaudeDir()
-		c.Args = append(c.Args, "--permission-mode", "auto",
-			"--settings", filepath.Join(cd, "settings.json"), "--plugin-dir", filepath.Join(cd, "f"))
-		// pi starts fresh when there's nothing to continue; claude exits.
-		reopen = reopen && hasClaudeSession(dir)
-	}
-	if reopen {
+	cd := ClaudeDir()
+	c := Command{Bin: Claude, Args: []string{"--name", name, "--permission-mode", "auto",
+		"--settings", filepath.Join(cd, "settings.json"), "--plugin-dir", filepath.Join(cd, "f")}}
+	// --continue with no saved session makes claude exit.
+	if reopen && hasClaudeSession(dir) {
 		c.Args = append(c.Args, "--continue")
 	}
 	return c

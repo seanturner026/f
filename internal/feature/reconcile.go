@@ -247,7 +247,7 @@ func reconcileRepo(ctx context.Context, r Runner, l Layout, name, repo string, p
 	if err := git.Checkout(ctx, r, wt, orig, false); err != nil {
 		problems = append(problems, err.Error())
 	}
-	git.DeleteRef(ctx, r, wt, LastRunRef) // "since pi's last run" would compare against pre-merge code
+	git.DeleteRef(ctx, r, wt, LastRunRef) // "since the agent's last run" would compare against pre-merge code
 
 	if push {
 		problems = append(problems, publish(ctx, r, wt, name, repo, prs, stack, &res, kept)...)

@@ -24,10 +24,10 @@ import (
 //   - just pushed or a new PR: every pollEvery for settleFor (checks take a
 //     moment to show up on a new commit)
 //   - otherwise: no GitHub calls; every tick it only looks for a push (the
-//     remote-tracking refs in each worktree) or a state.json change (pi
+//     remote-tracking refs in each worktree) or a state.json change (the agent
 //     recorded or refreshed PRs)
 //
-// r refreshes now (re-runs, merges) and syncs repos whose PR merged; f sends failing checks to pi (f ci fix);
+// r refreshes now (re-runs, merges) and syncs repos whose PR merged; f sends failing checks to the agent (f ci fix);
 // q quits.
 const (
 	watchTick = 5 * time.Second
@@ -188,7 +188,7 @@ func watchPRs(ctx context.Context, d deps, name string) error {
 			return syscall.Exec(self, os.Args, os.Environ())
 		}
 
-		// Someone else (pi) updated the state: take it; a new PR settles like a push.
+		// Someone else (the agent) updated the state: take it; a new PR settles like a push.
 		if m := modTime(feature.StatePath(d.layout, name)); !m.Equal(stateMod) {
 			before := len(state.PRs)
 			if s, err := feature.LoadState(d.layout, name); err == nil {

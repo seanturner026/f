@@ -176,7 +176,7 @@ func stepOf(i issue) model.Step {
 }
 
 // LinkedPRs parses a step's external ref: the URLs of its PRs, space-separated
-// (pi links them: bd update <id> --external-ref "<url> <url>"). Anything that
+// (the agent links them: bd update <id> --external-ref "<url> <url>"). Anything that
 // isn't a GitHub PR URL is ignored.
 func LinkedPRs(ref string) []string {
 	var urls []string

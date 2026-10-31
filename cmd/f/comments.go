@@ -61,7 +61,7 @@ func commentClear(d deps, explicit string) error {
 	return feature.ClearComments(d.layout, name)
 }
 
-// commentSend sends pending comments to the feature's pi as one prompt and
+// commentSend sends pending comments to the feature's agent as one prompt and
 // clears them. If that fails, they're kept and the message is copied.
 func commentSend(ctx context.Context, d deps, explicit string) error {
 	name, err := resolve(d, explicit)
@@ -77,7 +77,7 @@ func commentSend(ctx context.Context, d deps, explicit string) error {
 		return nil
 	}
 	msg := model.CommentsMessage(cs)
-	if err := promptPiOrCopy(ctx, d, name, msg); err != nil {
+	if err := promptAgentOrCopy(ctx, d, name, msg); err != nil {
 		return fmt.Errorf("%w (comments kept; message copied to clipboard)", err)
 	}
 	if err := feature.ClearComments(d.layout, name); err != nil {
@@ -87,10 +87,10 @@ func commentSend(ctx context.Context, d deps, explicit string) error {
 	return nil
 }
 
-// promptPiOrCopy sends msg to the feature's pi (via Herdr); if that fails,
+// promptAgentOrCopy sends msg to the feature's agent (via Herdr); if that fails,
 // msg goes on the clipboard so it isn't lost.
-func promptPiOrCopy(ctx context.Context, d deps, name, msg string) error {
-	err := herdr.PromptPi(ctx, d.run, feature.Dir(d.layout, name), msg)
+func promptAgentOrCopy(ctx context.Context, d deps, name, msg string) error {
+	err := herdr.PromptAgent(ctx, d.run, feature.Dir(d.layout, name), msg)
 	if err != nil {
 		_ = copyToClipboard(msg)
 	}

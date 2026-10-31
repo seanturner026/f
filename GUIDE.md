@@ -1,6 +1,6 @@
 # Operator guide
 
-How to run the Claude Code (or pi) + Herdr + nvim + beads setup day to day. The README covers
+How to run the Claude Code + Herdr + nvim + beads setup day to day. The README covers
 what each part is; this covers how to use it.
 
 ## The pieces
@@ -9,8 +9,7 @@ what each part is; this covers how to use it.
 |---|---|
 | `f` | Creates and owns features: worktrees, branches, `AGENTS.md`, `.context/`, Herdr layout, cleanup, beads issue |
 | Herdr | Terminals: one workspace per feature, agent status |
-| Claude Code | The agent (default). The `f` mod in `claude/f/`: guard, goal, checkpoints, PRs, plan, `/code` |
-| pi | The agent with `F_AGENT=pi`. Extensions: `f.ts` (goal, checkpoints, PRs, plan), `guard.ts` (credentials), `repo-instructions/` (must read a repo's CLAUDE.md/AGENTS.md in full before touching it), `compact-read.ts` (one-line reads), `copy-code.ts` (`/code`) |
+| Claude Code | The agent. The `f` mod in `claude/f/`: guard, goal, checkpoints, PRs, plan, `/code` |
 | nvim | Review: one live CodeDiff tab per repo, comments for the agent (`nvim/f.lua`) |
 | beads (`bd`) | The plan: one issue per feature, child issues for steps |
 
@@ -33,8 +32,8 @@ by `f`).
    `<leader>pr` toggles to *just the agent's last run*. Comment with `<leader>pc`,
    send them all with `<leader>ps`. Small fixes: edit the right-hand side
    directly and tell the agent ("I edited X").
-4. **PRs**: the agent opens them; they show in the statusline (pi: footer) with CI (`✓` `⋯` `✗`), and the
-   `prs` tab lists each PR's failing/running checks. `!!f prs -c` copies
+4. **PRs**: the agent opens them; they show in the statusline with CI (`✓` `⋯` `✗`), and the
+   `prs` tab lists each PR's failing/running checks. `/prc` copies
    `url: title` lines (stacks numbered 1/3, 2/3, …).
 5. **Switch**: `ctrl+space` → picker, ordered by what needs you.
 6. **Merged**: the repo resets to main by itself (on open, `r` in prs, `/sync`, or tell
@@ -102,41 +101,27 @@ PLAN (beads steps).
 Order: **needs you** (the agent asked something, or CI failing) → **done** (finished,
 unseen) → **working** → **idle** → **closed** (no agent running).
 
-### Claude Code (the default agent)
+### Claude Code
 
 `f` starts Claude Code with the `f` mod, statusline and settings from `claude/`
 (`F_CLAUDE_DIR` overrides `~/.claude/f`). It starts in auto mode, and the
 feature's `CLAUDE.md` imports its AGENTS.md and each repo's instructions.
-The statusline shows the feature's PRs with CI, like pi's footer.
+The statusline shows the feature's PRs with CI.
 
 | Command | Does |
 |---|---|
-| `/prs`, `/prc`, `/sync`, `/ci`, `/code [n]`, `/slack` | As in pi; none of them reach the model except `/ci`. `/prs`, `/prc` and `/f` run at once, even mid-turn; the rest wait for the turn to end |
-| `/f [name] [repo…]` | As in pi; no tab completion: a bare `/f` picks a feature, a new name picks repos |
-| `/plan`, `/steps` | As in pi, but in a sidebar that updates as the plan changes; opens at once with the last plan, then refreshes. `/plan` replaces Claude Code's (shift+tab still reaches plan mode) and waits for a running turn; `/steps` runs mid-turn |
-
-The guard, goal, checkpoints and PR recording work as in pi. Herdr's busy/idle
-marks need `herdr integration install claude`. Herdr plays its Done sound when Claude finishes. Mouse selection copies when
-**Copy on select** is on in `/config`; hold Shift for Herdr's own selection.
-
-### pi (`F_AGENT=pi`)
-
-| Key / command | Does |
-|---|---|
-| `/tree` then `ctrl+u` | List just your prompts; pick one to jump/branch |
-| `ctrl+alt+up/down` | Jump between prompts in the transcript |
-| `!!f prs -c` | Copy PR links (`!!` = run without sending output to the model) |
-| `/prs` | Open the open PRs in the browser, at once from the saved list (Claude Code then refreshes it from GitHub) |
-| `/code [n]` | Copy code block(s) from the last reply exactly as written (no wrap/indent); several: pick one or all. `/copy` (ctrl+x) copies the whole reply |
-| `/slack` | Copy the last reply formatted for Slack, just its quoted (`>`) draft if it has one: `*bold*`, headings as bold lines, `•` bullets, links as `text (url)`; code untouched |
-| `/f <name> [repo…]` | Open a feature or start one without leaving chat (tab completes names and repos; asks for repos if new and none given) |
+| `/prs` | Open the open PRs in the browser, at once from the saved list, then refresh it from GitHub |
+| `/prc` | Copy the feature's open PRs as `url: title` lines (stacks numbered 1/3, 2/3, …) |
+| `/f [name] [repo…]` | Open a feature or start one without leaving chat: a bare `/f` picks a feature, a new name picks repos (no tab completion) |
 | `/sync` | After a PR merges: merged branches are reset to main (the feature branch) or deleted (stack branches), commits added after a merge are kept, the rest of the stack is rebased onto main, force-pushed (with lease) and its PRs moved to base `main`; one line per branch. Also runs (without pushing; stacks wait) when you open the feature and on `r` in the prs tab |
-| `/plan` | Show/hide the feature's beads plan above the input: in progress, ready, blocked (← waits on), done count. Full list: `f plan show` |
-| `/prc` | Copy the feature's open PRs as `url: title` lines (same as `!!f prs -c`) |
-| `/ci` | Send failing checks + failed-job logs to pi: it finds the cause and proposes a fix, no push until you OK |
-| `/remember [what]` | Save a preference as a rule in `~/.pi/agent/AGENTS.md` |
-| `/reload` | Pick up changed extensions, rules, keybindings |
-| `ctrl+d` (empty editor) / `/quit` | Quit pi (session is saved; `f <name>` continues it) |
+| `/plan`, `/steps` | The feature's beads plan as a dependency tree, in a sidebar that updates as the plan changes; opens at once with the last plan, then refreshes. `/plan` replaces Claude Code's (shift+tab still reaches plan mode) and waits for a running turn; `/steps` runs mid-turn |
+| `/ci` | Send failing checks + failed-job logs to the agent: it finds the cause and proposes a fix, no push until you OK |
+| `/code [n]` | Copy code block(s) from the last reply exactly as written (no wrap/indent); several: pick one or all |
+| `/slack` | Copy the last reply formatted for Slack, just its quoted (`>`) draft if it has one: `*bold*`, headings as bold lines, `•` bullets, links as `text (url)`; code untouched |
+
+Only `/ci` reaches the model. `/prs`, `/prc` and `/f` run at once, even mid-turn; the rest wait for the turn to end.
+Herdr's busy/idle marks need `herdr integration install claude`. Herdr plays its Done sound when Claude finishes. Mouse selection copies when
+**Copy on select** is on in `/config`; hold Shift for Herdr's own selection.
 
 ### nvim (review tabs and anywhere in a feature)
 
@@ -154,8 +139,8 @@ marks need `herdr integration install claude`. Herdr plays its Done sound when C
 | `<leader>pc` | Comment on line/selection (normal or visual) |
 | `<leader>pl` | List pending comments (quickfix) |
 | `<leader>ps` | Send comments to the agent |
-| `:PiClear` | Discard pending comments |
-| `:PiReview [repo]` | Reopen a repo's CodeDiff (no repo: all, as nvim tabs); `:PiReview pr` is `<leader>pp` |
+| `:FClear` | Discard pending comments |
+| `:FReview [repo]` | Reopen a repo's CodeDiff (no repo: all, as nvim tabs); `:FReview pr` is `<leader>pp` |
 
 Comment on the **right** side of a diff (the real file). Comments are saved in
 `.context/comments.json`, so they survive closing nvim.
@@ -200,7 +185,7 @@ the real files, are blocked with a reason.
 
 - Allowed now: profiles without `admin`/`prod` (plus any `allow_profiles` in `guard.json`),
   contexts without `prod` (dev, staging, minikube).
-- Change rules: edit `~/.config/f/guard.json`, then restart the chat tab (pi: `/reload`).
+- Change rules: edit `~/.config/f/guard.json`, then restart the chat tab.
 - SSO expired? Run `aws sso login` yourself (the agent's filtered config shares the
   login).
 
@@ -227,11 +212,10 @@ the real files, are blocked with a reason.
 |---|---|
 | Tabs are bare shells after a restart (no agent, no CodeDiff) | `f resume` (all features) or `f <name>` (one) |
 | Workspace has an old tab layout | `ctrl+b shift+d` to close it, then `f <name>` |
-| Bash says "guard not set up" | `f creds` in a shell shows the error; fix, then restart the chat tab (pi: `/reload`) |
+| Bash says "guard not set up" | `f creds` in a shell shows the error; fix, then restart the chat tab |
 | A command is blocked by guard | Read the reason; it's intended. Run it yourself if you really mean it |
-| (pi) pi says "Read `<repo>/CLAUDE.md` in full before working in <repo>/" | Intended: it reads the file (paging to the end), then retries. Again after a compaction |
 | `<leader>ps` failed | No agent in that feature; comments are kept and the message is on your clipboard |
 | `<leader>pr` says no last run | The agent hasn't changed code in that repo since the guard/checkpoints started |
 | Repo tab says "no changes vs origin/main yet" | Nothing to diff yet; it checks every 3s and switches to CodeDiff once there is |
 | Picker status looks stale | Agent status is live from Herdr; PRs and CI refresh every 30 min (launchd), after each agent turn, and in the prs tab; `f prs -r` forces |
-| Mod/extension changes not active | Claude Code reloads the `f` mod on save (`/reload-plugins` forces); pi: `/reload` |
+| Mod changes not active | Claude Code reloads the `f` mod on save (`/reload-plugins` forces) |

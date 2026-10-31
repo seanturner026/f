@@ -20,8 +20,8 @@ import (
 
 // syncAll is the periodic sync (launchd, every 30 min): for every feature,
 // syncAllParallel at a time, refresh PRs/CI and beads progress, and reconcile
-// repos whose PR merged (never pushing) unless you're in it or its pi is
-// running. pi gets a note about anything it changed. Logs one line per change
+// repos whose PR merged (never pushing) unless you're in it or its agent is
+// running. The agent gets a note about anything it changed. Logs one line per change
 // to stdout (launchd log).
 func syncAll(ctx context.Context, d deps) error {
 	if idleTime(ctx, d.run) > syncAllInterval {
@@ -158,7 +158,7 @@ func newlyMerged(before, after []model.PR) []model.PR {
 }
 
 // takeSyncNotes prints and clears the feature's queued notes (for the f
-// extension, which shows them to pi with the next prompt).
+// mod, which shows them to the agent with the next prompt).
 func takeSyncNotes(d deps, explicit string) error {
 	name, err := resolve(d, explicit)
 	if err != nil {

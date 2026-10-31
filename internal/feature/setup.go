@@ -8,7 +8,7 @@ import (
 
 // Setup tracks repos being added in the background (f setup), so the
 // workspace can open before their worktrees exist. It lives in state.json
-// while anything is pending; pi waits on it before a run (agent/extensions/f.ts).
+// while anything is pending; the f mod waits on it before a run.
 type Setup struct {
 	Repos   []string `json:"repos"`   // every repo being added
 	Pending []string `json:"pending"` // not ready yet
@@ -36,7 +36,7 @@ func BeginSetup(l Layout, name string, repos []string) error {
 }
 
 // FinishSetup marks repo as no longer pending (ready or failed). Setup stays
-// until EndSetup, so pi keeps waiting until the notes about it are queued.
+// until EndSetup, so the agent keeps waiting until the notes about it are queued.
 func FinishSetup(l Layout, name, repo string) error {
 	_, err := UpdateState(l, name, func(s *State) {
 		if s.Setup != nil {

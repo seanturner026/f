@@ -34,7 +34,7 @@ func TestSetup(t *testing.T) {
 	}
 	_ = feature.FinishSetup(l, "feat", "infra")
 	if setup() == nil {
-		t.Fatal("cleared before EndSetup: pi would stop waiting before the notes")
+		t.Fatal("cleared before EndSetup: the agent would stop waiting before the notes")
 	}
 	_ = feature.EndSetup(l, "feat")
 	if s := setup(); s != nil {
