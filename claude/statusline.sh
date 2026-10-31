@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# pi-style footer: "~/dir (branch)" (outside features), then cache · cost · context · model • effort, then the f feature's PRs.
+# Footer: "~/dir (branch)" (outside features), then cache · cost · context · model • effort, then the f feature's PRs.
 in=$(cat)
 # \x1f, not tab: read merges empty tab-separated fields and shifts the rest.
 IFS=$'\x1f' read -r dir root r w hit cost pct size model effort < <(jq -r '[
@@ -26,7 +26,7 @@ dim=$'\033[2m' off=$'\033[0m'
 # Inline, not right-aligned: the status row is narrower than $COLUMNS, so padding pushed the model off-screen.
 printf '%s%s   %s%s%s\n' "$dim" "$left" "$model" "${effort:+ • $effort}" "$off"
 
-# PRs from f's local state (the f mod refreshes it from GitHub after each turn); as in agent/extensions/f.ts.
+# PRs from f's local state (the f mod refreshes it from GitHub after each turn).
 [ -f "$root/.context/feature.json" ] || exit 0
 prs=$(cd "$root" && f prs --json 2>/dev/null | jq -r '
   def c(code; s): "\u001b[" + code + "m" + s + "\u001b[0m";

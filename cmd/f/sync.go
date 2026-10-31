@@ -15,7 +15,7 @@ import (
 
 // syncFeature refreshes PRs and reconciles repos whose PR merged (reset or
 // rebase onto the default branch; see feature.Reconcile). With background, it
-// does nothing while the feature's pi is running (it would pull files from
+// does nothing while the feature's agent is running (it would pull files from
 // under it) and prints nothing.
 func syncFeature(ctx context.Context, d deps, explicit string, background bool) error {
 	name, err := resolve(d, explicit)
@@ -56,7 +56,7 @@ func reconcileLines(ctx context.Context, d deps, name string, stackSync bool) ([
 
 // syncLines describes Reconcile's results, one line per branch marked ✓, and
 // one per repo marked ✗ for what needs you. Colored marks are for display;
-// notes stored for pi stay plain.
+// notes stored for the agent stay plain.
 func syncLines(results []feature.SyncResult, colored bool) []string {
 	done, needed := "✓", "✗"
 	if colored {

@@ -207,7 +207,7 @@ func stackLabel(prs []PR, i int) string {
 	return fmt.Sprintf("%d/%d ", k, n)
 }
 
-// Comment is a review comment on a line range, waiting to be sent to pi.
+// Comment is a review comment on a line range, waiting to be sent to the agent.
 type Comment struct {
 	ID    int    `json:"id"`
 	File  string `json:"file"` // relative to the feature root, e.g. "argocd/apps/x.yaml"
@@ -218,7 +218,7 @@ type Comment struct {
 	Note  string `json:"note"`
 }
 
-// CommentsMessage formats comments as one prompt for pi.
+// CommentsMessage formats comments as one prompt for the agent.
 func CommentsMessage(comments []Comment) string {
 	var b strings.Builder
 	b.WriteString("Review comments:\n")

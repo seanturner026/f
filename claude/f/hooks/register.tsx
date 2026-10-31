@@ -1,7 +1,6 @@
 /**
- * f: Claude Code port of the pi extensions (agent/extensions/f.ts, guard.ts,
- * copy-code.ts). Everything goes through the `f` CLI; this mod only reads
- * `.context/feature.json` to know it's in a feature.
+ * f: the Claude Code side of f features. Everything goes through the `f` CLI;
+ * this mod only reads `.context/feature.json` to know it's in a feature.
  *
  * - Guard: `f creds` env at start, `f guard check` before each Bash call.
  * - Goal + checkpoints around each turn; notes from f ride the prompt.
@@ -9,7 +8,7 @@
  *   `f setup` (state.json "setup") via `f setup-wait`.
  * - PRs: refreshed after each turn, `gh pr create` output recorded (`f prs --add`);
  *   claude/statusline.sh draws them.
- * - The feature is the session's root: Bash `cd` moves Claude Code's cwd, unlike pi's.
+ * - The feature is the session's root: Bash `cd` moves Claude Code's cwd.
  * - Commands that never reach the model: /prs /prc /sync /plan /steps /f /code /slack.
  *   /ci sends failing checks to the model. /plan replaces Claude Code's (shift+tab still reaches plan mode);
  *   /steps is the same but runs mid-turn: a built-in's name can't be made immediate.
@@ -407,7 +406,7 @@ export const register: Register = on => {
     )
   })
 
-  // Quieter chrome, closer to pi: no "Worked for 47s" row (ctrl+o still shows it).
+  // Quieter chrome: no "Worked for 47s" row (ctrl+o still shows it).
   on('ui.render', { component: 'TurnDuration' }, ($, e, next) => {
     if (e.props.isExpanded) return next(e)
     const { Box } = $.ui.resolve(e)

@@ -13,7 +13,7 @@ import (
 	"github.com/seanturner026/f/internal/guard"
 )
 
-// guardPaths are where the guard reads rules and writes pi's filtered credentials.
+// guardPaths are where the guard reads rules and writes the agent's filtered credentials.
 type guardPaths struct {
 	rules, cache, awsConfig, awsCreds, kubeconfig string
 }
@@ -34,7 +34,7 @@ func newGuardPaths() (guardPaths, error) {
 }
 
 // source returns the real file for an env var: its value unless it already
-// points into the guard cache (nested pi), else the default path.
+// points into the guard cache (nested agent), else the default path.
 func (p guardPaths) source(env, def string) string {
 	if v := os.Getenv(env); v != "" && !strings.HasPrefix(v, p.cache) {
 		return v
@@ -42,14 +42,14 @@ func (p guardPaths) source(env, def string) string {
 	return def
 }
 
-// credsOutput is what the pi guard extension applies to pi's environment.
+// credsOutput is what the f mod applies to the agent's environment.
 type credsOutput struct {
 	Env             map[string]string `json:"env"`
 	RemovedProfiles []string          `json:"removed_profiles"`
 	RemovedContexts []string          `json:"removed_contexts"`
 }
 
-// creds writes filtered AWS config/credentials and kubeconfig for pi and
+// creds writes filtered AWS config/credentials and kubeconfig for the agent and
 // prints the environment pointing at them.
 func creds(ctx context.Context) error {
 	p, err := newGuardPaths()

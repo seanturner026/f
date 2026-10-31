@@ -8,8 +8,8 @@ import (
 	"text/template"
 )
 
-// GoalPlaceholder is shown until a goal is set (`f goal`; pi's f extension
-// sets it from the first prompt).
+// GoalPlaceholder is shown until a goal is set (`f goal`; the f mod sets
+// it from the first prompt).
 const GoalPlaceholder = "_Not set yet: the first chat prompt becomes the goal._"
 
 // legacyPlaceholder is what older AGENTS.md files used.

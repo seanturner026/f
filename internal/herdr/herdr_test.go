@@ -100,7 +100,7 @@ func TestOpenWorkspaceTabOrder(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			r := &recordingRunner{}
-			res, err := herdr.OpenWorkspace(context.Background(), r, "feat", "/f/feat", tt.repos, agent.Command{Bin: agent.Pi, Args: []string{"--name", "feat"}})
+			res, err := herdr.OpenWorkspace(context.Background(), r, "feat", "/f/feat", tt.repos, agent.Command{Bin: agent.Claude, Args: []string{"--name", "feat"}})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -122,8 +122,8 @@ func TestOpenWorkspaceTabOrder(t *testing.T) {
 
 func TestAgentStatuses(t *testing.T) {
 	list := `{"result":{"agents":[
-		{"agent":"pi","agent_status":"blocked","cwd":"/f/a"},
-		{"agent":"pi","agent_status":"working","cwd":"/f/b"},
+		{"agent":"claude","agent_status":"blocked","cwd":"/f/a"},
+		{"agent":"claude","agent_status":"working","cwd":"/f/b"},
 		{"agent":"claude","agent_status":"idle","cwd":"/f/c"},
 		{"agent":"codex","agent_status":"idle","cwd":"/f/d"}]}}`
 	got, err := herdr.AgentStatuses(context.Background(), fakeRunner{out: list})
@@ -136,8 +136,8 @@ func TestAgentStatuses(t *testing.T) {
 	}{
 		{cwd: "/f/a", want: herdr.AgentBlocked},
 		{cwd: "/f/b", want: herdr.AgentWorking},
-		{cwd: "/f/c", want: herdr.AgentIdle}, // Claude Code counts like pi
-		{cwd: "/f/d", want: ""},              // agents f doesn't start don't
+		{cwd: "/f/c", want: herdr.AgentIdle},
+		{cwd: "/f/d", want: ""}, // agents f doesn't start don't
 	}
 	for _, tt := range tests {
 		t.Run(tt.cwd, func(t *testing.T) {
@@ -161,19 +161,19 @@ func (p *promptRunner) Run(_ context.Context, _, _ string, args ...string) (stri
 	return p.list, nil
 }
 
-func TestPromptPi(t *testing.T) {
-	list := `{"result":{"agents":[{"agent":"pi","cwd":"/f/a","pane_id":"w1:p1"},{"agent":"pi","cwd":"/f/b","pane_id":"w2:p1"}]}}`
+func TestPromptAgent(t *testing.T) {
+	list := `{"result":{"agents":[{"agent":"claude","cwd":"/f/a","pane_id":"w1:p1"},{"agent":"claude","cwd":"/f/b","pane_id":"w2:p1"}]}}`
 	tests := []struct {
 		name, dir, wantPane string
 		wantErr             error
 	}{
-		{name: "finds pi by cwd", dir: "/f/b", wantPane: "w2:p1"},
-		{name: "no pi there", dir: "/f/c", wantErr: herdr.ErrNoPi},
+		{name: "finds agent by cwd", dir: "/f/b", wantPane: "w2:p1"},
+		{name: "no agent there", dir: "/f/c", wantErr: herdr.ErrNoAgent},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			r := &promptRunner{list: list}
-			err := herdr.PromptPi(context.Background(), r, tt.dir, "hello")
+			err := herdr.PromptAgent(context.Background(), r, tt.dir, "hello")
 			if !errors.Is(err, tt.wantErr) {
 				t.Fatalf("err = %v, want %v", err, tt.wantErr)
 			}
@@ -372,7 +372,7 @@ func (r *reviveRunner) Run(_ context.Context, _, _ string, args ...string) (stri
 
 func TestReviveWorkspace(t *testing.T) {
 	repos := []string{"argocd", "gateway", "infra"}
-	chat := agent.Command{Bin: agent.Pi, Args: []string{"--name", "feat", "--continue"}}
+	chat := agent.Command{Bin: agent.Claude, Args: []string{"--name", "feat", "--continue"}}
 	tests := []struct {
 		name string
 		busy []string
@@ -383,8 +383,8 @@ func TestReviveWorkspace(t *testing.T) {
 			want: []string{
 				"p1 --name feat --continue",
 				"p2 nvim",
-				"p3 nvim -c 'PiReview argocd'",
-				"p4 nvim -c 'PiReview gateway'",
+				"p3 nvim -c 'FReview argocd'",
+				"p4 nvim -c 'FReview gateway'",
 				"p5 f prs --watch",
 			},
 		},

@@ -1,4 +1,3 @@
-// Ported from agent/extensions/copy-code.ts (pi): keep the two in step.
 export type Block = { lang: string; code: string };
 
 /** codeBlocks extracts fenced code blocks (``` or ~~~) from markdown. */

@@ -1,5 +1,5 @@
-// Package guard keeps pi away from admin AWS profiles and production kube
-// contexts. The boundary is credentials: pi gets filtered copies of the AWS
+// Package guard keeps the agent away from admin AWS profiles and production kube
+// contexts. The boundary is credentials: the agent gets filtered copies of the AWS
 // config/credentials and kubeconfig without denied entries (FilterAWSConfig,
 // FilterKubeconfig), so no tool — aws, kubectl, boto3, terraform — can use
 // them. CheckCommand is a speed bump on top for commands that try to point
@@ -15,7 +15,7 @@ import (
 	"strings"
 )
 
-// Rules decide which AWS profiles and kube contexts pi may use. Patterns are
+// Rules decide which AWS profiles and kube contexts the agent may use. Patterns are
 // case-insensitive globs ("*admin*").
 type Rules struct {
 	DenyProfiles   []string `json:"deny_profiles"`
@@ -67,10 +67,10 @@ func matchAny(patterns []string, name string) bool {
 	return false
 }
 
-// ProfileAllowed reports whether pi may use AWS profile name.
+// ProfileAllowed reports whether the agent may use AWS profile name.
 func ProfileAllowed(r Rules, name string) bool {
 	return matchAny(r.AllowProfiles, name) || !matchAny(r.DenyProfiles, name)
 }
 
-// ContextAllowed reports whether pi may use kube context (or EKS cluster) name.
+// ContextAllowed reports whether the agent may use kube context (or EKS cluster) name.
 func ContextAllowed(r Rules, name string) bool { return !matchAny(r.DenyContexts, name) }

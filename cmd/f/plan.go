@@ -53,8 +53,8 @@ func closeOrNote(ctx context.Context, d deps, issue, name, reason string) (close
 	return true, nil
 }
 
-// planSync saves the feature's beads progress for the picker (pi runs it
-// after each turn; bd is too slow to call while the picker opens).
+// planSync saves the feature's beads progress for the picker (the f mod runs
+// it after each turn; bd is too slow to call while the picker opens).
 func planSync(ctx context.Context, d deps) error {
 	name, err := resolve(d, "")
 	if err != nil {
@@ -63,8 +63,8 @@ func planSync(ctx context.Context, d deps) error {
 	return planSyncFeature(ctx, d, name)
 }
 
-// planShow prints the current feature's plan (/plan in pi), or with tree as
-// a dependency tree (/plan in Claude Code).
+// planShow prints the current feature's plan, or with tree as a dependency
+// tree (/plan).
 func planShow(ctx context.Context, d deps, tree bool) error {
 	name, err := resolve(d, "")
 	if err != nil {
@@ -127,7 +127,7 @@ func finishRemove(ctx context.Context, d deps, dir, name, issue, reason string) 
 
 // closeMergedSteps closes the feature's open steps whose linked PRs have all
 // merged (model.MergedSteps): GitHub decides when a linked step is done, so
-// beads doesn't go stale when pi isn't around to close it. PRs the feature
+// beads doesn't go stale when the agent isn't around to close it. PRs the feature
 // doesn't track (e.g. a merged stack branch f sync dropped) are looked up live.
 // Returns a line per closed step, and every PR URL linked to a step.
 func closeMergedSteps(ctx context.Context, d deps, name string, prs []model.PR) (lines []string, linked map[string]bool) {

@@ -17,7 +17,7 @@ import (
 	"github.com/seanturner026/f/internal/tracing"
 )
 
-const help = `f: one agent session (Claude Code, or pi with F_AGENT=pi) across several repos, each on its own worktree.
+const help = `f: one Claude Code session across several repos, each on its own worktree.
 
   f <name>         start a feature (pick repos), or reopen it
   f                picker: what needs you → jump there (ctrl-n new, ctrl-x remove, ctrl-u flag, ctrl-o/y PRs, ctrl-s sync, ctrl-t trash)
@@ -61,7 +61,7 @@ func main() {
 		ShellComplete: func(ctx context.Context, c *cli.Command) { printLines(feature.List(d.layout)) },
 		Commands: []*cli.Command{
 			{
-				// Called by agent/extensions/f.ts after each pi run: beads progress for the picker.
+				// Called by the f mod after each turn: beads progress for the picker.
 				Name:   "plan",
 				Hidden: true,
 				Commands: []*cli.Command{
@@ -70,21 +70,21 @@ func main() {
 						Action: func(ctx context.Context, c *cli.Command) error { return planSync(ctx, d) },
 					},
 					{
-						// /plan in pi: steps grouped by in progress / ready / blocked / done.
+						// Without --tree: steps grouped by in progress / ready / blocked / done.
 						Name:   "show",
-						Flags:  []cli.Flag{&cli.BoolFlag{Name: "tree", Usage: "dependency tree (/plan in Claude Code)"}},
+						Flags:  []cli.Flag{&cli.BoolFlag{Name: "tree", Usage: "dependency tree (/plan)"}},
 						Action: func(ctx context.Context, c *cli.Command) error { return planShow(ctx, d, c.Bool("tree")) },
 					},
 				},
 			},
 			{
-				// Called by agent/extensions/guard.ts when pi starts.
+				// Called by the f mod when the agent starts.
 				Name:   "creds",
 				Hidden: true,
 				Action: func(ctx context.Context, c *cli.Command) error { return creds(ctx) },
 			},
 			{
-				// Called by agent/extensions/guard.ts before every bash command.
+				// Called by the f mod before every bash command.
 				Name:   "guard",
 				Hidden: true,
 				Commands: []*cli.Command{{
@@ -95,7 +95,7 @@ func main() {
 				}},
 			},
 			{
-				// Called by agent/extensions/f.ts around each pi run.
+				// Called by the f mod around each turn.
 				Name:   "checkpoint",
 				Hidden: true,
 				Commands: []*cli.Command{
@@ -278,7 +278,7 @@ func main() {
 				Flags: []cli.Flag{
 					featureFlag,
 					&cli.BoolFlag{Name: "background", Hidden: true},
-					&cli.BoolFlag{Name: "all", Usage: "every feature (launchd, every 30 min): refreshes all; resets wait for the one you're in and busy pis; never pushes"},
+					&cli.BoolFlag{Name: "all", Usage: "every feature (launchd, every 30 min): refreshes all; resets wait for the one you're in and busy agents; never pushes"},
 				},
 				Action: func(ctx context.Context, c *cli.Command) error {
 					if c.Bool("all") {
@@ -287,7 +287,7 @@ func main() {
 					return syncFeature(ctx, d, c.String("feature"), c.Bool("background"))
 				},
 				Commands: []*cli.Command{{
-					// Called by agent/extensions/f.ts before each prompt.
+					// Called by the f mod before each prompt.
 					Name:   "notes",
 					Hidden: true,
 					Flags:  []cli.Flag{featureFlag, &cli.BoolFlag{Name: "take"}},

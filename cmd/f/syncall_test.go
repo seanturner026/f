@@ -19,7 +19,7 @@ func TestNewlyMerged(t *testing.T) {
 		{URL: "a", Status: model.PRStatusMerged}, // newly merged
 		{URL: "b", Status: model.PRStatusMerged}, // already merged
 		{URL: "c", Status: model.PRStatusOpen},
-		{URL: "d", Status: model.PRStatusMerged}, // unknown before: pi just recorded it, skip
+		{URL: "d", Status: model.PRStatusMerged}, // unknown before: the agent just recorded it, skip
 	}
 	got := newlyMerged(before, after)
 	if len(got) != 1 || got[0].URL != "a" {

@@ -1,16 +1,16 @@
--- f: nvim side of `f` feature workspaces (review tabs, comments for pi).
+-- f: nvim side of `f` feature workspaces (review tabs, comments for the agent).
 -- Reads <feature>/.context/feature.json, which the f CLI owns.
 --
---   :PiComment [note]   comment on the current line / visual selection   <leader>pc
---   :PiComments         list pending comments (quickfix)                 <leader>pl
---   :PiSend             send all to pi (via Herdr) and clear             <leader>ps
---   :PiClear            discard all
---   :PiReview [repo]    live CodeDiff for one repo (or a tab per repo)
---   :PiReviewToggle     in a review tab: whole feature ↔ since pi's last run <leader>pr
---   :PiReview pr        in a review tab: pick the whole feature or one stacked PR <leader>pp
+--   :FComment [note]   comment on the current line / visual selection   <leader>pc
+--   :FComments         list pending comments (quickfix)                 <leader>pl
+--   :FSend             send all to the agent (via Herdr) and clear      <leader>ps
+--   :FClear            discard all
+--   :FReview [repo]    live CodeDiff for one repo (or a tab per repo)
+--   :FReviewToggle     in a review tab: whole feature ↔ since the agent's last run <leader>pr
+--   :FReview pr        in a review tab: pick the whole feature or one stacked PR <leader>pp
 --
 -- Works inside an `f` feature: <base>/.features/<feature>/<repo>/...
--- pi is found via `herdr agent list`: the pi agent whose cwd is the feature root.
+-- The agent is found via `herdr agent list`: the one whose cwd is the feature root.
 
 -- f records who called it in its traces (f trace stats).
 local F_ENV = { F_CALLER = "nvim" }
@@ -108,11 +108,11 @@ local function add(opts)
   local buf = vim.api.nvim_get_current_buf()
   local path = buf_path(buf)
   if not path then
-    return vim.notify("PiComment: comment on the real file (right side of the diff)", vim.log.levels.WARN)
+    return vim.notify("FComment: comment on the real file (right side of the diff)", vim.log.levels.WARN)
   end
   local root = feature_of(path)
   if not root then
-    return vim.notify("PiComment: not inside an f feature", vim.log.levels.WARN)
+    return vim.notify("FComment: not inside an f feature", vim.log.levels.WARN)
   end
   local l1, l2 = opts.line1, opts.line2
 
@@ -130,7 +130,7 @@ local function add(opts)
     })
     local ok, _, err = f_cli(root, { "comment", "add" }, comment)
     if not ok then
-      return vim.notify("PiComment: " .. err, vim.log.levels.ERROR)
+      return vim.notify("FComment: " .. err, vim.log.levels.ERROR)
     end
     render(buf)
   end
@@ -138,7 +138,7 @@ local function add(opts)
   if opts.args ~= "" then
     save(opts.args)
   else
-    vim.ui.input({ prompt = "comment for pi: " }, save)
+    vim.ui.input({ prompt = "comment for the agent: " }, save)
   end
 end
 
@@ -154,16 +154,16 @@ local function clear()
   end
 end
 
--- Send pending comments to this feature's pi (f finds it via Herdr).
+-- Send pending comments to this feature's agent (f finds it via Herdr).
 local function send()
   local root = current_root()
   if not root then
-    return vim.notify("PiComment: not inside an f feature", vim.log.levels.WARN)
+    return vim.notify("FComment: not inside an f feature", vim.log.levels.WARN)
   end
   vim.system({ "f", "comment", "send" }, { cwd = root, text = true, env = F_ENV }, function(res)
     vim.schedule(function()
       local out = vim.trim((res.stdout or "") .. (res.stderr or ""))
-      vim.notify("PiComment: " .. out, res.code == 0 and vim.log.levels.INFO or vim.log.levels.ERROR)
+      vim.notify("FComment: " .. out, res.code == 0 and vim.log.levels.INFO or vim.log.levels.ERROR)
       render_all()
     end)
   end)
@@ -178,7 +178,7 @@ local function list()
   for _, c in ipairs(load_comments(root)) do
     table.insert(items, { filename = root .. "/" .. c.file, lnum = c.line1, end_lnum = c.line2, text = c.note })
   end
-  vim.fn.setqflist({}, " ", { title = "pi comments", items = items })
+  vim.fn.setqflist({}, " ", { title = "agent comments", items = items })
   vim.cmd(#items > 0 and "copen" or "cclose")
 end
 
@@ -191,9 +191,9 @@ local function feature_repos()
   return info.root, info.repos or {}
 end
 
--- Tab label: the repo name for :PiReview tabs, else the focused buffer's name.
+-- Tab label: the repo name for :FReview tabs, else the focused buffer's name.
 local function tab_label(tab)
-  local ok, repo = pcall(vim.api.nvim_tabpage_get_var, tab, "pi_repo")
+  local ok, repo = pcall(vim.api.nvim_tabpage_get_var, tab, "f_repo")
   if ok then
     return repo
   end
@@ -212,7 +212,7 @@ end
 
 -- What a review tab compares against.
 local FEATURE = "origin/HEAD..." -- everything since the branch left origin's default branch
-local LAST_RUN = "refs/worktree/pi-last" -- the code before pi's last run (f checkpoint)
+local LAST_RUN = "refs/worktree/pi-last" -- the code before the agent's last run (f checkpoint)
 
 -- open_codediff opens CodeDiff for each repo against rev, one at a time
 -- (CodeDiff opens its tab asynchronously, and concurrent launches get mixed
@@ -232,13 +232,13 @@ local function open_codediff(root, repos, rev, done)
     local function poll()
       for _, t in ipairs(vim.api.nvim_list_tabpages()) do
         if not before[t] then
-          vim.api.nvim_tabpage_set_var(t, "pi_repo", repo)
-          vim.api.nvim_tabpage_set_var(t, "pi_rev", rev)
+          vim.api.nvim_tabpage_set_var(t, "f_repo", repo)
+          vim.api.nvim_tabpage_set_var(t, "f_rev", rev)
           -- CodeDiff fixes the merge-base when it opens; remember it so a
           -- rebase (or a sync reset) can be noticed and the tab reopened.
           local mb = vim.system({ "git", "-C", root .. "/" .. repo, "merge-base", "origin/HEAD", "HEAD" }, { text = true }):wait()
           if mb.code == 0 then
-            vim.api.nvim_tabpage_set_var(t, "pi_base", vim.trim(mb.stdout))
+            vim.api.nvim_tabpage_set_var(t, "f_base", vim.trim(mb.stdout))
           end
           vim.cmd("redrawtabline")
           return open(i + 1)
@@ -311,7 +311,7 @@ local function wait_for_changes(root, repo)
   end
   show()
   local ready = is_worktree(dir)
-  vim.api.nvim_tabpage_set_var(tab, "pi_repo", repo)
+  vim.api.nvim_tabpage_set_var(tab, "f_repo", repo)
   vim.cmd("redrawtabline")
 
   local timer = vim.uv.new_timer()
@@ -357,14 +357,14 @@ local function watch_bases()
       return
     end
     for _, t in ipairs(vim.api.nvim_list_tabpages()) do
-      local repo, base = var(t, "pi_repo"), var(t, "pi_base")
-      if repo and base and var(t, "pi_rev") == FEATURE then
+      local repo, base = var(t, "f_repo"), var(t, "f_base")
+      if repo and base and var(t, "f_rev") == FEATURE then
         local dir = root .. "/" .. repo
         local mb = git(dir, "merge-base", "origin/HEAD", "HEAD")
         local now = mb.code == 0 and vim.trim(mb.stdout) or nil
         if now and now ~= base then
           reopening = true
-          vim.api.nvim_tabpage_set_var(t, "pi_base", now)
+          vim.api.nvim_tabpage_set_var(t, "f_base", now)
           local function close_old()
             if vim.api.nvim_tabpage_is_valid(t) and #vim.api.nvim_list_tabpages() > 1 then
               vim.cmd("tabclose " .. vim.api.nvim_tabpage_get_number(t))
@@ -385,15 +385,15 @@ local function watch_bases()
   end))
 end
 
-local review_pick -- below; :PiReview pr opens it
+local review_pick -- below; :FReview pr opens it
 
--- :PiReview [repo]: with a repo (as in f's Herdr repo tabs), just that repo
+-- :FReview [repo]: with a repo (as in f's Herdr repo tabs), just that repo
 -- (waiting for changes if there are none yet); without, every repo in the
 -- feature, one nvim tab each.
 local function review(opts)
   local root, repos = feature_repos()
   if not root then
-    return vim.notify("PiReview: not inside an f feature", vim.log.levels.WARN)
+    return vim.notify("FReview: not inside an f feature", vim.log.levels.WARN)
   end
   watch_bases()
   local only = opts and opts.args or ""
@@ -402,7 +402,7 @@ local function review(opts)
   end
   if only ~= "" then
     if not vim.tbl_contains(repos, only) then
-      return vim.notify("PiReview: no repo " .. only .. " in this feature", vim.log.levels.WARN)
+      return vim.notify("FReview: no repo " .. only .. " in this feature", vim.log.levels.WARN)
     end
     repos = { only }
     if not is_worktree(root .. "/" .. only) or not has_changes(root .. "/" .. only) then
@@ -421,28 +421,28 @@ local function review(opts)
   end)
 end
 
--- :PiReviewToggle (<leader>pr) in a review tab: switch between the whole
--- feature and what pi's last run changed.
+-- :FReviewToggle (<leader>pr) in a review tab: switch between the whole
+-- feature and what the agent's last run changed.
 local function review_toggle()
   local tab = vim.api.nvim_get_current_tabpage()
-  local ok_repo, repo = pcall(vim.api.nvim_tabpage_get_var, tab, "pi_repo")
+  local ok_repo, repo = pcall(vim.api.nvim_tabpage_get_var, tab, "f_repo")
   if not ok_repo then
-    return vim.notify("PiReview: not a review tab", vim.log.levels.WARN)
+    return vim.notify("FReview: not a review tab", vim.log.levels.WARN)
   end
   local root = feature_of(nil)
-  local ok_rev, rev = pcall(vim.api.nvim_tabpage_get_var, tab, "pi_rev")
+  local ok_rev, rev = pcall(vim.api.nvim_tabpage_get_var, tab, "f_rev")
   local next_rev = (ok_rev and rev == LAST_RUN) and FEATURE or LAST_RUN
   if next_rev == LAST_RUN then
     local res = vim.system({ "git", "-C", root .. "/" .. repo, "rev-parse", "-q", "--verify", LAST_RUN }):wait()
     if res.code ~= 0 then
-      return vim.notify("PiReview: pi hasn't changed code in " .. repo .. " yet", vim.log.levels.WARN)
+      return vim.notify("FReview: the agent hasn't changed code in " .. repo .. " yet", vim.log.levels.WARN)
     end
   end
   open_codediff(root, { repo }, next_rev, function()
     if vim.api.nvim_tabpage_is_valid(tab) then
       vim.cmd("tabclose " .. vim.api.nvim_tabpage_get_number(tab))
     end
-    vim.notify(repo .. ": " .. (next_rev == LAST_RUN and "since pi's last run" or "whole feature"))
+    vim.notify(repo .. ": " .. (next_rev == LAST_RUN and "since the agent's last run" or "whole feature"))
   end)
 end
 
@@ -487,17 +487,17 @@ local function pr_target(dir, p, current)
   return p.head == current and base or base .. " " .. head, head
 end
 
--- :PiReview pr (<leader>pp) in a review tab: pick what the tab shows, the
+-- :FReview pr (<leader>pp) in a review tab: pick what the tab shows, the
 -- whole feature or one PR of the repo's stack. Nothing is checked out.
 function review_pick()
   local tab = vim.api.nvim_get_current_tabpage()
-  local ok_repo, repo = pcall(vim.api.nvim_tabpage_get_var, tab, "pi_repo")
+  local ok_repo, repo = pcall(vim.api.nvim_tabpage_get_var, tab, "f_repo")
   if not ok_repo then
-    return vim.notify("PiReview: not a review tab", vim.log.levels.WARN)
+    return vim.notify("FReview: not a review tab", vim.log.levels.WARN)
   end
   local root = feature_of(nil)
   local dir = root .. "/" .. repo
-  local _, shown = pcall(vim.api.nvim_tabpage_get_var, tab, "pi_rev")
+  local _, shown = pcall(vim.api.nvim_tabpage_get_var, tab, "f_rev")
   local current = vim.trim(git(dir, "branch", "--show-current").stdout or "")
   local prs = open_prs(root, repo)
   local items = { { text = "whole feature (vs " .. FEATURE:gsub("%.%.%.$", "") .. ")", rev = FEATURE, preview = { text = "Everything this feature changed in " .. repo .. "." } } }
@@ -548,18 +548,18 @@ end
 M._repos = feature_repos -- for tests
 
 function M.setup()
-  vim.api.nvim_create_user_command("PiComment", add, { range = true, nargs = "*", desc = "Comment for pi" })
-  vim.api.nvim_create_user_command("PiComments", list, { desc = "List pending pi comments" })
-  vim.api.nvim_create_user_command("PiSend", send, { desc = "Send pi comments" })
-  vim.api.nvim_create_user_command("PiClear", clear, { desc = "Discard pi comments" })
-  vim.api.nvim_create_user_command("PiReview", review, {
+  vim.api.nvim_create_user_command("FComment", add, { range = true, nargs = "*", desc = "Comment for the agent" })
+  vim.api.nvim_create_user_command("FComments", list, { desc = "List pending comments" })
+  vim.api.nvim_create_user_command("FSend", send, { desc = "Send comments to the agent" })
+  vim.api.nvim_create_user_command("FClear", clear, { desc = "Discard pending comments" })
+  vim.api.nvim_create_user_command("FReview", review, {
     nargs = "?",
     desc = "Live CodeDiff for a feature repo (or all)",
     complete = function()
       return select(2, feature_repos()) or {}
     end,
   })
-  vim.api.nvim_create_user_command("PiReviewToggle", review_toggle, { desc = "Review: whole feature ↔ last run" })
+  vim.api.nvim_create_user_command("FReviewToggle", review_toggle, { desc = "Review: whole feature ↔ last run" })
 
   -- Pending comments survive restarts (.context/comments.json): draw them on open.
   vim.api.nvim_create_autocmd("BufWinEnter", {
@@ -569,12 +569,12 @@ function M.setup()
     end,
   })
 
-  vim.keymap.set("n", "<leader>pc", "<cmd>PiComment<cr>", { desc = "[P]i [C]omment" })
-  vim.keymap.set("x", "<leader>pc", ":PiComment<cr>", { desc = "[P]i [C]omment" })
-  vim.keymap.set("n", "<leader>ps", "<cmd>PiSend<cr>", { desc = "[P]i [S]end comments" })
-  vim.keymap.set("n", "<leader>pl", "<cmd>PiComments<cr>", { desc = "[P]i [L]ist comments" })
-  vim.keymap.set("n", "<leader>pr", "<cmd>PiReviewToggle<cr>", { desc = "[P]i [R]eview: feature ↔ last run" })
-  vim.keymap.set("n", "<leader>pp", "<cmd>PiReview pr<cr>", { desc = "[P]i review: [P]ick a stacked PR" })
+  vim.keymap.set("n", "<leader>pc", "<cmd>FComment<cr>", { desc = "Comment for the agent" })
+  vim.keymap.set("x", "<leader>pc", ":FComment<cr>", { desc = "Comment for the agent" })
+  vim.keymap.set("n", "<leader>ps", "<cmd>FSend<cr>", { desc = "Send comments to the agent" })
+  vim.keymap.set("n", "<leader>pl", "<cmd>FComments<cr>", { desc = "List pending comments" })
+  vim.keymap.set("n", "<leader>pr", "<cmd>FReviewToggle<cr>", { desc = "Review: feature ↔ last run" })
+  vim.keymap.set("n", "<leader>pp", "<cmd>FReview pr<cr>", { desc = "Review: pick a stacked PR" })
 end
 
 

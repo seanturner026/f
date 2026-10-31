@@ -33,9 +33,9 @@ type State struct {
 	MergedEarlier []model.PR `json:"merged_earlier,omitempty"`
 	// Flagged is the picker's "unread" mark (ctrl-u); opening the feature, or its agent doing anything, clears it.
 	Flagged bool       `json:"flagged,omitempty"`
-	Plan    model.Plan `json:"plan,omitzero"` // beads progress, synced after each pi run
-	// SyncNotes tell pi what a background f sync changed (e.g. a repo reset to
-	// main after its PR merged); the f extension hands them over on the next prompt.
+	Plan    model.Plan `json:"plan,omitzero"` // beads progress, synced after each turn
+	// SyncNotes tell the agent what a background f sync changed (e.g. a repo reset to
+	// main after its PR merged); the f mod hands them over on the next prompt.
 	SyncNotes []string `json:"sync_notes,omitempty"`
 	Setup     *Setup   `json:"setup,omitempty"` // repos still being added in the background
 }
@@ -63,7 +63,7 @@ func SetFlagged(l Layout, name string, flagged, toggle bool) (bool, error) {
 	return s.Flagged, err
 }
 
-// AddSyncNotes queues notes for pi.
+// AddSyncNotes queues notes for the agent.
 func AddSyncNotes(l Layout, name string, notes ...string) error {
 	_, err := UpdateState(l, name, func(s *State) { s.SyncNotes = append(s.SyncNotes, notes...) })
 	return err
@@ -104,7 +104,7 @@ func LoadState(l Layout, name string) (State, error) {
 }
 
 // UpdateState changes the feature's state under a lock: it re-reads the file,
-// applies fn, and writes it back. Several writers run at once (pi's post-run
+// applies fn, and writes it back. Several writers run at once (the f mod's post-turn
 // PR refresh and plan sync, the prs tab, launchd's f sync --all); without the
 // lock each would write back its own stale copy and drop the others' fields.
 func UpdateState(l Layout, name string, fn func(*State)) (State, error) {
