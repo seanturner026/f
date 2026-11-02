@@ -140,7 +140,7 @@ Herdr's busy/idle marks need `herdr integration install claude`. Herdr plays its
 | `<leader>pl` | List pending comments (quickfix) |
 | `<leader>ps` | Send comments to the agent |
 | `:FClear` | Discard pending comments |
-| `:FReview [repo]` | Reopen a repo's CodeDiff (no repo: all, as nvim tabs); `:FReview pr` is `<leader>pp` |
+| `:FReview [repo]` | Reopen a repo's CodeDiff (no repo: all, as nvim tabs); `:FReview pr` is `<leader>pp`. Review tabs check for changes only while focused, and at once when you switch to them |
 
 Comment on the **right** side of a diff (the real file). Comments are saved in
 `.context/comments.json`, so they survive closing nvim.
