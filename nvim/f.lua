@@ -285,6 +285,31 @@ end
 
 local WAIT_MS = 3000 -- how often a waiting review tab checks for changes
 
+-- Checks run only while this nvim has focus (Herdr forwards it), and at once on
+-- regaining it: every repo tab is an nvim, and dozens polling git kept the CPU busy.
+local focused, pollers = true, {}
+local function poll(check)
+  local timer = vim.uv.new_timer()
+  pollers[timer] = check
+  timer:start(WAIT_MS, WAIT_MS, vim.schedule_wrap(function()
+    if focused and not timer:is_closing() then
+      check(timer)
+    end
+  end))
+  return timer
+end
+
+local function on_focus(gained)
+  focused = gained
+  for timer, check in pairs(pollers) do
+    if timer:is_closing() then
+      pollers[timer] = nil
+    elseif gained then
+      check(timer)
+    end
+  end
+end
+
 local function is_worktree(dir)
   return vim.uv.fs_stat(dir .. "/.git") ~= nil
 end
@@ -314,8 +339,7 @@ local function wait_for_changes(root, repo)
   vim.api.nvim_tabpage_set_var(tab, "f_repo", repo)
   vim.cmd("redrawtabline")
 
-  local timer = vim.uv.new_timer()
-  timer:start(WAIT_MS, WAIT_MS, vim.schedule_wrap(function()
+  poll(function(timer)
     if not vim.api.nvim_tabpage_is_valid(tab) or not vim.api.nvim_buf_is_valid(buf) then
       return timer:close()
     end
@@ -335,7 +359,7 @@ local function wait_for_changes(root, repo)
         vim.cmd("tabclose " .. vim.api.nvim_tabpage_get_number(tab))
       end
     end)
-  end))
+  end)
 end
 
 -- watch_bases reopens a whole-feature review tab when its merge-base moves
@@ -350,8 +374,7 @@ local function watch_bases()
     local ok, v = pcall(vim.api.nvim_tabpage_get_var, t, name)
     return ok and v or nil
   end
-  base_timer = vim.uv.new_timer()
-  base_timer:start(WAIT_MS, WAIT_MS, vim.schedule_wrap(function()
+  base_timer = poll(function()
     local root = feature_of(nil)
     if reopening or not root then
       return
@@ -382,7 +405,7 @@ local function watch_bases()
         end
       end
     end
-  end))
+  end)
 end
 
 local review_pick -- below; :FReview pr opens it
@@ -560,6 +583,13 @@ function M.setup()
     end,
   })
   vim.api.nvim_create_user_command("FReviewToggle", review_toggle, { desc = "Review: whole feature ↔ last run" })
+
+  vim.api.nvim_create_autocmd({ "FocusGained", "FocusLost" }, {
+    group = vim.api.nvim_create_augroup("f_focus", { clear = true }),
+    callback = function(ev)
+      on_focus(ev.event == "FocusGained")
+    end,
+  })
 
   -- Pending comments survive restarts (.context/comments.json): draw them on open.
   vim.api.nvim_create_autocmd("BufWinEnter", {
