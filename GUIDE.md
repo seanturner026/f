@@ -115,7 +115,7 @@ The statusline shows the feature's PRs with CI.
 | `/f [name] [repo…]` | Open a feature or start one without leaving chat: a bare `/f` picks a feature, a new name picks repos (no tab completion) |
 | `/sync` | After a PR merges: merged branches are reset to main (the feature branch) or deleted (stack branches), commits added after a merge are kept, the rest of the stack is rebased onto main, force-pushed (with lease) and its PRs moved to base `main`; one line per branch. Also runs (without pushing; stacks wait) when you open the feature and on `r` in the prs tab |
 | `/plan`, `/steps` | The feature's beads plan as a dependency tree, in a sidebar that updates as the plan changes; opens at once with the last plan, then refreshes. `/plan` replaces Claude Code's (shift+tab still reaches plan mode) and waits for a running turn; `/steps` runs mid-turn |
-| `/ci` | Send failing checks + failed-job logs to the agent: it finds the cause and proposes a fix, no push until you OK |
+| `/ci` | Send failing checks + failed-job logs to the agent: it finds the cause, fixes and pushes (asks first only for behavior changes or judgment calls) |
 | `/code [n]` | Copy code block(s) from the last reply exactly as written (no wrap/indent); several: pick one or all |
 | `/slack` | Copy the last reply formatted for Slack, just its quoted (`>`) draft if it has one: `*bold*`, headings as bold lines, `•` bullets, links as `text (url)`; code untouched |
 
