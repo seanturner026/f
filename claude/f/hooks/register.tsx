@@ -158,7 +158,7 @@ export const register: Register = on => {
       { name: 'prs', description: "Open this feature's open PRs in the browser (saved list; refreshed after)", immediate: true as const },
       { name: 'prc', description: "Copy this feature's PRs as url: title lines (stacks numbered)", immediate: true as const },
       { name: 'sync', description: 'After a PR merges: reset its repo to main (or rebase newer commits onto it)' },
-      { name: 'ci', description: "Send this feature's failing CI checks (with logs): find the cause, propose a fix, don't push" },
+      { name: 'ci', description: "Send this feature's failing CI checks (with logs): find the cause, fix and push" },
       { name: 'steps', description: "Show/hide this feature's beads plan in the sidebar (like /plan, but runs mid-turn)", immediate: true as const },
       { name: 'f', description: 'Open a feature, or start one: /f [name] [repo...]', argumentHint: '[name] [repo...]', immediate: true as const },
       { name: 'code', description: 'Copy code block(s) from the last reply, unwrapped: /code [n]', argumentHint: '[n]' },

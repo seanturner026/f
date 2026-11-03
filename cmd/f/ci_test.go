@@ -38,7 +38,7 @@ func TestCIPrompt(t *testing.T) {
 	}
 	got := ciPrompt(failures)
 	for _, want := range []string{
-		"Don't push until I OK it.",
+		"commit and push so CI runs again",
 		"## argocd #412 Add ACK app\nhttps://github.com/o/argocd/pull/412",
 		"### ✗ Test / build",
 		"`gh run view --job 22 --log-failed -R o/argocd`",

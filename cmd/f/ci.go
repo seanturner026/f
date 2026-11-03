@@ -115,11 +115,11 @@ func fetchLogs(ctx context.Context, d deps, name string, failures []*ciFailure) 
 	wg.Wait()
 }
 
-// ciPrompt asks the agent to diagnose and propose, grouped by PR.
+// ciPrompt asks the agent to diagnose, fix and push, grouped by PR.
 func ciPrompt(failures []*ciFailure) string {
 	var b strings.Builder
-	b.WriteString("CI is failing on this feature's PRs. For each failure: find the cause (read the code and the log; " +
-		"run the check locally if you can), then propose a fix. Don't push until I OK it.\n")
+	b.WriteString("CI is failing on this feature's PRs. For each failure: find the cause (read the code and the log), " +
+		"fix it, then commit and push so CI runs again. Ask me first only if the fix changes behavior or is a judgment call.\n")
 	var lastPR string
 	for _, f := range failures {
 		if key := f.pr.URL; key != lastPR {
