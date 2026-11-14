@@ -9,8 +9,8 @@
  * - PRs: refreshed after each turn, `gh pr create` output recorded (`f prs --add`);
  *   claude/statusline.sh draws them.
  * - The feature is the session's root: Bash `cd` moves Claude Code's cwd.
- * - One command, /f <cmd> (SUBCOMMANDS; bare /f lists them). It runs mid-turn; /f sync
- *   waits for a running turn. ci, sr and prr send a prompt to the model; the rest don't.
+ * - Commands /f<name> (COMMANDS): /fprs /fprc /fplan run mid-turn, the rest wait for it.
+ *   /fci, /fsr and /fprr send a prompt to the model; the rest don't.
  * - Quieter chrome: no "Worked for …" line, no hint/mode row under the prompt while idle.
  */
 import { atom, read, update } from 'claude-code'
@@ -66,7 +66,7 @@ async function togglePlan($: $): Promise<string> {
   }
   await $.ui.open({ id: PLAN_PANE, title: 'Plan' })
   background($, () => refreshPlan($))
-  return 'plan in the sidebar, updated as it changes (/f plan again to hide)'
+  return 'plan in the sidebar, updated as it changes (/fplan again to hide)'
 
 }
 
@@ -123,7 +123,7 @@ async function copyBlocks($: $, codes: string[]): Promise<string> {
 async function openPick($: $, value: Pick) {
   await update($, pick, () => value)
   const widest = Math.max(20, ...value.options.map(o => o.label.length + 8))
-  await $.ui.open({ id: PICK_PANE, title: value.kind === 'code' ? 'Copy which code block?' : 'f commands', focus: true, closeOnEscape: true, rows: value.options.length + 4, columns: Math.min(widest, 90) })
+  await $.ui.open({ id: PICK_PANE, title: 'Copy which code block?', focus: true, closeOnEscape: true, rows: value.options.length + 4, columns: Math.min(widest, 80) })
 }
 
 async function closePick($: $) {
@@ -207,38 +207,32 @@ async function copySlack($: $): Promise<string> {
   return text ? copy($, slackText(text), 'copied for Slack') : 'no reply to copy'
 }
 
-type Subcommand = {
+// Command is one of the mod's slash commands, /f<name>.
+type Command = {
   name: string
-  usage: string
   description: string
+  argumentHint?: string
+  immediate: boolean // runs mid-turn; sync, code and the prompt senders wait for the turn
   feature: boolean // needs an f feature
 }
 
-// The /f subcommands, in the order bare /f lists them.
-const SUBCOMMANDS: Subcommand[] = [
-  { name: 'prs', usage: 'prs', description: "open the feature's open PRs", feature: true },
-  { name: 'prc', usage: 'prc', description: 'copy them as url: title lines', feature: true },
-  { name: 'prr', usage: 'prr [text]', description: '+ unresolved GitHub review threads → the agent', feature: true },
-  { name: 'sr', usage: 'sr [text]', description: '+ tuicr/nvim review comments → the agent', feature: true },
-  { name: 'ci', usage: 'ci', description: 'failing checks → the agent: fix and push', feature: true },
-  { name: 'sync', usage: 'sync', description: 'after a merge: reset/rebase branches (after a running turn)', feature: true },
-  { name: 'plan', usage: 'plan', description: 'show/hide the plan sidebar', feature: true },
-  { name: 'code', usage: 'code [n]', description: 'copy code block(s) from the last reply', feature: false },
-  { name: 'slack', usage: 'slack', description: "copy the last reply's quoted draft for Slack", feature: false },
+const COMMANDS: Command[] = [
+  { name: 'prs', description: "Open this feature's open PRs in the browser", immediate: true, feature: true },
+  { name: 'prc', description: "Copy this feature's open PRs as url: title lines", immediate: true, feature: true },
+  { name: 'prr', description: "Send your text + the unresolved GitHub review threads on this feature's PRs", argumentHint: '[text]', immediate: false, feature: true },
+  { name: 'sr', description: 'Send your text + the pending tuicr/nvim review comments', argumentHint: '[text]', immediate: false, feature: true },
+  { name: 'ci', description: "Send this feature's failing checks (with logs): fix and push", immediate: false, feature: true },
+  { name: 'sync', description: 'After a PR merges: reset/rebase branches onto main', immediate: false, feature: true },
+  { name: 'plan', description: "Show/hide this feature's plan in the sidebar", immediate: true, feature: true },
+  { name: 'code', description: 'Copy code block(s) from the last reply, unwrapped', argumentHint: '[n]', immediate: false, feature: false },
+  { name: 'slack', description: "Copy the last reply's quoted draft formatted for Slack", immediate: false, feature: false },
 ]
 
-// Turn is the session's turn state: whether a run is going, and a /f sync
-// held back until it ends (sync moves branches under the agent).
-type Turn = { running: boolean; syncAfter: boolean }
-
-// dispatch runs /f <cmd>.
-async function dispatch($: $, turn: Turn, sub: Subcommand, args: string): Promise<string> {
-  if (sub.feature && !(await featureInfo($))) return 'not in an f feature'
-  if (sub.name === 'sync' && turn.running) {
-    turn.syncAfter = true
-    return 'syncing when this turn ends'
-  }
-  switch (sub.name) {
+// runCommand runs /f<name>.
+async function runCommand($: $, name: string, args: string): Promise<string> {
+  const cmd = COMMANDS.find(c => c.name === name)
+  if (cmd?.feature && !(await featureInfo($))) return 'not in an f feature'
+  switch (name) {
     case 'prs':
       return openPRs($)
     case 'prc':
@@ -258,17 +252,19 @@ async function dispatch($: $, turn: Turn, sub: Subcommand, args: string): Promis
     case 'slack':
       return copySlack($)
   }
-  return `no /f ${sub.name}`
+  return `no /f${name}`
 }
 
 export const register: Register = on => {
   let guardError = 'starting'
-  const turn: Turn = { running: false, syncAfter: false }
+  const turn = { running: false }
   let turnPrompt = '' // names the run's turn in the review (f checkpoint end --prompt)
 
 
   on('session.start', async ($, e, next) => {
-    await $.command.register({ name: 'f', description: `f: ${SUBCOMMANDS.map(c => c.name).join(' · ')} (bare /f lists them)`, argumentHint: '<cmd> [args]', immediate: true })
+    for (const c of COMMANDS) {
+      await $.command.register({ name: `f${c.name}`, description: c.description, argumentHint: c.argumentHint, immediate: c.immediate })
+    }
 
     const creds = await f($, ['creds'])
     if (creds.code !== 0) {
@@ -342,10 +338,6 @@ export const register: Register = on => {
     if (turn.running) {
       turn.running = false
       await f($, ['checkpoint', 'end', '--prompt', turnPrompt])
-      if (turn.syncAfter) {
-        turn.syncAfter = false
-        background($, async () => $.ui.toast(await syncFeature($)))
-      }
       const info = await featureInfo($)
       background($, async () => {
         await refreshPRs($)
@@ -356,18 +348,12 @@ export const register: Register = on => {
     return next(e)
   })
 
-  // --- /f ----------------------------------------------------------------------
+  // --- /f<name> -------------------------------------------------------------------
 
-  on('command.run', { command: 'f' }, async ($, e) => {
-    const [name = '', ...rest] = e.args.trim().split(/\s+/)
-    if (!name) {
-      const width = Math.max(...SUBCOMMANDS.map(c => c.usage.length)) + 2
-      await openPick($, { kind: 'command', options: SUBCOMMANDS.map(c => ({ value: c.name, label: `${c.usage.padEnd(width)}${c.description}` })) })
-      return { text: 'pick an f command' }
-    }
-    const sub = SUBCOMMANDS.find(c => c.name === name)
-    if (!sub) return { text: `no /f ${name}; there's ${SUBCOMMANDS.map(c => c.name).join(' · ')}` }
-    return { text: await dispatch($, turn, sub, rest.join(' ')) }
+  on('command.run', async ($, e, next) => {
+    const cmd = COMMANDS.find(c => `f${c.name}` === e.command)
+    if (!cmd) return next(e)
+    return { text: await runCommand($, cmd.name, e.args.trim()) }
   })
 
   // --- drawing -------------------------------------------------------------------
@@ -379,11 +365,6 @@ export const register: Register = on => {
 
     const choose = async (value: string) => {
       await closePick($)
-      if (p.kind === 'command') {
-        const sub = SUBCOMMANDS.find(c => c.name === value)
-        if (sub) $.ui.toast(await dispatch($, turn, sub, ''))
-        return
-      }
       const blocks = codeBlocks((await lastReply($)) ?? '').filter((_b, i) => value === 'all' || i === Number(value))
       $.ui.toast(blocks.length ? await copyBlocks($, blocks.map(b => b.code)) : 'that code block is gone')
     }

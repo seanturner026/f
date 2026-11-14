@@ -24,7 +24,7 @@ const help = `f: one Claude Code session across several repos, each on its own w
   f add [repo...]  add repos to this feature
   f resume         after a Herdr restart: restart the agent, nvim, prs in every feature workspace
   f prs [-r] [-c]  this feature's PRs (-r refresh, -c copy, -w live view)
-  f prs review     unresolved GitHub review threads on the open PRs, as a prompt (/f prr)
+  f prs review     unresolved GitHub review threads on the open PRs, as a prompt (/fprr)
   f review <repo>  review a repo in tuicr (each repo tab runs it; :q picks a PR or the agent's turns)
   f ci fix         send failing checks to the agent (it fixes and pushes)
   f sync           after a PR merges: reset/drop merged branches, rebase the rest onto main
@@ -74,7 +74,7 @@ func main() {
 					{
 						// Without --tree: steps grouped by in progress / ready / blocked / done.
 						Name:   "show",
-						Flags:  []cli.Flag{&cli.BoolFlag{Name: "tree", Usage: "dependency tree (/f plan)"}},
+						Flags:  []cli.Flag{&cli.BoolFlag{Name: "tree", Usage: "dependency tree (/fplan)"}},
 						Action: func(ctx context.Context, c *cli.Command) error { return planShow(ctx, d, c.Bool("tree")) },
 					},
 				},
@@ -161,7 +161,7 @@ func main() {
 							return commentList(d, c.String("feature"), c.Bool("json"))
 						}},
 					{Name: "send", Usage: "send them (and tuicr's) to the agent and clear", Flags: []cli.Flag{featureFlag,
-						&cli.BoolFlag{Name: "print", Usage: "print the prompt instead of sending it (the mod's /f sr)"}},
+						&cli.BoolFlag{Name: "print", Usage: "print the prompt instead of sending it (the mod's /fsr)"}},
 						Action: func(ctx context.Context, c *cli.Command) error {
 							return commentSend(ctx, d, c.String("feature"), c.Bool("print"))
 						}},
@@ -327,7 +327,7 @@ func main() {
 				Commands: []*cli.Command{{
 					Name:  "fix",
 					Usage: "send failing checks (with failed job logs) to the agent: find the cause, fix and push",
-					Flags: []cli.Flag{featureFlag, &cli.BoolFlag{Name: "print", Usage: "print the prompt instead (for /f ci)"}},
+					Flags: []cli.Flag{featureFlag, &cli.BoolFlag{Name: "print", Usage: "print the prompt instead (for /fci)"}},
 					Action: func(ctx context.Context, c *cli.Command) error {
 						return ciFix(ctx, d, c.String("feature"), c.Bool("print"))
 					},
@@ -373,7 +373,7 @@ func main() {
 					})
 				},
 				Commands: []*cli.Command{
-					{Name: "review", Usage: "print the unresolved review threads on this feature's open PRs as a prompt (/f prr sends it)",
+					{Name: "review", Usage: "print the unresolved review threads on this feature's open PRs as a prompt (/fprr sends it)",
 						Flags: []cli.Flag{featureFlag},
 						Action: func(ctx context.Context, c *cli.Command) error {
 							return prsReview(ctx, d, c.String("feature"))

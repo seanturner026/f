@@ -10,7 +10,7 @@ import (
 )
 
 // prsReview prints the unresolved review threads on the feature's open PRs
-// as one prompt (nothing if there are none); the mod's /f prr sends it.
+// as one prompt (nothing if there are none); the mod's /fprr sends it.
 func prsReview(ctx context.Context, d deps, explicit string) error {
 	name, err := resolve(d, explicit)
 	if err != nil {
