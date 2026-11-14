@@ -11,9 +11,12 @@ import (
 	"github.com/seanturner026/f/internal/tuicr"
 )
 
-// ReviewSession is a tuicr session that holds comments, so it can be cleared
-// once they're sent.
-type ReviewSession struct{ Dir, Slug string }
+// ReviewSession is a tuicr session and the comments read from it, so exactly
+// those can be deleted once sent (ones added meanwhile stay).
+type ReviewSession struct {
+	Dir, Slug string
+	IDs       []string
+}
 
 // TuicrComments gathers the draft comments of every repo's tuicr reviews as
 // f comments (file relative to the feature root, code read from the worktree).
@@ -42,20 +45,24 @@ func TuicrComments(ctx context.Context, r tuicr.Runner, l Layout, name string) (
 			if err != nil {
 				return nil, nil, err
 			}
+			session := ReviewSession{Dir: dir, Slug: s.Slug}
 			for _, c := range cs {
 				out = append(out, fromTuicr(dir, repo, c))
+				session.IDs = append(session.IDs, c.ID)
 			}
-			sessions = append(sessions, ReviewSession{Dir: dir, Slug: s.Slug})
+			sessions = append(sessions, session)
 		}
 	}
 	return out, sessions, nil
 }
 
-// ClearTuicrComments clears the sessions TuicrComments read.
-func ClearTuicrComments(ctx context.Context, r tuicr.Runner, sessions []ReviewSession) error {
+// DeleteTuicrComments deletes the comments TuicrComments read.
+func DeleteTuicrComments(ctx context.Context, r tuicr.Runner, sessions []ReviewSession) error {
 	for _, s := range sessions {
-		if err := tuicr.ClearComments(ctx, r, s.Dir, s.Slug); err != nil {
-			return err
+		for _, id := range s.IDs {
+			if err := tuicr.DeleteComment(ctx, r, s.Dir, s.Slug, id); err != nil {
+				return err
+			}
 		}
 	}
 	return nil

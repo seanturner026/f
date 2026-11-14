@@ -41,15 +41,29 @@ func LoadInfo(l Layout, name string) (Info, error) {
 	return info, nil
 }
 
-// SetIssue records the feature's beads issue and regenerates AGENTS.md.
-func SetIssue(l Layout, name, issue string) (Info, error) {
+// UpdateInfo changes the feature's info under a lock, as UpdateState does for
+// its state: concurrent writers (f goal, f setup) would drop each other's fields.
+func UpdateInfo(l Layout, name string, fn func(*Info)) (Info, error) {
+	unlock, err := lockFile(InfoPath(l, name)+".lock", true)
+	if err != nil {
+		return Info{}, err
+	}
+	defer unlock()
 	info, err := LoadInfo(l, name)
 	if err != nil {
 		return Info{}, err
 	}
-	info.Issue = issue
+	fn(&info)
 	if err := writeJSON(InfoPath(l, name), info); err != nil {
 		return Info{}, fmt.Errorf("save feature info: %w", err)
+	}
+	return info, nil
+}
+
+// SetIssue records the feature's beads issue and regenerates AGENTS.md.
+func SetIssue(l Layout, name, issue string) (Info, error) {
+	if _, err := UpdateInfo(l, name, func(i *Info) { i.Issue = issue }); err != nil {
+		return Info{}, err
 	}
 	return Sync(l, name, "")
 }
@@ -57,10 +71,6 @@ func SetIssue(l Layout, name, issue string) (Info, error) {
 // Sync refreshes the feature's info (repos from disk, plus any still being set
 // up; goal if non-empty, otherwise the existing one) and regenerates AGENTS.md.
 func Sync(l Layout, name, goal string) (Info, error) {
-	info, err := LoadInfo(l, name)
-	if err != nil {
-		return Info{}, err
-	}
 	repos, err := Repos(l, name)
 	if err != nil {
 		return Info{}, err
@@ -73,15 +83,17 @@ func Sync(l Layout, name, goal string) (Info, error) {
 		}
 		slices.Sort(repos)
 	}
-	info.Name, info.Root, info.Repos = name, Dir(l, name), repos
-	switch {
-	case goal != "":
-		info.Goal = goal
-	case info.Goal == "":
-		info.Goal = ExistingGoal(AgentsMDPath(l, name)) // migrate older features
-	}
-	if err := writeJSON(InfoPath(l, name), info); err != nil {
-		return Info{}, fmt.Errorf("save feature info: %w", err)
+	info, err := UpdateInfo(l, name, func(info *Info) {
+		info.Name, info.Root, info.Repos = name, Dir(l, name), repos
+		switch {
+		case goal != "":
+			info.Goal = goal
+		case info.Goal == "":
+			info.Goal = ExistingGoal(AgentsMDPath(l, name)) // migrate older features
+		}
+	})
+	if err != nil {
+		return Info{}, err
 	}
 	if err := writeAgentsMD(l, info); err != nil {
 		return Info{}, err

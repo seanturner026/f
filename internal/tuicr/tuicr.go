@@ -23,6 +23,7 @@ type Session struct {
 // Comment is a draft review comment. Path is empty for a whole-review
 // comment, StartLine zero for a whole-file one.
 type Comment struct {
+	ID        string `json:"id"`
 	Path      string `json:"path"`
 	StartLine int    `json:"start_line"`
 	EndLine   int    `json:"end_line"`
@@ -63,10 +64,10 @@ func Comments(ctx context.Context, r Runner, dir, slug string) ([]Comment, error
 	return cs, nil
 }
 
-// ClearComments deletes session slug's comments, keeping its reviewed marks.
-func ClearComments(ctx context.Context, r Runner, dir, slug string) error {
-	if _, err := r.Run(ctx, dir, "tuicr", "review", "clearc", "--session", slug, "--repo", dir); err != nil {
-		return fmt.Errorf("tuicr review clearc: %w", err)
+// DeleteComment deletes one comment of session slug.
+func DeleteComment(ctx context.Context, r Runner, dir, slug, id string) error {
+	if _, err := r.Run(ctx, dir, "tuicr", "review", "delete", "--session", slug, "--comment-id", id, "--repo", dir); err != nil {
+		return fmt.Errorf("tuicr review delete: %w", err)
 	}
 	return nil
 }
