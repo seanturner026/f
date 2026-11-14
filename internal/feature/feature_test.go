@@ -51,6 +51,7 @@ func mustMkdir(t *testing.T, path string) {
 }
 
 func TestCheckName(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name, in string
 		wantErr  bool
@@ -76,6 +77,7 @@ func TestCheckName(t *testing.T) {
 }
 
 func TestResolve(t *testing.T) {
+	t.Parallel()
 	l := newLayout(t, "feat", "argocd")
 	tests := []struct {
 		name, explicit, cwd, want string
@@ -102,6 +104,7 @@ func TestResolve(t *testing.T) {
 }
 
 func TestSync(t *testing.T) {
+	t.Parallel()
 	l := newLayout(t, "feat", "argocd", "ops")
 	l.AgentRules = []string{"Read CI logs with `x logs <id>`."}
 	if err := os.WriteFile(filepath.Join(feature.Dir(l, "feat"), "argocd", "CLAUDE.md"), nil, 0o644); err != nil {
@@ -142,6 +145,7 @@ func TestSync(t *testing.T) {
 }
 
 func TestSyncMigratesLegacyGoal(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name, agents, wantGoal string
 	}{
@@ -166,6 +170,7 @@ func TestSyncMigratesLegacyGoal(t *testing.T) {
 }
 
 func TestPRs(t *testing.T) {
+	t.Parallel()
 	l := newLayout(t, "feat", "argocd", "infra")
 	runner := fakeRunner{"gh pr list": `[{"number":7,"state":"OPEN","url":"u","isDraft":false}]`}
 	prs, errs, err := feature.PRs(context.Background(), runner, l, "feat")
@@ -181,6 +186,7 @@ func TestPRs(t *testing.T) {
 }
 
 func TestComments(t *testing.T) {
+	t.Parallel()
 	l := newLayout(t, "feat", "argocd")
 	tests := []struct {
 		name    string
@@ -229,6 +235,7 @@ func TestComments(t *testing.T) {
 }
 
 func TestRemoveWithDeletedBaseClone(t *testing.T) {
+	t.Parallel()
 	l := newLayout(t, "feat", "gone")
 	if err := os.RemoveAll(filepath.Join(l.Base, "gone")); err != nil {
 		t.Fatal(err)

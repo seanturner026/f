@@ -13,6 +13,7 @@ import (
 )
 
 func TestTuicrComments(t *testing.T) {
+	t.Parallel()
 	if _, err := exec.LookPath("tuicr"); err != nil {
 		t.Skip("tuicr not installed") // TuicrComments skips repos without it
 	}

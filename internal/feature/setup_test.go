@@ -8,6 +8,7 @@ import (
 )
 
 func TestSetup(t *testing.T) {
+	t.Parallel()
 	l := feature.NewLayout(t.TempDir())
 	setup := func() *feature.Setup { s, _ := feature.LoadState(l, "feat"); return s.Setup }
 

@@ -12,6 +12,7 @@ import (
 )
 
 func TestParsePRURL(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name, in string
 		want     model.PR
@@ -52,6 +53,7 @@ func TestParsePRURL(t *testing.T) {
 }
 
 func TestLoadStateMissing(t *testing.T) {
+	t.Parallel()
 	l := newLayout(t, "feat", "argocd")
 	s, err := feature.LoadState(l, "feat")
 	if err != nil {
@@ -63,6 +65,7 @@ func TestLoadStateMissing(t *testing.T) {
 }
 
 func TestRecordPR(t *testing.T) {
+	t.Parallel()
 	a := model.PR{Repo: "argocd", Number: 1, URL: "u1", Status: model.PRStatusOpen}
 	b := model.PR{Repo: "infra", Number: 2, URL: "u2", Status: model.PRStatusOpen}
 	aMerged := model.PR{Repo: "argocd", Number: 1, URL: "u1", Status: model.PRStatusMerged}
@@ -113,6 +116,7 @@ func (f perRepoRunner) Run(_ context.Context, dir, _ string, args ...string) (st
 }
 
 func TestRefreshPRs(t *testing.T) {
+	t.Parallel()
 	cached := model.PR{Repo: "infra", Number: 9, URL: "old", Status: model.PRStatusOpen}
 	tests := []struct {
 		name       string
@@ -164,6 +168,7 @@ func TestRefreshPRs(t *testing.T) {
 }
 
 func TestUpdateStateConcurrentWritersKeepEachOthersFields(t *testing.T) {
+	t.Parallel()
 	l := newLayout(t, "feat", "argocd")
 	var wg sync.WaitGroup
 	for i := range 20 {
@@ -191,6 +196,7 @@ func TestUpdateStateConcurrentWritersKeepEachOthersFields(t *testing.T) {
 }
 
 func TestRefreshPRsKeepsMergedHistory(t *testing.T) {
+	t.Parallel()
 	l := newLayout(t, "feat", "argocd")
 	merged := model.PR{Repo: "argocd", Number: 3, URL: "u3", Status: model.PRStatusMerged}
 	if err := feature.RecordPR(l, "feat", merged); err != nil {
@@ -217,6 +223,7 @@ func TestRefreshPRsKeepsMergedHistory(t *testing.T) {
 }
 
 func TestRefreshPRsPartialFailureDoesNotDuplicate(t *testing.T) {
+	t.Parallel()
 	l := newLayout(t, "feat", "f")
 	// The stack names a PR gh can't view; the branch list still finds #1.
 	run := fakeRunner{
@@ -235,6 +242,7 @@ func TestRefreshPRsPartialFailureDoesNotDuplicate(t *testing.T) {
 }
 
 func TestAllPRsDedupesMergedEarlier(t *testing.T) {
+	t.Parallel()
 	p := model.PR{Repo: "f", Number: 3, URL: "u3", Status: model.PRStatusMerged}
 	s := feature.State{MergedEarlier: []model.PR{p, p, p}}
 	if got := s.AllPRs(); len(got) != 1 {
@@ -243,6 +251,7 @@ func TestAllPRsDedupesMergedEarlier(t *testing.T) {
 }
 
 func TestSetFlagged(t *testing.T) {
+	t.Parallel()
 	l := newLayout(t, "feat", "argocd")
 	for i, want := range []bool{true, false} {
 		if got, err := feature.SetFlagged(l, "feat", false, true); err != nil || got != want {
