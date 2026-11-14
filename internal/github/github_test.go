@@ -132,6 +132,15 @@ func TestRepoPRs(t *testing.T) {
 			},
 		},
 		{
+			name: "merge conflicts: only on active PRs",
+			runner: cmdRunner{"stack": "ERR", "pr list": `[{"number":7,"state":"OPEN","url":"u7","headRefName":"feat","baseRefName":"main","mergeable":"CONFLICTING"},
+				{"number":6,"state":"MERGED","url":"u6","headRefName":"feat","baseRefName":"main","mergeable":"CONFLICTING"}]`},
+			want: []model.PR{
+				{Repo: "r", Number: 7, URL: "u7", Status: model.PRStatusOpen, Head: "feat", Base: "main", Conflicting: true},
+				{Repo: "r", Number: 6, URL: "u6", Status: model.PRStatusMerged, Head: "feat", Base: "main"},
+			},
+		},
+		{
 			name:   "no stack: falls back to the feature branch",
 			runner: cmdRunner{"stack": "ERR", "pr list": `[{"number":7,"state":"OPEN","title":"t","url":"u7","headRefName":"feat","baseRefName":"main"}]`},
 			want:   []model.PR{{Repo: "r", Number: 7, Title: "t", URL: "u7", Status: model.PRStatusOpen, Head: "feat", Base: "main"}},

@@ -44,6 +44,21 @@ func TestAttention(t *testing.T) {
 	}
 }
 
+func TestConflicts(t *testing.T) {
+	conflicted := []model.PR{
+		{Repo: "ops", Status: model.PRStatusOpen, Conflicting: true},
+		{Repo: "core", Status: model.PRStatusOpen, Checks: []model.Check{{State: model.CheckFail}}},
+		{Repo: "old", Status: model.PRStatusMerged, Conflicting: true},
+	}
+	if got, want := ciCell(conflicted), "conflict ops · ✗ core"; got != want {
+		t.Errorf("ciCell = %q, want %q", got, want)
+	}
+	idle := pickerRow{status: statusIdle, prs: conflicted[:1]}
+	if got, want := attention(idle), statusRank[statusNeedsYou]; got != want {
+		t.Errorf("idle with a conflict: attention = %d, want %d (needs you)", got, want)
+	}
+}
+
 func TestWithUnread(t *testing.T) {
 	tests := []struct {
 		status featureStatus

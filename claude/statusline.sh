@@ -36,7 +36,8 @@ prs=$(cd "$root" && f prs --json 2>/dev/null | jq -r '
       elif ($s | length) > 0 then " " + c("32"; "✓") else "" end;
   (.prs // []) as $all
   | ([$all[] | select(.status == "open" or .status == "draft")
-      | "\(.repo) #\(.number) " + (if .status == "open" then c("36"; "open") else c("2"; "draft") end) + ci]
+      | "\(.repo) #\(.number) " + (if .status == "open" then c("36"; "open") else c("2"; "draft") end) + ci
+        + (if .conflicting then " " + c("31"; "conflicts") else "" end)]
      + ([$all[] | select(.status == "merged")] | length | if . > 0 then [c("32"; "\(.) merged")] else [] end))
   | if length > 0 then c("2"; "PRs: ") + join(c("2"; " · ")) else empty end')
 # Exit 0 even with no PRs: Claude Code drops the whole status line when this script fails.
