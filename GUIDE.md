@@ -151,7 +151,7 @@ Send comments with `/fsr [text]` in chat (or `f comment send`).
 |---|---|
 | `<leader>pc` | Comment on line/selection (normal or visual) |
 | `<leader>pl` | List pending comments (quickfix) |
-| `<leader>pp` | Pick pending comments (Snacks): ⏎ jumps to one, Tab selects several, ctrl-x deletes |
+| `<leader>pp` | Pick pending comments (Snacks): ⏎ jumps to one, Tab selects several, ctrl-x deletes them and the list stays open |
 | `<leader>ps` | Send comments (nvim's and tuicr's) to the agent |
 | `:FClear` | Discard pending comments |
 
