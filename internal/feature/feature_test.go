@@ -214,6 +214,12 @@ func TestComments(t *testing.T) {
 	if len(cs) != 2 {
 		t.Fatalf("want 2 saved, got %d", len(cs))
 	}
+	if err := feature.DeleteComments(l, "feat", cs[0].ID, 99); err != nil {
+		t.Fatal(err)
+	}
+	if left, _ := feature.LoadComments(l, "feat"); len(left) != 1 || left[0].ID != cs[1].ID {
+		t.Errorf("after deleting #%d: %+v, want only #%d", cs[0].ID, left, cs[1].ID)
+	}
 	if err := feature.ClearComments(l, "feat"); err != nil {
 		t.Fatal(err)
 	}
