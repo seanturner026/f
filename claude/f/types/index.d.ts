@@ -1,9 +1,6 @@
 export type PickOption = { value: string; label: string }
-// What the picker pane shows: code blocks to copy, a feature to open, or repos for a new one.
-export type Pick =
-  | { kind: 'code'; options: PickOption[] }
-  | { kind: 'feature'; options: PickOption[] }
-  | { kind: 'repos'; name: string; options: PickOption[]; chosen: string[] }
+// What the picker pane shows: code blocks to copy, or the /f subcommands.
+export type Pick = { kind: 'code' | 'command'; options: PickOption[] }
 
 declare module 'claude-code' {
   interface PluginState {
