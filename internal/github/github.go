@@ -346,3 +346,71 @@ func LogExcerpt(raw string, maxLines int) string {
 	}
 	return strings.Join(lines, "\n")
 }
+
+// prURL matches a pull request link: github.com/<owner>/<repo>/pull/<n>.
+var prURL = regexp.MustCompile(`github\.com/([^/]+)/([^/]+)/pull/\d+`)
+
+const reviewThreadsQuery = `query($owner: String!, $name: String!, $number: Int!) {
+  repository(owner: $owner, name: $name) {
+    pullRequest(number: $number) {
+      reviewThreads(first: 100) {
+        nodes {
+          isResolved
+          path
+          line
+          comments(first: 50) { nodes { author { login } body diffHunk } }
+        }
+      }
+    }
+  }
+}`
+
+// ReviewThreads returns pr's unresolved review threads, oldest first.
+func ReviewThreads(ctx context.Context, r Runner, dir string, pr model.PR) ([]model.ReviewThread, error) {
+	m := prURL.FindStringSubmatch(pr.URL)
+	if m == nil {
+		return nil, fmt.Errorf("review threads: %q isn't a GitHub PR URL", pr.URL)
+	}
+	out, err := r.Run(ctx, dir, "gh", "api", "graphql", "-f", "query="+reviewThreadsQuery,
+		"-F", "owner="+m[1], "-F", "name="+m[2], "-F", fmt.Sprintf("number=%d", pr.Number))
+	if err != nil {
+		return nil, fmt.Errorf("review threads of #%d: %w", pr.Number, err)
+	}
+	var resp struct {
+		Data struct {
+			Repository struct {
+				PullRequest struct {
+					ReviewThreads struct {
+						Nodes []struct {
+							IsResolved bool   `json:"isResolved"`
+							Path       string `json:"path"`
+							Line       int    `json:"line"`
+							Comments   struct {
+								Nodes []struct {
+									Author   struct{ Login string } `json:"author"`
+									Body     string                 `json:"body"`
+									DiffHunk string                 `json:"diffHunk"`
+								} `json:"nodes"`
+							} `json:"comments"`
+						} `json:"nodes"`
+					} `json:"reviewThreads"`
+				} `json:"pullRequest"`
+			} `json:"repository"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal([]byte(out), &resp); err != nil {
+		return nil, fmt.Errorf("review threads of #%d: decode: %w", pr.Number, err)
+	}
+	var threads []model.ReviewThread
+	for _, n := range resp.Data.Repository.PullRequest.ReviewThreads.Nodes {
+		if n.IsResolved || len(n.Comments.Nodes) == 0 {
+			continue
+		}
+		t := model.ReviewThread{Path: n.Path, Line: n.Line, DiffHunk: n.Comments.Nodes[0].DiffHunk}
+		for _, c := range n.Comments.Nodes {
+			t.Comments = append(t.Comments, model.ReviewComment{Author: c.Author.Login, Body: c.Body})
+		}
+		threads = append(threads, t)
+	}
+	return threads, nil
+}

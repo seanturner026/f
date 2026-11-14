@@ -118,11 +118,12 @@ The statusline shows the feature's PRs with CI, and `conflicts` on one that conf
 | `/sync` | After a PR merges: merged branches are reset to main (the feature branch) or deleted (stack branches), commits added after a merge are kept, the rest of the stack is rebased onto main, force-pushed (with lease) and its PRs moved to base `main`; one line per branch. Also runs (without pushing; stacks wait) when you open the feature and on `r` in the prs tab |
 | `/plan`, `/steps` | The feature's beads plan as a dependency tree, in a sidebar that updates as the plan changes; opens at once with the last plan, then refreshes. `/plan` replaces Claude Code's (shift+tab still reaches plan mode) and waits for a running turn; `/steps` runs mid-turn |
 | `/ci` | Send failing checks + failed-job logs to the agent: it finds the cause, fixes and pushes (asks first only for behavior changes or judgment calls) |
+| `/fprr [text]` | Send your text plus the unresolved GitHub review threads on the feature's open PRs (with the diff context); the agent fixes them, you resolve the threads |
 | `/fsr [text]` | Send your text plus the pending review comments (tuicr's in every repo, and nvim's) as one message, then clear them |
 | `/code [n]` | Copy code block(s) from the last reply exactly as written (no wrap/indent); several: pick one or all |
 | `/slack` | Copy the last reply formatted for Slack, just its quoted (`>`) draft if it has one: `*bold*`, headings as bold lines, `•` bullets, links as `text (url)`; code untouched |
 
-Only `/ci` and `/fsr` reach the model. `/prs`, `/prc` and `/f` run at once, even mid-turn; the rest wait for the turn to end.
+Only `/ci`, `/fsr` and `/fprr` reach the model. `/prs`, `/prc` and `/f` run at once, even mid-turn; the rest wait for the turn to end.
 Herdr's busy/idle marks need `herdr integration install claude`. Herdr plays its Done sound when Claude finishes. Mouse selection copies when
 **Copy on select** is on in `/config`; hold Shift for Herdr's own selection.
 
