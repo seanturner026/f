@@ -64,7 +64,7 @@ func planSync(ctx context.Context, d deps) error {
 }
 
 // planShow prints the current feature's plan, or with tree as a dependency
-// tree (/plan).
+// tree (/f plan).
 func planShow(ctx context.Context, d deps, tree bool) error {
 	name, err := resolve(d, "")
 	if err != nil {

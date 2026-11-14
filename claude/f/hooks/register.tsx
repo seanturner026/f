@@ -9,10 +9,8 @@
  * - PRs: refreshed after each turn, `gh pr create` output recorded (`f prs --add`);
  *   claude/statusline.sh draws them.
  * - The feature is the session's root: Bash `cd` moves Claude Code's cwd.
- * - Commands that never reach the model: /prs /prc /sync /plan /steps /f /code /slack.
- *   /ci sends failing checks to the model, /fsr your text plus the tuicr/nvim review comments,
- *   /fprr your text plus the PRs' unresolved GitHub review threads. /plan replaces Claude Code's (shift+tab still reaches plan mode);
- *   /steps is the same but runs mid-turn: a built-in's name can't be made immediate.
+ * - One command, /f <cmd> (SUBCOMMANDS; bare /f lists them). It runs mid-turn; /f sync
+ *   waits for a running turn. ci, sr and prr send a prompt to the model; the rest don't.
  * - Quieter chrome: no "Worked for …" line, no hint/mode row under the prompt while idle.
  */
 import { atom, read, update } from 'claude-code'
@@ -33,7 +31,7 @@ const MARK_COLORS: Record<string, string> = { '✓': 'success', '◐': 'suggesti
 const PR_URL = /https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/pull\/\d+/g
 
 const plan = atom({ plugin: 'f', key: 'plan' } as const, null, { shape: 'plan-1' })
-const pick = atom({ plugin: 'f', key: 'pick' } as const, null, { shape: 'pick-1' })
+const pick = atom({ plugin: 'f', key: 'pick' } as const, null, { shape: 'pick-2' })
 
 async function f($: $, args: string[], timeoutMs = 30_000) {
   try {
@@ -61,15 +59,15 @@ async function refreshPRs($: $) {
 
 // togglePlan opens the plan pane with the last plan drawn, then refreshes it
 // from beads (bd is slow), or closes it.
-async function togglePlan($: $, command: string) {
+async function togglePlan($: $): Promise<string> {
   if ((await $.ui.panes()).some(p => p.id === PLAN_PANE)) {
     await $.ui.close({ id: PLAN_PANE })
-    return { text: 'plan hidden' }
+    return 'plan hidden'
   }
-  if (!(await featureInfo($))) return { text: 'not in an f feature' }
   await $.ui.open({ id: PLAN_PANE, title: 'Plan' })
   background($, () => refreshPlan($))
-  return { text: `plan in the sidebar, updated as it changes (/${command} again to hide)` }
+  return 'plan in the sidebar, updated as it changes (/f plan again to hide)'
+
 }
 
 // refreshPlan redraws the plan pane, if it's open, from beads.
@@ -125,7 +123,7 @@ async function copyBlocks($: $, codes: string[]): Promise<string> {
 async function openPick($: $, value: Pick) {
   await update($, pick, () => value)
   const widest = Math.max(20, ...value.options.map(o => o.label.length + 8))
-  await $.ui.open({ id: PICK_PANE, title: value.kind === 'code' ? 'Copy which code block?' : value.kind === 'feature' ? 'Open which feature?' : `${value.name}: repos`, focus: true, closeOnEscape: true, rows: value.options.length + 4, columns: Math.min(widest, 80) })
+  await $.ui.open({ id: PICK_PANE, title: value.kind === 'code' ? 'Copy which code block?' : 'f commands', focus: true, closeOnEscape: true, rows: value.options.length + 4, columns: Math.min(widest, 90) })
 }
 
 async function closePick($: $) {
@@ -133,42 +131,144 @@ async function closePick($: $) {
   await update($, pick, () => null)
 }
 
-async function openFeature($: $, name: string, repos: string[]): Promise<string> {
-  $.ui.toast(`f ${name}…`)
-  const res = await f($, [name, ...repos.flatMap(r => ['-r', r])], 180_000)
+// --- /f subcommands ----------------------------------------------------------------
+
+// sendPrompt submits text as the user's next message: queued until the turn
+// it starts, so it never interrupts one.
+function sendPrompt($: $, text: string) {
+  background($, () => $.prompt.submit({ text }))
+}
+
+async function openPRs($: $): Promise<string> {
+  const res = await f($, ['prs']) // saved PRs at once: a live lookup is several slow gh calls
+  background($, () => refreshPRs($))
+  return res.code === 0 ? 'opened PRs' : res.stderr.trim() || 'f prs failed'
+}
+
+async function copyPRs($: $): Promise<string> {
+  const res = await f($, ['prs', '-c'])
   const out = (res.stdout + res.stderr).trim()
-  return res.code === 0 ? summarize(out, `opened ${name}`) : out || `f ${name} failed`
+  return res.code === 0 ? summarize(out, 'copied') : out || 'f prs -c failed'
 }
 
-// featureNames and baseRepos ask f: its config says where features and repos live.
-async function lines($: $, args: string[]): Promise<string[]> {
-  const res = await f($, args)
-  return res.code === 0 ? res.stdout.split('\n').filter(Boolean) : []
+async function sendReviewThreads($: $, text: string): Promise<string> {
+  $.ui.toast('reading review threads…')
+  const res = await f($, ['prs', 'review'], 120_000)
+  if (res.code !== 0) return res.stderr.trim() || 'f prs review failed'
+  const prompt = [text, res.stdout.trim()].filter(Boolean).join('\n\n')
+  if (!prompt) return 'no unresolved review threads'
+  sendPrompt($, prompt)
+  return res.stdout.trim() ? 'sending review threads…' : 'no unresolved review threads; sending your text'
 }
-const featureNames = ($: $) => lines($, ['features'])
-const baseRepos = ($: $) => lines($, ['repos'])
 
-const asOptions = (values: string[]): PickOption[] => values.map(v => ({ value: v, label: v }))
+async function sendReviewComments($: $, text: string): Promise<string> {
+  const res = await f($, ['comment', 'send', '--print'], 60_000)
+  if (res.code !== 0) return res.stderr.trim() || 'f comment send failed'
+  const prompt = [text, res.stdout.trim()].filter(Boolean).join('\n\n')
+  if (!prompt) return 'no review comments'
+  sendPrompt($, prompt)
+  return res.stdout.trim() ? 'sending review comments…' : 'no review comments; sending your text'
+}
+
+async function sendFailingChecks($: $): Promise<string> {
+  $.ui.toast('checking CI…')
+  const res = await f($, ['ci', 'fix', '--print'], 120_000)
+  if (res.code !== 0) return res.stderr.trim() || 'f ci fix failed'
+  if (!res.stdout.trim()) return 'no failing checks'
+  sendPrompt($, res.stdout.trim())
+  return 'sending failing checks…'
+}
+
+async function syncFeature($: $): Promise<string> {
+  const res = await f($, ['sync'], 120_000)
+  return (res.stdout + res.stderr).trim() || 'nothing to sync'
+}
+
+async function copyCode($: $, args: string): Promise<string> {
+  const text = await lastReply($)
+  const blocks = text ? codeBlocks(text) : []
+  if (blocks.length === 0) return 'no code blocks in the last reply'
+  const n = Number.parseInt(args, 10)
+  if (!Number.isNaN(n)) {
+    const block = blocks[n - 1]
+    return block ? copyBlocks($, [block.code]) : `there are ${blocks.length} code blocks`
+  }
+  if (blocks.length === 1) return copyBlocks($, blocks.map(b => b.code))
+  const options = blocks.map((b, i) => {
+    const first = b.code.split('\n')[0].trim()
+    return { value: String(i), label: `${b.lang ? `[${b.lang}] ` : ''}${first.length > 70 ? `${first.slice(0, 69)}…` : first}` }
+  })
+  await openPick($, { kind: 'code', options: [...options, { value: 'all', label: `all ${blocks.length}` }] })
+  return 'pick a code block'
+}
+
+async function copySlack($: $): Promise<string> {
+  const text = await lastReply($)
+  return text ? copy($, slackText(text), 'copied for Slack') : 'no reply to copy'
+}
+
+type Subcommand = {
+  name: string
+  usage: string
+  description: string
+  feature: boolean // needs an f feature
+}
+
+// The /f subcommands, in the order bare /f lists them.
+const SUBCOMMANDS: Subcommand[] = [
+  { name: 'prs', usage: 'prs', description: "open the feature's open PRs", feature: true },
+  { name: 'prc', usage: 'prc', description: 'copy them as url: title lines', feature: true },
+  { name: 'prr', usage: 'prr [text]', description: '+ unresolved GitHub review threads → the agent', feature: true },
+  { name: 'sr', usage: 'sr [text]', description: '+ tuicr/nvim review comments → the agent', feature: true },
+  { name: 'ci', usage: 'ci', description: 'failing checks → the agent: fix and push', feature: true },
+  { name: 'sync', usage: 'sync', description: 'after a merge: reset/rebase branches (after a running turn)', feature: true },
+  { name: 'plan', usage: 'plan', description: 'show/hide the plan sidebar', feature: true },
+  { name: 'code', usage: 'code [n]', description: 'copy code block(s) from the last reply', feature: false },
+  { name: 'slack', usage: 'slack', description: "copy the last reply's quoted draft for Slack", feature: false },
+]
+
+// Turn is the session's turn state: whether a run is going, and a /f sync
+// held back until it ends (sync moves branches under the agent).
+type Turn = { running: boolean; syncAfter: boolean }
+
+// dispatch runs /f <cmd>.
+async function dispatch($: $, turn: Turn, sub: Subcommand, args: string): Promise<string> {
+  if (sub.feature && !(await featureInfo($))) return 'not in an f feature'
+  if (sub.name === 'sync' && turn.running) {
+    turn.syncAfter = true
+    return 'syncing when this turn ends'
+  }
+  switch (sub.name) {
+    case 'prs':
+      return openPRs($)
+    case 'prc':
+      return copyPRs($)
+    case 'prr':
+      return sendReviewThreads($, args)
+    case 'sr':
+      return sendReviewComments($, args)
+    case 'ci':
+      return sendFailingChecks($)
+    case 'sync':
+      return syncFeature($)
+    case 'plan':
+      return togglePlan($)
+    case 'code':
+      return copyCode($, args)
+    case 'slack':
+      return copySlack($)
+  }
+  return `no /f ${sub.name}`
+}
 
 export const register: Register = on => {
   let guardError = 'starting'
-  let running = false
+  const turn: Turn = { running: false, syncAfter: false }
   let turnPrompt = '' // names the run's turn in the review (f checkpoint end --prompt)
 
+
   on('session.start', async ($, e, next) => {
-    const commands = [
-      { name: 'prs', description: "Open this feature's open PRs in the browser (saved list; refreshed after)", immediate: true as const },
-      { name: 'prc', description: "Copy this feature's PRs as url: title lines (stacks numbered)", immediate: true as const },
-      { name: 'sync', description: 'After a PR merges: reset its repo to main (or rebase newer commits onto it)' },
-      { name: 'ci', description: "Send this feature's failing CI checks (with logs): find the cause, fix and push" },
-      { name: 'fsr', description: 'Send your text plus the pending review comments (tuicr and nvim) as one message', argumentHint: '[text]' },
-      { name: 'fprr', description: "Send your text plus the unresolved GitHub review threads on this feature's open PRs", argumentHint: '[text]' },
-      { name: 'steps', description: "Show/hide this feature's beads plan in the sidebar (like /plan, but runs mid-turn)", immediate: true as const },
-      { name: 'f', description: 'Open a feature, or start one: /f [name] [repo...]', argumentHint: '[name] [repo...]', immediate: true as const },
-      { name: 'code', description: 'Copy code block(s) from the last reply, unwrapped: /code [n]', argumentHint: '[n]' },
-      { name: 'slack', description: "Copy the last reply's quoted draft (or all of it) formatted for Slack" },
-    ]
-    for (const c of commands) await $.command.register(c)
+    await $.command.register({ name: 'f', description: `f: ${SUBCOMMANDS.map(c => c.name).join(' · ')} (bare /f lists them)`, argumentHint: '<cmd> [args]', immediate: true })
 
     const creds = await f($, ['creds'])
     if (creds.code !== 0) {
@@ -221,8 +321,8 @@ export const register: Register = on => {
     const info = await featureInfo($)
     if (!info) return next(e)
     const context = [...(e.context ?? [])]
-    if (!running) {
-      running = true // follow-ups within one turn share its snapshot
+    if (!turn.running) {
+      turn.running = true // follow-ups within one turn share its snapshot
       const prompt = e.text.trim()
       turnPrompt = prompt
       await waitForSetup($) // the snapshot below needs the worktrees
@@ -239,9 +339,13 @@ export const register: Register = on => {
   })
 
   on('turn.complete', async ($, e, next) => {
-    if (running) {
-      running = false
+    if (turn.running) {
+      turn.running = false
       await f($, ['checkpoint', 'end', '--prompt', turnPrompt])
+      if (turn.syncAfter) {
+        turn.syncAfter = false
+        background($, async () => $.ui.toast(await syncFeature($)))
+      }
       const info = await featureInfo($)
       background($, async () => {
         await refreshPRs($)
@@ -252,102 +356,18 @@ export const register: Register = on => {
     return next(e)
   })
 
-  // --- commands ------------------------------------------------------------------
-
-  on('command.run', { command: 'prs' }, async $ => {
-    if (!(await featureInfo($))) return { text: 'not in an f feature' }
-    // Saved PRs open at once (a live lookup is several slow gh calls); refresh after.
-    const res = await f($, ['prs'])
-    background($, () => refreshPRs($))
-    return { text: res.code === 0 ? 'opened PRs' : res.stderr.trim() || 'f prs failed' }
-  })
-
-  on('command.run', { command: 'prc' }, async $ => {
-    if (!(await featureInfo($))) return { text: 'not in an f feature' }
-    const res = await f($, ['prs', '-c'])
-    const out = (res.stdout + res.stderr).trim()
-    return { text: res.code === 0 ? summarize(out, 'copied') : out || 'f prs -c failed' }
-  })
-
-  on('command.run', { command: 'fsr' }, async ($, e) => {
-    if (!(await featureInfo($))) return { text: 'not in an f feature' }
-    const res = await f($, ['comment', 'send', '--print'], 60_000)
-    if (res.code !== 0) return { text: res.stderr.trim() || 'f comment send failed' }
-    const prompt = [e.args.trim(), res.stdout.trim()].filter(Boolean).join('\n\n')
-    if (!prompt) return { text: 'no review comments' }
-    background($, () => $.prompt.submit({ text: prompt }))
-    return { text: res.stdout.trim() ? 'sending review comments…' : 'no review comments; sending your text' }
-  })
-
-  on('command.run', { command: 'fprr' }, async ($, e) => {
-    if (!(await featureInfo($))) return { text: 'not in an f feature' }
-    $.ui.toast('reading review threads…')
-    const res = await f($, ['prs', 'review'], 120_000)
-    if (res.code !== 0) return { text: res.stderr.trim() || 'f prs review failed' }
-    const prompt = [e.args.trim(), res.stdout.trim()].filter(Boolean).join('\n\n')
-    if (!prompt) return { text: 'no unresolved review threads' }
-    background($, () => $.prompt.submit({ text: prompt }))
-    return { text: res.stdout.trim() ? 'sending review threads…' : 'no unresolved review threads; sending your text' }
-  })
-
-  on('command.run', { command: 'sync' }, async $ => {
-    if (!(await featureInfo($))) return { text: 'not in an f feature' }
-    const res = await f($, ['sync'], 120_000)
-    return { text: (res.stdout + res.stderr).trim() || 'nothing to sync' }
-  })
-
-  // Answers without next: Claude Code's own /plan never runs.
-  on('command.run', { command: 'plan' }, async $ => togglePlan($, 'plan'))
-  on('command.run', { command: 'steps' }, async $ => togglePlan($, 'steps'))
-
-  on('command.run', { command: 'ci' }, async $ => {
-    if (!(await featureInfo($))) return { text: 'not in an f feature' }
-    $.ui.toast('checking CI…')
-    const res = await f($, ['ci', 'fix', '--print'], 120_000)
-    if (res.code !== 0) return { text: res.stderr.trim() || 'f ci fix failed' }
-    const prompt = res.stdout.trim()
-    if (!prompt) return { text: 'no failing checks' }
-    // Queued after the command returns: submit resolves when its turn starts, which waits for this command.
-    background($, () => $.prompt.submit({ text: prompt }))
-    return { text: 'sending failing checks…' }
-  })
+  // --- /f ----------------------------------------------------------------------
 
   on('command.run', { command: 'f' }, async ($, e) => {
-    const [name, ...repos] = e.args.trim().split(/\s+/).filter(Boolean)
+    const [name = '', ...rest] = e.args.trim().split(/\s+/)
     if (!name) {
-      await openPick($, { kind: 'feature', options: asOptions(await featureNames($)) })
-      return { text: 'pick a feature' }
+      const width = Math.max(...SUBCOMMANDS.map(c => c.usage.length)) + 2
+      await openPick($, { kind: 'command', options: SUBCOMMANDS.map(c => ({ value: c.name, label: `${c.usage.padEnd(width)}${c.description}` })) })
+      return { text: 'pick an f command' }
     }
-    if (!(await featureNames($)).includes(name) && repos.length === 0) {
-      await openPick($, { kind: 'repos', name, options: asOptions(await baseRepos($)), chosen: [] })
-      return { text: `pick repos for ${name}` }
-    }
-    return { text: await openFeature($, name, repos) }
-  })
-
-  on('command.run', { command: 'code' }, async ($, e) => {
-    const text = await lastReply($)
-    const blocks = text ? codeBlocks(text) : []
-    if (blocks.length === 0) return { text: 'no code blocks in the last reply' }
-    const n = Number.parseInt(e.args.trim(), 10)
-    if (!Number.isNaN(n)) {
-      const block = blocks[n - 1]
-      if (!block) return { text: `there are ${blocks.length} code blocks` }
-      return { text: await copyBlocks($, [block.code]) }
-    }
-    if (blocks.length === 1) return { text: await copyBlocks($, blocks.map(b => b.code)) }
-    const options = blocks.map((b, i) => {
-      const first = b.code.split('\n')[0].trim()
-      return { value: String(i), label: `${b.lang ? `[${b.lang}] ` : ''}${first.length > 70 ? `${first.slice(0, 69)}…` : first}` }
-    })
-    await openPick($, { kind: 'code', options: [...options, { value: 'all', label: `all ${blocks.length}` }] })
-    return { text: 'pick a code block' }
-  })
-
-  on('command.run', { command: 'slack' }, async $ => {
-    const text = await lastReply($)
-    if (!text) return { text: 'no reply to copy' }
-    return { text: await copy($, slackText(text), 'copied for Slack') }
+    const sub = SUBCOMMANDS.find(c => c.name === name)
+    if (!sub) return { text: `no /f ${name}; there's ${SUBCOMMANDS.map(c => c.name).join(' · ')}` }
+    return { text: await dispatch($, turn, sub, rest.join(' ')) }
   })
 
   // --- drawing -------------------------------------------------------------------
@@ -358,28 +378,22 @@ export const register: Register = on => {
     if (!p) return <Text dimColor>nothing to pick</Text>
 
     const choose = async (value: string) => {
-      if (p.kind === 'code') {
-        await closePick($)
-        const blocks = codeBlocks((await lastReply($)) ?? '').filter((_b, i) => value === 'all' || i === Number(value))
-        $.ui.toast(blocks.length ? await copyBlocks($, blocks.map(b => b.code)) : 'that code block is gone')
-      } else if (p.kind === 'feature') {
-        await closePick($)
-        $.ui.toast(await openFeature($, value, []))
-      } else if (value === '\u0000done') {
-        await closePick($)
-        $.ui.toast(await openFeature($, p.name, p.chosen))
-      } else {
-        await update($, pick, cur => (cur?.kind === 'repos' ? { ...cur, chosen: cur.chosen.includes(value) ? cur.chosen.filter(r => r !== value) : [...cur.chosen, value] } : cur))
+      await closePick($)
+      if (p.kind === 'command') {
+        const sub = SUBCOMMANDS.find(c => c.name === value)
+        if (sub) $.ui.toast(await dispatch($, turn, sub, ''))
+        return
       }
+      const blocks = codeBlocks((await lastReply($)) ?? '').filter((_b, i) => value === 'all' || i === Number(value))
+      $.ui.toast(blocks.length ? await copyBlocks($, blocks.map(b => b.code)) : 'that code block is gone')
     }
 
-    const options = p.kind === 'repos' && p.chosen.length ? [{ value: '\u0000done', label: `✓ done (${p.chosen.join(', ')})` }, ...p.options] : p.options
     const hotkeys = '123456789abcdefghijklmnopqrstuvwxyz'
     return (
       <Box flexDirection="column">
-        {options.map((o, i) => (
+        {p.options.map((o, i) => (
           <Button key={o.value} plain hotkey={hotkeys[i]} autoFocus={i === 0 ? true : undefined} onPress={() => choose(o.value)}>
-            {p.kind === 'repos' && p.chosen.includes(o.value) ? `[x] ${o.label}` : p.kind === 'repos' && o.value !== '\u0000done' ? `[ ] ${o.label}` : o.label}
+            {o.label}
           </Button>
         ))}
         <Text dimColor>esc to cancel</Text>
