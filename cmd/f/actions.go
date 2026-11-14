@@ -582,7 +582,11 @@ func printPRs(d deps, name string, list []model.PR, errs map[string]error) {
 		}
 		for i, p := range byRepo[repo] {
 			indent := model.StackPrefix(byRepo[repo], i)
-			fmt.Printf("  %s#%d %-7s %s\n  %s       %s\n", indent, p.Number, p.Status, p.Title, strings.Repeat(" ", utf8.RuneCountInString(indent)), dim(p.URL))
+			conflict := ""
+			if p.Status.IsActive() && p.Conflicting {
+				conflict = red(" conflicts with " + p.Base)
+			}
+			fmt.Printf("  %s#%d %-7s %s%s\n  %s       %s\n", indent, p.Number, p.Status, p.Title, conflict, strings.Repeat(" ", utf8.RuneCountInString(indent)), dim(p.URL))
 		}
 	}
 }

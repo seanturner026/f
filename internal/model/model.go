@@ -48,6 +48,8 @@ type PR struct {
 	Base     string   `json:"base,omitempty"`      // base branch
 	Stack    int      `json:"stack_pos,omitempty"` // 1 = bottom of a gh stack; 0 = not stacked
 	Checks   []Check  `json:"checks,omitempty"`    // CI checks on the head commit
+
+	Conflicting bool `json:"conflicting,omitempty"` // conflicts with its base (GitHub's mergeable)
 }
 
 // Same reports whether p and o are the same pull request.
@@ -126,6 +128,17 @@ func CISummary(prs []PR) string {
 		return "✓"
 	}
 	return ""
+}
+
+// Conflicts lists the repos with an active PR that conflicts with its base.
+func Conflicts(prs []PR) []string {
+	var repos []string
+	for _, p := range prs {
+		if p.Status.IsActive() && p.Conflicting && !slices.Contains(repos, p.Repo) {
+			repos = append(repos, p.Repo)
+		}
+	}
+	return repos
 }
 
 // prStatusOrder is the display order for PR summaries.

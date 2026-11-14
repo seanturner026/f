@@ -113,11 +113,24 @@ func withUnread(s featureStatus, unread bool) (shown featureStatus, read bool) {
 	return s, true
 }
 
-// attention ranks a row: lower needs you sooner. Failing CI counts as much as
-// the agent asking you something.
+// ciCell is the CI column: merge conflicts first (CI can't help them), then CI.
+func ciCell(prs []model.PR) string {
+	conflicts := model.Conflicts(prs)
+	if len(conflicts) == 0 {
+		return model.CISummary(prs)
+	}
+	cell := "conflict " + strings.Join(conflicts, ", ")
+	if ci := model.CISummary(prs); ci != "" {
+		cell += " · " + ci
+	}
+	return cell
+}
+
+// attention ranks a row: lower needs you sooner. Failing CI and merge
+// conflicts count as much as the agent asking you something.
 func attention(r pickerRow) int {
 	rank := statusRank[r.status]
-	if state, _ := model.CI(r.prs); state == model.CIFailing {
+	if state, _ := model.CI(r.prs); state == model.CIFailing || len(model.Conflicts(r.prs)) > 0 {
 		rank = min(rank, statusRank[statusNeedsYou])
 	}
 	return rank
@@ -302,7 +315,7 @@ func pickerTable(rows []pickerRow) (string, []string) {
 		cells[i] = [numColumns]string{
 			colFeature: r.name,
 			colAgent:   string(r.status),
-			colCI:      orNone(model.CISummary(r.prs)),
+			colCI:      orNone(ciCell(r.prs)),
 			colPRs:     orNone(model.PRSummary(r.prs)),
 			colPlan:    orNone(model.PlanSummary(r.plan)),
 		}
@@ -338,6 +351,9 @@ func pickerTable(rows []pickerRow) (string, []string) {
 			colCI:      ciStyle[ci],
 			colPRs:     func(s string) string { return s },
 			colPlan:    dim,
+		}
+		if len(model.Conflicts(r.prs)) > 0 {
+			style[colCI] = red
 		}
 		var b strings.Builder
 		b.WriteString(r.name + "\t" + mark)

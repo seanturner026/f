@@ -22,7 +22,7 @@ type Runner interface {
 // ErrNotInStack means the checkout isn't on a gh stack branch.
 var ErrNotInStack = errors.New("not in a gh stack")
 
-const prFields = "number,state,title,url,isDraft,headRefOid,headRefName,baseRefName,mergeCommit,statusCheckRollup"
+const prFields = "number,state,title,url,isDraft,headRefOid,headRefName,baseRefName,mergeCommit,statusCheckRollup,mergeable"
 
 type ghPR struct {
 	Number      int    `json:"number"`
@@ -36,7 +36,8 @@ type ghPR struct {
 	MergeCommit *struct {
 		OID string `json:"oid"`
 	} `json:"mergeCommit"`
-	Checks []ghCheck `json:"statusCheckRollup"`
+	Checks    []ghCheck `json:"statusCheckRollup"`
+	Mergeable string    `json:"mergeable"` // MERGEABLE, CONFLICTING, or UNKNOWN while GitHub computes it
 }
 
 // ghCheck is one entry of statusCheckRollup: a CheckRun (GitHub Actions job,
@@ -113,6 +114,8 @@ func (p ghPR) toModel(repo string, stackPos int) model.PR {
 		Head:     p.HeadRefName,
 		Base:     p.BaseRefName,
 		Stack:    stackPos,
+
+		Conflicting: status.IsActive() && p.Mergeable == "CONFLICTING",
 	}
 }
 

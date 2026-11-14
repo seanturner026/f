@@ -95,7 +95,7 @@ picker too.
 | `esc` / `ctrl-space` | Close |
 
 Columns: `●` marks the workspace you're in (listed first, with the cursor on it) ·
-FEATURE · AGENT status (or `unread`) · CI of open PRs (`✓`, `⋯ running`, `✗ <repos>`) · PRS ·
+FEATURE · AGENT status (or `unread`) · CI of open PRs (`✓`, `⋯ running`, `✗ <repos>`; `conflict <repos>` first when one conflicts with its base, sorted with "needs you") · PRS ·
 PLAN (beads steps).
 
 Order: **needs you** (the agent asked something, or CI failing) → **done** (finished,
@@ -106,7 +106,7 @@ unseen) → **working** → **idle** → **closed** (no agent running).
 `f` starts Claude Code with the `f` mod, statusline and settings from `claude/`
 (`F_CLAUDE_DIR` overrides `~/.claude/f`). It starts in auto mode, and the
 feature's `CLAUDE.md` imports its AGENTS.md and each repo's instructions.
-The statusline shows the feature's PRs with CI.
+The statusline shows the feature's PRs with CI, and `conflicts` on one that conflicts with its base (GitHub's `mergeable`; it can take a refresh to appear after main moves).
 
 | Command | Does |
 |---|---|
