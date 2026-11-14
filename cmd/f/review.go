@@ -23,9 +23,10 @@ import (
 
 // reviewView is one thing a review tab can show, as tuicr's range arguments.
 type reviewView struct {
-	title string
-	args  []string
-	live  bool // includes the work tree: waits for changes, restarts when the base moves
+	title  string
+	args   []string
+	live   bool     // includes the work tree: waits for changes
+	follow []string // refs that restart the view when they move (tuicr resolves its range once)
 }
 
 // reviewOutcome is why tuicr stopped.
@@ -78,7 +79,11 @@ func review(ctx context.Context, d deps, repo string) error {
 // its stack (bottom first), and the agent's turns once there are any.
 func reviewViews(ctx context.Context, d deps, name, repo, dir string) []reviewView {
 	base := "origin/" + git.DefaultBranch(ctx, d.run, dir)
-	views := []reviewView{{title: "whole feature (vs " + base + ")", args: []string{"-r", base + "...HEAD", "-w"}, live: true}}
+	views := []reviewView{{title: "whole feature (vs " + base + ")", args: []string{"-r", base + "...HEAD", "-w"}, live: true, follow: []string{base, "HEAD"}}}
+	if feature.TurnsRange(ctx, d.run, dir) != "" {
+		views = append(views, reviewView{title: "last turn (follows new turns)",
+			args: []string{"-r", feature.TurnsRef + "~1.." + feature.TurnsRef}, follow: []string{feature.TurnsRef}})
+	}
 	state, _ := feature.LoadState(d.layout, name)
 	var prs []model.PR
 	for _, p := range state.PRs {
@@ -98,7 +103,7 @@ func reviewViews(ctx context.Context, d deps, name, repo, dir string) []reviewVi
 		v := reviewView{title: fmt.Sprintf("%d/%d #%d %s", i+1, len(prs), p.Number, p.Title)}
 		if p.Head == current {
 			v.title += "  (checked out, live)"
-			v.args, v.live = []string{"-r", ref(p.Base) + "...HEAD", "-w"}, true
+			v.args, v.live, v.follow = []string{"-r", ref(p.Base) + "...HEAD", "-w"}, true, []string{ref(p.Base), "HEAD"}
 		} else {
 			v.args = []string{"-r", ref(p.Base) + "..." + ref(p.Head)}
 		}
@@ -163,7 +168,7 @@ func runTuicr(ctx context.Context, d deps, dir string, view reviewView, vis *vis
 
 	done := make(chan struct{})
 	var moved atomic.Bool
-	if view.live {
+	if len(view.follow) > 0 {
 		start := reviewMarks(ctx, d, dir, view)
 		go func() {
 			for {
@@ -210,11 +215,13 @@ func rangeHasCommits(ctx context.Context, d deps, dir string, view reviewView) b
 	return err != nil || strings.TrimSpace(n) != "0" // unsure: let tuicr decide
 }
 
-// reviewMarks identifies what a live view was started on: the base and HEAD.
-// tuicr resolves its range once, so a change means starting it again.
+// reviewMarks is where the refs a view follows point now.
 func reviewMarks(ctx context.Context, d deps, dir string, view reviewView) string {
-	base, _, _ := strings.Cut(view.args[1], "...")
-	return git.RevParse(ctx, d.run, dir, base) + " " + git.RevParse(ctx, d.run, dir, "HEAD")
+	marks := make([]string, len(view.follow))
+	for i, ref := range view.follow {
+		marks[i] = git.RevParse(ctx, d.run, dir, ref)
+	}
+	return strings.Join(marks, " ")
 }
 
 // waitScreen shows text, then returns after reviewPoll once the tab is visible

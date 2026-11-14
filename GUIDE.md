@@ -145,7 +145,7 @@ main moves, and waits ("no changes yet") until there's something to show.
 | `e` | Open the file in your editor |
 | `:diff` / `:set wrap!` | Side-by-side ↔ unified / line wrap |
 | `?` | All tuicr keys |
-| `:q` | Pick another view: whole feature · each open PR of the stack (`n/N`; the checked-out one is live) · the agent's turns (choose one or more in tuicr's commit list) · leave |
+| `:q` | Pick another view: whole feature · **last turn** (just the agent's latest turn; follows each new one) · each open PR of the stack (`n/N`; the checked-out one is live) · all the agent's turns (choose one or more in tuicr's commit list) · leave |
 
 Send comments with `/fsr [text]` in chat (or `f comment send`).
 
