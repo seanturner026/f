@@ -24,8 +24,8 @@ type ciFailure struct {
 }
 
 // ciFix refreshes the feature's PRs, collects failing checks (with failed job
-// logs for GitHub Actions) and asks the agent to find the cause and propose a fix
-// without pushing. With print, it writes the prompt to stdout instead (/ci).
+// logs for GitHub Actions) and asks the agent to find the cause, fix and push.
+// With print, it writes the prompt to stdout instead (/ci).
 func ciFix(ctx context.Context, d deps, explicit string, print bool) error {
 	name, err := resolve(d, explicit)
 	if err != nil {

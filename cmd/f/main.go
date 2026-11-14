@@ -20,11 +20,12 @@ import (
 const help = `f: one Claude Code session across several repos, each on its own worktree.
 
   f <name>         start a feature (pick repos), or reopen it
-  f                picker: what needs you → jump there (ctrl-n new, ctrl-x remove, ctrl-u flag, ctrl-o/y PRs, ctrl-s sync, ctrl-t trash)
+  f                picker: what needs you → jump there (ctrl-n new, ctrl-x remove, ctrl-u unread, ctrl-o/y PRs, ctrl-s sync, ctrl-t trash)
   f add [repo...]  add repos to this feature
   f resume         after a Herdr restart: restart the agent, nvim, prs in every feature workspace
   f prs [-r] [-c]  this feature's PRs (-r refresh, -c copy, -w live view)
-  f ci fix         send failing checks to the agent (it proposes a fix, doesn't push)
+  f review <repo>  review a repo in tuicr (each repo tab runs it; :q picks a PR or the agent's turns)
+  f ci fix         send failing checks to the agent (it fixes and pushes)
   f sync           after a PR merges: reset/drop merged branches, rebase the rest onto main
   f restore [name] bring back a removed feature (14 days); no name lists the trash
   f trace [stats]  where f spends time: Jaeger (Docker), or stats as text
@@ -106,14 +107,15 @@ func main() {
 						}
 						return feature.CheckpointBegin(ctx, d.run, d.layout, name)
 					}},
-					{Name: "end", Action: func(ctx context.Context, c *cli.Command) error {
-						name, err := resolve(d, "")
-						if err != nil {
+					{Name: "end", Flags: []cli.Flag{&cli.StringFlag{Name: "prompt", Usage: "the run's prompt: names its turn"}},
+						Action: func(ctx context.Context, c *cli.Command) error {
+							name, err := resolve(d, "")
+							if err != nil {
+								return err
+							}
+							_, err = feature.CheckpointEnd(ctx, d.run, d.layout, name, c.String("prompt"))
 							return err
-						}
-						_, err = feature.CheckpointEnd(ctx, d.run, d.layout, name)
-						return err
-					}},
+						}},
 				},
 			},
 			{
@@ -136,7 +138,7 @@ func main() {
 			{
 				Name:   "comment",
 				Hidden: true,
-				Usage:  "review comments for the agent (nvim: <leader>pc / <leader>ps)",
+				Usage:  "review comments for the agent (nvim: <leader>pc / <leader>ps; send also takes tuicr's)",
 				Flags:  []cli.Flag{featureFlag},
 				Commands: []*cli.Command{
 					{Name: "add", Usage: "add a comment (JSON on stdin)", Flags: []cli.Flag{featureFlag},
@@ -147,9 +149,10 @@ func main() {
 						Action: func(ctx context.Context, c *cli.Command) error {
 							return commentList(d, c.String("feature"), c.Bool("json"))
 						}},
-					{Name: "send", Usage: "send them to the agent and clear", Flags: []cli.Flag{featureFlag},
+					{Name: "send", Usage: "send them (and tuicr's) to the agent and clear", Flags: []cli.Flag{featureFlag,
+						&cli.BoolFlag{Name: "print", Usage: "print the prompt instead of sending it (the mod's /fsr)"}},
 						Action: func(ctx context.Context, c *cli.Command) error {
-							return commentSend(ctx, d, c.String("feature"))
+							return commentSend(ctx, d, c.String("feature"), c.Bool("print"))
 						}},
 					{Name: "clear", Usage: "discard them", Flags: []cli.Flag{featureFlag},
 						Action: func(ctx context.Context, c *cli.Command) error {
@@ -308,12 +311,23 @@ func main() {
 				Usage: "CI on this feature's PRs",
 				Commands: []*cli.Command{{
 					Name:  "fix",
-					Usage: "send failing checks (with failed job logs) to the agent: find the cause, propose a fix, don't push",
+					Usage: "send failing checks (with failed job logs) to the agent: find the cause, fix and push",
 					Flags: []cli.Flag{featureFlag, &cli.BoolFlag{Name: "print", Usage: "print the prompt instead (for /ci)"}},
 					Action: func(ctx context.Context, c *cli.Command) error {
 						return ciFix(ctx, d, c.String("feature"), c.Bool("print"))
 					},
 				}},
+			},
+			{
+				Name:      "review",
+				Usage:     "review a repo with tuicr (each repo tab runs it): quit tuicr to pick a stacked PR or the agent's turns",
+				ArgsUsage: "<repo>",
+				Action: func(ctx context.Context, c *cli.Command) error {
+					if c.Args().Len() != 1 {
+						return fmt.Errorf("usage: f review <repo>")
+					}
+					return review(ctx, d, c.Args().First())
+				},
 			},
 			{
 				Name:  "prs",

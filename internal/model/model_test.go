@@ -129,6 +129,15 @@ func TestCommentsMessage(t *testing.T) {
 			},
 			want: "Review comments:\n\n1. a/x.go:1\n```\na\n```\n→ n1\n\n2. b/y.tf:2-4\n```terraform\nb\nc\nd\n```\n→ n2\n",
 		},
+		{
+			name: "whole file, whole review, no code",
+			comments: []model.Comment{
+				{File: "a/x.go", Note: "split this file"},
+				{File: "a", Note: "looks good overall"},
+				{File: "a/y.go", Line1: 5, Line2: 5, Note: "(on the removed lines) why?"},
+			},
+			want: "Review comments:\n\n1. a/x.go\n→ split this file\n\n2. a\n→ looks good overall\n\n3. a/y.go:5\n→ (on the removed lines) why?\n",
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

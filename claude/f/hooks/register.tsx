@@ -10,7 +10,7 @@
  *   claude/statusline.sh draws them.
  * - The feature is the session's root: Bash `cd` moves Claude Code's cwd.
  * - Commands that never reach the model: /prs /prc /sync /plan /steps /f /code /slack.
- *   /ci sends failing checks to the model. /plan replaces Claude Code's (shift+tab still reaches plan mode);
+ *   /ci sends failing checks to the model, /fsr your text plus the tuicr/nvim review comments. /plan replaces Claude Code's (shift+tab still reaches plan mode);
  *   /steps is the same but runs mid-turn: a built-in's name can't be made immediate.
  * - Quieter chrome: no "Worked for …" line, no hint/mode row under the prompt while idle.
  */
@@ -152,6 +152,7 @@ const asOptions = (values: string[]): PickOption[] => values.map(v => ({ value: 
 export const register: Register = on => {
   let guardError = 'starting'
   let running = false
+  let turnPrompt = '' // names the run's turn in the review (f checkpoint end --prompt)
 
   on('session.start', async ($, e, next) => {
     const commands = [
@@ -159,6 +160,7 @@ export const register: Register = on => {
       { name: 'prc', description: "Copy this feature's PRs as url: title lines (stacks numbered)", immediate: true as const },
       { name: 'sync', description: 'After a PR merges: reset its repo to main (or rebase newer commits onto it)' },
       { name: 'ci', description: "Send this feature's failing CI checks (with logs): find the cause, fix and push" },
+      { name: 'fsr', description: 'Send your text plus the pending review comments (tuicr and nvim) as one message', argumentHint: '[text]' },
       { name: 'steps', description: "Show/hide this feature's beads plan in the sidebar (like /plan, but runs mid-turn)", immediate: true as const },
       { name: 'f', description: 'Open a feature, or start one: /f [name] [repo...]', argumentHint: '[name] [repo...]', immediate: true as const },
       { name: 'code', description: 'Copy code block(s) from the last reply, unwrapped: /code [n]', argumentHint: '[n]' },
@@ -220,6 +222,7 @@ export const register: Register = on => {
     if (!running) {
       running = true // follow-ups within one turn share its snapshot
       const prompt = e.text.trim()
+      turnPrompt = prompt
       await waitForSetup($) // the snapshot below needs the worktrees
       if (!info.goal && prompt) background($, () => f($, ['goal', prompt]))
       // Awaited: the snapshot must exist before Claude starts editing.
@@ -236,7 +239,7 @@ export const register: Register = on => {
   on('turn.complete', async ($, e, next) => {
     if (running) {
       running = false
-      await f($, ['checkpoint', 'end'])
+      await f($, ['checkpoint', 'end', '--prompt', turnPrompt])
       const info = await featureInfo($)
       background($, async () => {
         await refreshPRs($)
@@ -262,6 +265,16 @@ export const register: Register = on => {
     const res = await f($, ['prs', '-c'])
     const out = (res.stdout + res.stderr).trim()
     return { text: res.code === 0 ? summarize(out, 'copied') : out || 'f prs -c failed' }
+  })
+
+  on('command.run', { command: 'fsr' }, async ($, e) => {
+    if (!(await featureInfo($))) return { text: 'not in an f feature' }
+    const res = await f($, ['comment', 'send', '--print'], 60_000)
+    if (res.code !== 0) return { text: res.stderr.trim() || 'f comment send failed' }
+    const prompt = [e.args.trim(), res.stdout.trim()].filter(Boolean).join('\n\n')
+    if (!prompt) return { text: 'no review comments' }
+    background($, () => $.prompt.submit({ text: prompt }))
+    return { text: res.stdout.trim() ? 'sending review comments…' : 'no review comments; sending your text' }
   })
 
   on('command.run', { command: 'sync' }, async $ => {

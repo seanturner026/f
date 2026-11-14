@@ -236,11 +236,18 @@ func CommentsMessage(comments []Comment) string {
 	var b strings.Builder
 	b.WriteString("Review comments:\n")
 	for i, c := range comments {
-		lines := fmt.Sprint(c.Line1)
-		if c.Line2 != c.Line1 {
-			lines = fmt.Sprintf("%d-%d", c.Line1, c.Line2)
+		where := c.File // a whole file, or a repo for a whole-review comment
+		if c.Line1 > 0 {
+			where += ":" + fmt.Sprint(c.Line1)
+			if c.Line2 != c.Line1 {
+				where += fmt.Sprintf("-%d", c.Line2)
+			}
 		}
-		fmt.Fprintf(&b, "\n%d. %s:%s\n```%s\n%s\n```\n→ %s\n", i+1, c.File, lines, c.Lang, c.Code, c.Note)
+		fmt.Fprintf(&b, "\n%d. %s\n", i+1, where)
+		if c.Code != "" {
+			fmt.Fprintf(&b, "```%s\n%s\n```\n", c.Lang, c.Code)
+		}
+		fmt.Fprintf(&b, "→ %s\n", c.Note)
 	}
 	return b.String()
 }
