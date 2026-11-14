@@ -25,10 +25,10 @@ func TestTuicrComments(t *testing.T) {
 	run := fakeRunner{
 		"tuicr review list": `[{"slug":"s1","kind":"local","comment_count":5},{"slug":"empty","kind":"local","comment_count":0},{"slug":"pr","kind":"pr","comment_count":2}]`,
 		"tuicr review comments --session s1": `[
-			{"path":"x.go","start_line":2,"end_line":3,"side":"new","comment_type":"none","content":"rename"},
-			{"path":"x.go","start_line":1,"end_line":1,"side":"old","comment_type":"issue","content":"why gone?"},
-			{"path":"x.go","start_line":null,"end_line":null,"side":null,"comment_type":"none","content":"split it"},
-			{"path":null,"start_line":null,"end_line":null,"side":null,"comment_type":"none","content":"overall fine"}]`,
+			{"id":"c1","path":"x.go","start_line":2,"end_line":3,"side":"new","comment_type":"none","content":"rename"},
+			{"id":"c2","path":"x.go","start_line":1,"end_line":1,"side":"old","comment_type":"issue","content":"why gone?"},
+			{"id":"c3","path":"x.go","start_line":null,"end_line":null,"side":null,"comment_type":"none","content":"split it"},
+			{"id":"c4","path":null,"start_line":null,"end_line":null,"side":null,"comment_type":"none","content":"overall fine"}]`,
 	}
 	got, sessions, err := feature.TuicrComments(context.Background(), run, l, "feat")
 	if err != nil {
@@ -43,7 +43,7 @@ func TestTuicrComments(t *testing.T) {
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("comments =\n%+v\nwant\n%+v", got, want)
 	}
-	if want := []feature.ReviewSession{{Dir: dir, Slug: "s1"}}; !reflect.DeepEqual(sessions, want) {
+	if want := []feature.ReviewSession{{Dir: dir, Slug: "s1", IDs: []string{"c1", "c2", "c3", "c4"}}}; !reflect.DeepEqual(sessions, want) {
 		t.Errorf("sessions = %+v, want %+v (only local ones with comments)", sessions, want)
 	}
 }

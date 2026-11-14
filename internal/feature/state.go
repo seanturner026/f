@@ -121,22 +121,43 @@ func UpdateState(l Layout, name string, fn func(*State)) (State, error) {
 	return s, SaveState(l, name, s)
 }
 
-// lockState takes an exclusive lock on the feature's state (a lock file next
-// to state.json; flock is released if the process dies).
+// lockState takes an exclusive lock on the feature's state.
 func lockState(l Layout, name string) (func(), error) {
-	path := StatePath(l, name) + ".lock"
+	return lockFile(StatePath(l, name)+".lock", true)
+}
+
+// ErrBusy means another f holds a lock taken without waiting (LockWork).
+var ErrBusy = errors.New("another f is syncing or snapshotting this feature")
+
+// lockFile takes an exclusive lock on path (flock: released if the process
+// dies). Without wait it returns ErrBusy instead of waiting for another holder.
+func lockFile(path string, wait bool) (func(), error) {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return nil, fmt.Errorf("lock state: %w", err)
+		return nil, fmt.Errorf("lock %s: %w", filepath.Base(path), err)
 	}
 	f, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0o644)
 	if err != nil {
-		return nil, fmt.Errorf("lock state: %w", err)
+		return nil, fmt.Errorf("lock %s: %w", filepath.Base(path), err)
 	}
-	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX); err != nil {
+	how := syscall.LOCK_EX
+	if !wait {
+		how |= syscall.LOCK_NB
+	}
+	if err := syscall.Flock(int(f.Fd()), how); err != nil {
 		f.Close()
-		return nil, fmt.Errorf("lock state: %w", err)
+		if errors.Is(err, syscall.EWOULDBLOCK) {
+			return nil, ErrBusy
+		}
+		return nil, fmt.Errorf("lock %s: %w", filepath.Base(path), err)
 	}
 	return func() { _ = syscall.Flock(int(f.Fd()), syscall.LOCK_UN); f.Close() }, nil
+}
+
+// LockWork serializes git work on the feature's worktrees (sync, checkpoints):
+// two at once would move branches under each other. Without wait it returns
+// ErrBusy if another f holds it.
+func LockWork(l Layout, name string, wait bool) (func(), error) {
+	return lockFile(filepath.Join(Dir(l, name), ContextDir, "work.lock"), wait)
 }
 
 // SaveState writes the feature's state atomically. Use UpdateState to change

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -25,6 +26,14 @@ func syncFeature(ctx context.Context, d deps, explicit string, background bool) 
 	if background && piWorking(ctx, d, name) {
 		return nil
 	}
+	unlock, err := feature.LockWork(d.layout, name, !background) // background: skip if another f is at it
+	if errors.Is(err, feature.ErrBusy) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	defer unlock()
 	lines, err := reconcileLines(ctx, d, name, !background) // only an explicit sync pushes stacks
 	if err != nil || background {
 		return err

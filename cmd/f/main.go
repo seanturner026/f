@@ -106,6 +106,11 @@ func main() {
 						if err != nil {
 							return err
 						}
+						unlock, err := feature.LockWork(d.layout, name, true)
+						if err != nil {
+							return err
+						}
+						defer unlock()
 						return feature.CheckpointBegin(ctx, d.run, d.layout, name)
 					}},
 					{Name: "end", Flags: []cli.Flag{&cli.StringFlag{Name: "prompt", Usage: "the run's prompt: names its turn"}},
@@ -114,6 +119,11 @@ func main() {
 							if err != nil {
 								return err
 							}
+							unlock, err := feature.LockWork(d.layout, name, true)
+							if err != nil {
+								return err
+							}
+							defer unlock()
 							_, err = feature.CheckpointEnd(ctx, d.run, d.layout, name, c.String("prompt"))
 							return err
 						}},

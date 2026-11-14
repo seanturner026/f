@@ -90,6 +90,10 @@ func commentSend(ctx context.Context, d deps, explicit string, print bool) error
 	if err != nil {
 		return err
 	}
+	sent := make([]int, len(cs)) // delete exactly these: comments added meanwhile stay
+	for i, c := range cs {
+		sent[i] = c.ID
+	}
 	reviewed, sessions, err := feature.TuicrComments(ctx, d.run, d.layout, name)
 	if err != nil {
 		return err
@@ -107,10 +111,10 @@ func commentSend(ctx context.Context, d deps, explicit string, print bool) error
 	} else if err := promptAgentOrCopy(ctx, d, name, msg); err != nil {
 		return fmt.Errorf("%w (comments kept; message copied to clipboard)", err)
 	}
-	if err := feature.ClearComments(d.layout, name); err != nil {
+	if err := feature.DeleteComments(d.layout, name, sent...); err != nil {
 		return err
 	}
-	if err := feature.ClearTuicrComments(ctx, d.run, sessions); err != nil {
+	if err := feature.DeleteTuicrComments(ctx, d.run, sessions); err != nil {
 		return err
 	}
 	if !print {

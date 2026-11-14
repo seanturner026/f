@@ -45,6 +45,21 @@ func saveComments(l Layout, name string, cs []model.Comment) error {
 	return nil
 }
 
+// updateComments changes the pending comments under a lock (nvim adds while
+// f comment send deletes).
+func updateComments(l Layout, name string, fn func([]model.Comment) []model.Comment) error {
+	unlock, err := lockFile(CommentsPath(l, name)+".lock", true)
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	cs, err := LoadComments(l, name)
+	if err != nil {
+		return err
+	}
+	return saveComments(l, name, fn(cs))
+}
+
 // AddComment appends a comment, assigning the next ID.
 func AddComment(l Layout, name string, c model.Comment) (model.Comment, error) {
 	if c.File == "" || c.Line1 < 1 || c.Note == "" {
@@ -53,26 +68,24 @@ func AddComment(l Layout, name string, c model.Comment) (model.Comment, error) {
 	if c.Line2 < c.Line1 {
 		c.Line2 = c.Line1
 	}
-	cs, err := LoadComments(l, name)
-	if err != nil {
-		return model.Comment{}, err
-	}
-	for _, x := range cs {
-		c.ID = max(c.ID, x.ID)
-	}
-	c.ID++
-	return c, saveComments(l, name, append(cs, c))
+	err := updateComments(l, name, func(cs []model.Comment) []model.Comment {
+		for _, x := range cs {
+			c.ID = max(c.ID, x.ID)
+		}
+		c.ID++
+		return append(cs, c)
+	})
+	return c, err
 }
 
 // DeleteComments removes the pending comments with the given IDs.
 func DeleteComments(l Layout, name string, ids ...int) error {
-	cs, err := LoadComments(l, name)
-	if err != nil {
-		return err
-	}
-	kept := slices.DeleteFunc(cs, func(c model.Comment) bool { return slices.Contains(ids, c.ID) })
-	return saveComments(l, name, kept)
+	return updateComments(l, name, func(cs []model.Comment) []model.Comment {
+		return slices.DeleteFunc(cs, func(c model.Comment) bool { return slices.Contains(ids, c.ID) })
+	})
 }
 
 // ClearComments removes all pending comments.
-func ClearComments(l Layout, name string) error { return saveComments(l, name, nil) }
+func ClearComments(l Layout, name string) error {
+	return updateComments(l, name, func([]model.Comment) []model.Comment { return nil })
+}

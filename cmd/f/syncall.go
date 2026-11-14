@@ -113,7 +113,13 @@ func syncAllFeature(ctx context.Context, d deps, name, focused, stamp string) {
 	case piWorking(ctx, d, name):
 		fmt.Printf("%s %s: refreshed; no resets (the agent is running)\n", stamp, name)
 	default:
+		unlock, err := feature.LockWork(d.layout, name, false)
+		if err != nil { // ErrBusy: a sync or checkpoint is running; next time
+			fmt.Printf("%s %s: refreshed; no resets (%v)\n", stamp, name, err)
+			break
+		}
 		results, err := feature.Reconcile(ctx, d.run, d.layout, name, after.PRs, false)
+		unlock()
 		if err != nil {
 			fmt.Printf("%s %s: %v\n", stamp, name, err)
 			return
