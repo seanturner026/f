@@ -252,6 +252,55 @@ func CommentsMessage(comments []Comment) string {
 	return b.String()
 }
 
+// ReviewThread is an unresolved review conversation on a PR.
+type ReviewThread struct {
+	Path     string          // file the thread is on
+	Line     int             // 0 for an outdated thread (GitHub has no current line)
+	DiffHunk string          // the diff context the reviewer saw
+	Comments []ReviewComment // first comment, then replies
+}
+
+// ReviewComment is one comment of a review thread.
+type ReviewComment struct{ Author, Body string }
+
+// PRReview is a PR's unresolved review threads.
+type PRReview struct {
+	PR      PR
+	Threads []ReviewThread
+}
+
+// reviewHunkLines is how much of a thread's diff context goes in the prompt:
+// GitHub's hunk ends at the commented line.
+const reviewHunkLines = 6
+
+// ReviewMessage formats unresolved review threads as one prompt. Resolving
+// them on GitHub stays with the user.
+func ReviewMessage(reviews []PRReview) string {
+	var b strings.Builder
+	b.WriteString("Unresolved review comments on this feature's PRs. Address them; don't resolve the threads on GitHub (I will):\n")
+	for _, r := range reviews {
+		fmt.Fprintf(&b, "\n## %s #%d %s\n%s\n", r.PR.Repo, r.PR.Number, r.PR.Title, r.PR.URL)
+		for i, t := range r.Threads {
+			where := t.Path + " (outdated: the code moved since)"
+			if t.Line > 0 {
+				where = fmt.Sprintf("%s:%d", t.Path, t.Line)
+			}
+			fmt.Fprintf(&b, "\n%d. %s\n", i+1, where)
+			if hunk := strings.Split(strings.TrimRight(t.DiffHunk, "\n"), "\n"); t.DiffHunk != "" {
+				fmt.Fprintf(&b, "```diff\n%s\n```\n", strings.Join(hunk[max(0, len(hunk)-reviewHunkLines):], "\n"))
+			}
+			for j, c := range t.Comments {
+				lead := "→"
+				if j > 0 {
+					lead = "  ↳"
+				}
+				fmt.Fprintf(&b, "%s @%s: %s\n", lead, c.Author, strings.ReplaceAll(strings.TrimSpace(c.Body), "\n", "\n    "))
+			}
+		}
+	}
+	return b.String()
+}
+
 // Plan is the progress of a feature's beads issue: its child issues.
 type Plan struct {
 	Issue string `json:"issue"`

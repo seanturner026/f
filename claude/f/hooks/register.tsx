@@ -10,7 +10,8 @@
  *   claude/statusline.sh draws them.
  * - The feature is the session's root: Bash `cd` moves Claude Code's cwd.
  * - Commands that never reach the model: /prs /prc /sync /plan /steps /f /code /slack.
- *   /ci sends failing checks to the model, /fsr your text plus the tuicr/nvim review comments. /plan replaces Claude Code's (shift+tab still reaches plan mode);
+ *   /ci sends failing checks to the model, /fsr your text plus the tuicr/nvim review comments,
+ *   /fprr your text plus the PRs' unresolved GitHub review threads. /plan replaces Claude Code's (shift+tab still reaches plan mode);
  *   /steps is the same but runs mid-turn: a built-in's name can't be made immediate.
  * - Quieter chrome: no "Worked for …" line, no hint/mode row under the prompt while idle.
  */
@@ -161,6 +162,7 @@ export const register: Register = on => {
       { name: 'sync', description: 'After a PR merges: reset its repo to main (or rebase newer commits onto it)' },
       { name: 'ci', description: "Send this feature's failing CI checks (with logs): find the cause, fix and push" },
       { name: 'fsr', description: 'Send your text plus the pending review comments (tuicr and nvim) as one message', argumentHint: '[text]' },
+      { name: 'fprr', description: "Send your text plus the unresolved GitHub review threads on this feature's open PRs", argumentHint: '[text]' },
       { name: 'steps', description: "Show/hide this feature's beads plan in the sidebar (like /plan, but runs mid-turn)", immediate: true as const },
       { name: 'f', description: 'Open a feature, or start one: /f [name] [repo...]', argumentHint: '[name] [repo...]', immediate: true as const },
       { name: 'code', description: 'Copy code block(s) from the last reply, unwrapped: /code [n]', argumentHint: '[n]' },
@@ -275,6 +277,17 @@ export const register: Register = on => {
     if (!prompt) return { text: 'no review comments' }
     background($, () => $.prompt.submit({ text: prompt }))
     return { text: res.stdout.trim() ? 'sending review comments…' : 'no review comments; sending your text' }
+  })
+
+  on('command.run', { command: 'fprr' }, async ($, e) => {
+    if (!(await featureInfo($))) return { text: 'not in an f feature' }
+    $.ui.toast('reading review threads…')
+    const res = await f($, ['prs', 'review'], 120_000)
+    if (res.code !== 0) return { text: res.stderr.trim() || 'f prs review failed' }
+    const prompt = [e.args.trim(), res.stdout.trim()].filter(Boolean).join('\n\n')
+    if (!prompt) return { text: 'no unresolved review threads' }
+    background($, () => $.prompt.submit({ text: prompt }))
+    return { text: res.stdout.trim() ? 'sending review threads…' : 'no unresolved review threads; sending your text' }
   })
 
   on('command.run', { command: 'sync' }, async $ => {

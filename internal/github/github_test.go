@@ -217,3 +217,24 @@ func TestRepoPRsStackWithoutPRsFallsBack(t *testing.T) {
 		t.Errorf("prs = %+v, want #5 from pr list", prs)
 	}
 }
+
+func TestReviewThreads(t *testing.T) {
+	run := cmdRunner{"api": `{"data":{"repository":{"pullRequest":{"reviewThreads":{"nodes":[
+		{"isResolved":true,"path":"done.go","line":1,"comments":{"nodes":[{"author":{"login":"a"},"body":"fixed","diffHunk":"@@"}]}},
+		{"isResolved":false,"path":"x.go","line":12,"comments":{"nodes":[
+			{"author":{"login":"rev"},"body":"rename this","diffHunk":"@@ -1 +1 @@\n+x := 1"},
+			{"author":{"login":"me"},"body":"why?","diffHunk":"@@ -1 +1 @@\n+x := 1"}]}},
+		{"isResolved":false,"path":"empty.go","line":3,"comments":{"nodes":[]}}]}}}}}`}
+	got, err := github.ReviewThreads(context.Background(), run, "", model.PR{Number: 7, URL: "https://github.com/o/r/pull/7"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []model.ReviewThread{{Path: "x.go", Line: 12, DiffHunk: "@@ -1 +1 @@\n+x := 1",
+		Comments: []model.ReviewComment{{Author: "rev", Body: "rename this"}, {Author: "me", Body: "why?"}}}}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("threads = %+v\nwant %+v (resolved and empty ones skipped)", got, want)
+	}
+	if _, err := github.ReviewThreads(context.Background(), run, "", model.PR{URL: "not-a-pr"}); err == nil {
+		t.Error("want an error for a non-PR URL")
+	}
+}

@@ -252,3 +252,20 @@ func TestMergedSteps(t *testing.T) {
 		t.Errorf("MergedSteps = %v, want 1,2", ids)
 	}
 }
+
+func TestReviewMessage(t *testing.T) {
+	got := model.ReviewMessage([]model.PRReview{{
+		PR: model.PR{Repo: "api", Number: 4, Title: "Add x", URL: "u4"},
+		Threads: []model.ReviewThread{
+			{Path: "x.go", Line: 3, DiffHunk: "@@ -1,8 +1,8 @@\n a\n b\n c\n d\n e\n f\n+g", Comments: []model.ReviewComment{{Author: "rev", Body: "two\nlines"}, {Author: "me", Body: "ok"}}},
+			{Path: "y.go", Comments: []model.ReviewComment{{Author: "rev", Body: "gone?"}}},
+		},
+	}})
+	want := "Unresolved review comments on this feature's PRs. Address them; don't resolve the threads on GitHub (I will):\n" +
+		"\n## api #4 Add x\nu4\n" +
+		"\n1. x.go:3\n```diff\n b\n c\n d\n e\n f\n+g\n```\n→ @rev: two\n    lines\n  ↳ @me: ok\n" +
+		"\n2. y.go (outdated: the code moved since)\n→ @rev: gone?\n"
+	if got != want {
+		t.Errorf("got\n%s\nwant\n%s", got, want)
+	}
+}
