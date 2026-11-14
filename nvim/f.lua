@@ -180,13 +180,8 @@ local function list()
   vim.cmd(#items > 0 and "copen" or "cclose")
 end
 
--- pick lists pending comments in a Snacks picker: ⏎ jumps to one, ctrl-x
--- deletes the selected ones (Tab selects several). Without Snacks, a pick deletes.
-local function pick()
-  local root = current_root()
-  if not root then
-    return vim.notify("FComment: not inside an f feature", vim.log.levels.WARN)
-  end
+-- comment_items are the pending comments as picker items.
+local function comment_items(root)
   local items = {}
   for _, c in ipairs(load_comments(root)) do
     table.insert(items, {
@@ -197,7 +192,18 @@ local function pick()
       end_pos = { c.line2, 0 },
     })
   end
-  if #items == 0 then
+  return items
+end
+
+-- pick lists pending comments in a Snacks picker: ⏎ jumps to one, ctrl-x
+-- deletes the selected ones (Tab selects several) and stays open. Without
+-- Snacks, a pick deletes.
+local function pick()
+  local root = current_root()
+  if not root then
+    return vim.notify("FComment: not inside an f feature", vim.log.levels.WARN)
+  end
+  if #comment_items(root) == 0 then
     return vim.notify("no pending comments")
   end
   local function delete(selected)
@@ -206,29 +212,33 @@ local function pick()
     end, selected)
     local ok, _, err = f_cli(root, vim.list_extend({ "comment", "delete" }, ids))
     if not ok then
-      return vim.notify("FPick: " .. err, vim.log.levels.ERROR)
+      vim.notify("FPick: " .. err, vim.log.levels.ERROR)
     end
     render_all()
-    vim.notify(("deleted %d comment(s)"):format(#ids))
   end
   local has_snacks, Snacks = pcall(require, "snacks")
   if not (has_snacks and Snacks.picker) then
-    return vim.ui.select(items, { prompt = "delete comment", format_item = function(it) return it.text end }, function(it)
+    return vim.ui.select(comment_items(root), { prompt = "delete comment", format_item = function(it) return it.text end }, function(it)
       if it then
         delete({ it })
       end
     end)
   end
   Snacks.picker.pick({
-    title = "agent comments · ⏎ jump · ctrl-x delete",
-    items = items,
+    title = "agent comments · ⏎ jump · Tab select · ctrl-x delete",
+    finder = function()
+      return comment_items(root)
+    end,
     format = "text",
     confirm = "jump",
     actions = {
       delete_comments = function(picker)
-        local selected = picker:selected({ fallback = true })
-        picker:close()
-        delete(selected)
+        delete(picker:selected({ fallback = true }))
+        if #comment_items(root) == 0 then
+          picker:close()
+        else
+          picker:refresh()
+        end
       end,
     },
     win = {
