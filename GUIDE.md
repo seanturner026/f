@@ -151,6 +151,7 @@ Send comments with `/fsr [text]` in chat (or `f comment send`).
 |---|---|
 | `<leader>pc` | Comment on line/selection (normal or visual) |
 | `<leader>pl` | List pending comments (quickfix) |
+| `<leader>pp` | Pick pending comments (Snacks): ⏎ jumps to one, Tab selects several, ctrl-x deletes |
 | `<leader>ps` | Send comments (nvim's and tuicr's) to the agent |
 | `:FClear` | Discard pending comments |
 
@@ -173,7 +174,7 @@ nvim comments are saved in
 | `f trace [--since 24h]` | Where `f` spends time: starts Jaeger in Docker (`f-jaeger`) if needed, sends it the traces, opens http://localhost:16686. Jaeger keeps nothing on disk, so each run re-sends. `f trace stop` stops it |
 | `f trace stats [--since 24h]` | The same as text, no Docker (agents can run it): count, p50, p95, max per span, then the 10 slowest runs with their slowest steps |
 | `f goal [text]` | Show / set the goal |
-| `f comment list\|send\|clear` | Review comments: nvim's (list, clear) and, for send, tuicr's too; `send --print` is `/fsr` |
+| `f comment list\|send\|delete\|clear` | Review comments: nvim's (list, delete by ID, clear) and, for send, tuicr's too; `send --print` is `/fsr` |
 
 `f -h` for the summary. Feature names can't be subcommand names.
 

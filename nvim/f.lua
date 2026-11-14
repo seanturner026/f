@@ -3,6 +3,7 @@
 --
 --   :FComment [note]   comment on the current line / visual selection   <leader>pc
 --   :FComments         list pending comments (quickfix)                 <leader>pl
+--   :FPick             pick comments: jump (⏎) or delete (ctrl-x)       <leader>pp
 --   :FSend             send all (and tuicr's) to the agent and clear     <leader>ps
 --   :FClear            discard all
 --
@@ -179,9 +180,68 @@ local function list()
   vim.cmd(#items > 0 and "copen" or "cclose")
 end
 
+-- pick lists pending comments in a Snacks picker: ⏎ jumps to one, ctrl-x
+-- deletes the selected ones (Tab selects several). Without Snacks, a pick deletes.
+local function pick()
+  local root = current_root()
+  if not root then
+    return vim.notify("FComment: not inside an f feature", vim.log.levels.WARN)
+  end
+  local items = {}
+  for _, c in ipairs(load_comments(root)) do
+    table.insert(items, {
+      id = c.id,
+      text = ("%s:%d  %s"):format(c.file, c.line1, c.note),
+      file = root .. "/" .. c.file,
+      pos = { c.line1, 0 },
+      end_pos = { c.line2, 0 },
+    })
+  end
+  if #items == 0 then
+    return vim.notify("no pending comments")
+  end
+  local function delete(selected)
+    local ids = vim.tbl_map(function(it)
+      return tostring(it.id)
+    end, selected)
+    local ok, _, err = f_cli(root, vim.list_extend({ "comment", "delete" }, ids))
+    if not ok then
+      return vim.notify("FPick: " .. err, vim.log.levels.ERROR)
+    end
+    render_all()
+    vim.notify(("deleted %d comment(s)"):format(#ids))
+  end
+  local has_snacks, Snacks = pcall(require, "snacks")
+  if not (has_snacks and Snacks.picker) then
+    return vim.ui.select(items, { prompt = "delete comment", format_item = function(it) return it.text end }, function(it)
+      if it then
+        delete({ it })
+      end
+    end)
+  end
+  Snacks.picker.pick({
+    title = "agent comments · ⏎ jump · ctrl-x delete",
+    items = items,
+    format = "text",
+    confirm = "jump",
+    actions = {
+      delete_comments = function(picker)
+        local selected = picker:selected({ fallback = true })
+        picker:close()
+        delete(selected)
+      end,
+    },
+    win = {
+      input = { keys = { ["<c-x>"] = { "delete_comments", mode = { "n", "i" } } } },
+      list = { keys = { ["<c-x>"] = "delete_comments" } },
+    },
+  })
+end
+
 function M.setup()
   vim.api.nvim_create_user_command("FComment", add, { range = true, nargs = "*", desc = "Comment for the agent" })
   vim.api.nvim_create_user_command("FComments", list, { desc = "List pending comments" })
+  vim.api.nvim_create_user_command("FPick", pick, { desc = "Pick comments: jump or delete" })
   vim.api.nvim_create_user_command("FSend", send, { desc = "Send comments to the agent" })
   vim.api.nvim_create_user_command("FClear", clear, { desc = "Discard pending comments" })
 
@@ -197,6 +257,7 @@ function M.setup()
   vim.keymap.set("x", "<leader>pc", ":FComment<cr>", { desc = "Comment for the agent" })
   vim.keymap.set("n", "<leader>ps", "<cmd>FSend<cr>", { desc = "Send comments to the agent" })
   vim.keymap.set("n", "<leader>pl", "<cmd>FComments<cr>", { desc = "List pending comments" })
+  vim.keymap.set("n", "<leader>pp", "<cmd>FPick<cr>", { desc = "Pick comments: jump or delete" })
 end
 
 return M

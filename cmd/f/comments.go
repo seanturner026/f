@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strconv"
 
 	"github.com/seanturner026/f/internal/feature"
 	"github.com/seanturner026/f/internal/herdr"
@@ -51,6 +52,21 @@ func commentList(d deps, explicit string, asJSON bool) error {
 	}
 	fmt.Print(model.CommentsMessage(cs))
 	return nil
+}
+
+// commentDelete removes the pending comments with the given IDs (nvim's picker).
+func commentDelete(d deps, explicit string, args []string) error {
+	name, err := resolve(d, explicit)
+	if err != nil {
+		return err
+	}
+	ids := make([]int, len(args))
+	for i, a := range args {
+		if ids[i], err = strconv.Atoi(a); err != nil {
+			return fmt.Errorf("comment delete: %q isn't a comment ID", a)
+		}
+	}
+	return feature.DeleteComments(d.layout, name, ids...)
 }
 
 func commentClear(d deps, explicit string) error {

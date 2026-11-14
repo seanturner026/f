@@ -154,6 +154,10 @@ func main() {
 						Action: func(ctx context.Context, c *cli.Command) error {
 							return commentSend(ctx, d, c.String("feature"), c.Bool("print"))
 						}},
+					{Name: "delete", Usage: "discard some (nvim: <leader>pp)", ArgsUsage: "<id>...", Flags: []cli.Flag{featureFlag},
+						Action: func(ctx context.Context, c *cli.Command) error {
+							return commentDelete(d, c.String("feature"), c.Args().Slice())
+						}},
 					{Name: "clear", Usage: "discard them", Flags: []cli.Flag{featureFlag},
 						Action: func(ctx context.Context, c *cli.Command) error {
 							return commentClear(d, c.String("feature"))

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 
 	"github.com/seanturner026/f/internal/model"
 )
@@ -61,6 +62,16 @@ func AddComment(l Layout, name string, c model.Comment) (model.Comment, error) {
 	}
 	c.ID++
 	return c, saveComments(l, name, append(cs, c))
+}
+
+// DeleteComments removes the pending comments with the given IDs.
+func DeleteComments(l Layout, name string, ids ...int) error {
+	cs, err := LoadComments(l, name)
+	if err != nil {
+		return err
+	}
+	kept := slices.DeleteFunc(cs, func(c model.Comment) bool { return slices.Contains(ids, c.ID) })
+	return saveComments(l, name, kept)
 }
 
 // ClearComments removes all pending comments.
