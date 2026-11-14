@@ -61,7 +61,9 @@ func review(ctx context.Context, d deps, repo string) error {
 			waitScreen(ctx, vis, repo+": f is still setting up this worktree.")
 			continue
 		}
-		switch runTuicr(ctx, d, dir, view, vis) {
+		outcome := runTuicr(ctx, d, dir, view, vis)
+		resetTerminal()
+		switch outcome {
 		case reviewNoChanges:
 			waitScreen(ctx, vis, repo+": no changes to review yet. This tab opens the review once there are.")
 		case reviewQuit:
@@ -213,6 +215,15 @@ func rangeHasCommits(ctx context.Context, d deps, dir string, view reviewView) b
 	base, _, _ := strings.Cut(view.args[1], "...")
 	n, err := d.run.Run(ctx, dir, "git", "rev-list", "--count", base+"..HEAD")
 	return err != nil || strings.TrimSpace(n) != "0" // unsure: let tuicr decide
+}
+
+// resetTerminal undoes the terminal modes tuicr turns on, which it can't undo
+// itself when f stops it to restart: the kitty keyboard protocol (fzf would
+// read arrows as text like "1;1:1B"), mouse reporting, bracketed paste, its screen.
+func resetTerminal() {
+	fmt.Print("\x1b[<10u\x1b[=0;1u\x1b[>4;0m" + // keyboard protocols
+		"\x1b[?1000l\x1b[?1002l\x1b[?1003l\x1b[?1006l\x1b[?1015l" + // mouse
+		"\x1b[?2004l\x1b[?1049l\x1b[?25h") // bracketed paste, main screen, cursor
 }
 
 // reviewMarks is where the refs a view follows point now.
