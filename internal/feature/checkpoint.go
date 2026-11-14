@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 
 	"go.opentelemetry.io/otel/attribute"
@@ -18,6 +19,9 @@ const (
 	LastRunRef = "refs/worktree/pi-last"
 	// pendingRef is the snapshot taken when a run starts.
 	pendingRef = "refs/worktree/pi-pending"
+	// TurnsRef chains a snapshot after each run that changed code, and one of
+	// your own edits between runs, so a review can show any of them alone.
+	TurnsRef = "refs/worktree/f/turns"
 )
 
 // CheckpointBegin snapshots every repo in the feature as a run starts. The
@@ -50,10 +54,10 @@ func CheckpointBegin(ctx context.Context, r Runner, l Layout, name string) error
 }
 
 // CheckpointEnd runs when the agent finishes. For each repo whose code changed since
-// CheckpointBegin, the run's starting snapshot becomes LastRunRef; repos the
-// run didn't touch keep their previous marker. Repos are checked concurrently.
-// Returns the changed repos.
-func CheckpointEnd(ctx context.Context, r Runner, l Layout, name string) ([]string, error) {
+// CheckpointBegin, the run's starting snapshot becomes LastRunRef and the run
+// joins TurnsRef, named after prompt; repos the run didn't touch keep their
+// previous marker. Repos are checked concurrently. Returns the changed repos.
+func CheckpointEnd(ctx context.Context, r Runner, l Layout, name, prompt string) ([]string, error) {
 	repos, err := Repos(l, name)
 	if err != nil {
 		return nil, err
@@ -67,7 +71,7 @@ func CheckpointEnd(ctx context.Context, r Runner, l Layout, name string) ([]stri
 			defer wg.Done()
 			ctx, span := tracing.Start(ctx, "checkpoint end repo", attribute.String("repo", repo))
 			defer func() { tracing.End(span, errs[i]) }()
-			changed[i], errs[i] = checkpointEndRepo(ctx, r, RepoDir(l, name, repo))
+			changed[i], errs[i] = checkpointEndRepo(ctx, r, RepoDir(l, name, repo), prompt)
 			if errs[i] != nil {
 				errs[i] = fmt.Errorf("checkpoint %s: %w", repo, errs[i])
 			}
@@ -83,7 +87,7 @@ func CheckpointEnd(ctx context.Context, r Runner, l Layout, name string) ([]stri
 	return out, errors.Join(errs...)
 }
 
-func checkpointEndRepo(ctx context.Context, r Runner, wt string) (bool, error) {
+func checkpointEndRepo(ctx context.Context, r Runner, wt, prompt string) (bool, error) {
 	before := git.TreeOf(ctx, r, wt, pendingRef)
 	if before == "" {
 		return false, nil // no run started here
@@ -93,8 +97,12 @@ func checkpointEndRepo(ctx context.Context, r Runner, wt string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	if git.TreeOf(ctx, r, wt, now) == before {
+	after := git.TreeOf(ctx, r, wt, now)
+	if after == before {
 		return false, nil
+	}
+	if err := recordTurn(ctx, r, wt, before, after, prompt); err != nil {
+		return false, err
 	}
 	commit, err := r.Run(ctx, wt, "git", "rev-parse", pendingRef)
 	if err != nil {
@@ -109,4 +117,46 @@ func checkpointEndRepo(ctx context.Context, r Runner, wt string) (bool, error) {
 		return false, err
 	}
 	return true, nil
+}
+
+// recordTurn appends a run to TurnsRef: first your edits since the last run
+// (if any), then the run itself, each a commit of the whole tree.
+func recordTurn(ctx context.Context, r Runner, wt, before, after, prompt string) error {
+	tip := git.RevParse(ctx, r, wt, TurnsRef)
+	if tip == "" || git.TreeOf(ctx, r, wt, tip) != before {
+		msg := "your edits between turns"
+		if tip == "" {
+			msg = "before the first turn" // the base the first turn is shown against
+		}
+		var err error
+		if tip, err = git.CommitTree(ctx, r, wt, before, tip, msg); err != nil {
+			return err
+		}
+	}
+	turn, err := git.CommitTree(ctx, r, wt, after, tip, "turn: "+turnTitle(prompt))
+	if err != nil {
+		return err
+	}
+	return git.UpdateRef(ctx, r, wt, TurnsRef, turn)
+}
+
+// turnTitle is a prompt's first line, cut to fit a commit list.
+func turnTitle(prompt string) string {
+	line, _, _ := strings.Cut(strings.TrimSpace(prompt), "\n")
+	if line == "" {
+		return "(no prompt)"
+	}
+	if r := []rune(line); len(r) > 72 {
+		return string(r[:71]) + "…"
+	}
+	return line
+}
+
+// TurnsRange is the tuicr/git range of every recorded turn in wt ("" if none).
+func TurnsRange(ctx context.Context, r Runner, wt string) string {
+	root, err := r.Run(ctx, wt, "git", "rev-list", "--max-parents=0", TurnsRef)
+	if err != nil || root == "" {
+		return ""
+	}
+	return strings.Fields(root)[0] + ".." + TurnsRef
 }

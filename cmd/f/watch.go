@@ -174,7 +174,7 @@ func watchPRs(ctx context.Context, d deps, name string) error {
 				case n == 0:
 					note = "no failing checks"
 				default:
-					note = green(fmt.Sprintf("sent %d failing check(s) to the agent: it proposes a fix, doesn't push", n))
+					note = green(fmt.Sprintf("sent %d failing check(s) to the agent: it fixes and pushes", n))
 				}
 			}
 			continue

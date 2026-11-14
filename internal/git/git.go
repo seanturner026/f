@@ -170,6 +170,19 @@ func TreeOf(ctx context.Context, r Runner, wt, rev string) string {
 	return tree
 }
 
+// CommitTree makes a commit of tree with message msg, on parent ("" for none).
+func CommitTree(ctx context.Context, r Runner, wt, tree, parent, msg string) (string, error) {
+	args := []string{"commit-tree", tree, "-m", msg}
+	if parent != "" {
+		args = append(args, "-p", parent)
+	}
+	commit, err := r.Run(ctx, wt, "git", args...)
+	if err != nil {
+		return "", fmt.Errorf("commit-tree: %w", err)
+	}
+	return commit, nil
+}
+
 // UpdateRef points ref at commit.
 func UpdateRef(ctx context.Context, r Runner, wt, ref, commit string) error {
 	if _, err := r.Run(ctx, wt, "git", "update-ref", ref, commit); err != nil {

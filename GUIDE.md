@@ -10,7 +10,8 @@ what each part is; this covers how to use it.
 | `f` | Creates and owns features: worktrees, branches, `AGENTS.md`, `.context/`, Herdr layout, cleanup, beads issue |
 | Herdr | Terminals: one workspace per feature, agent status |
 | Claude Code | The agent. The `f` mod in `claude/f/`: guard, goal, checkpoints, PRs, plan, `/code` |
-| nvim | Review: one live CodeDiff tab per repo, comments for the agent (`nvim/f.lua`) |
+| tuicr | Review: one tab per repo (`f review`): the whole feature, one PR of a stack, or the agent's turns |
+| nvim | Editing, with comments for the agent (`nvim/f.lua`) |
 | beads (`bd`) | The plan: one issue per feature, child issues for steps |
 
 A feature is `<home>/.features/<name>/` (`home` in `~/.config/f/config.json`): one worktree per
@@ -28,10 +29,11 @@ by `f`).
    reference files across repos. Started from a feature's shell tab, that feature
    goes back to its chat tab.
 2. **Direction**: the agent asks questions, then proposes. Approve or steer.
-3. **Review**: `opt+3…` repo tabs show a live CodeDiff of the whole feature.
-   `<leader>pr` toggles to *just the agent's last run*. Comment with `<leader>pc`,
-   send them all with `<leader>ps`. Small fixes: edit the right-hand side
-   directly and tell the agent ("I edited X").
+3. **Review**: `opt+3…` repo tabs show the whole feature in tuicr, live. Quit tuicr
+   (`:q`) to pick another view: one PR of the stack, or the agent's turns (each
+   turn's changes on their own, your edits between turns separate). Comment in
+   tuicr (`c`, `v`), then send them with `/fsr [text]` from chat. `e` opens a file in
+   your editor; tell the agent if you changed something ("I edited X").
 4. **PRs**: the agent opens them; they show in the statusline with CI (`✓` `⋯` `✗`), and the
    `prs` tab lists each PR's failing/running checks. `/prc` copies
    `url: title` lines (stacks numbered 1/3, 2/3, …).
@@ -116,33 +118,43 @@ The statusline shows the feature's PRs with CI, and `conflicts` on one that conf
 | `/sync` | After a PR merges: merged branches are reset to main (the feature branch) or deleted (stack branches), commits added after a merge are kept, the rest of the stack is rebased onto main, force-pushed (with lease) and its PRs moved to base `main`; one line per branch. Also runs (without pushing; stacks wait) when you open the feature and on `r` in the prs tab |
 | `/plan`, `/steps` | The feature's beads plan as a dependency tree, in a sidebar that updates as the plan changes; opens at once with the last plan, then refreshes. `/plan` replaces Claude Code's (shift+tab still reaches plan mode) and waits for a running turn; `/steps` runs mid-turn |
 | `/ci` | Send failing checks + failed-job logs to the agent: it finds the cause, fixes and pushes (asks first only for behavior changes or judgment calls) |
+| `/fsr [text]` | Send your text plus the pending review comments (tuicr's in every repo, and nvim's) as one message, then clear them |
 | `/code [n]` | Copy code block(s) from the last reply exactly as written (no wrap/indent); several: pick one or all |
 | `/slack` | Copy the last reply formatted for Slack, just its quoted (`>`) draft if it has one: `*bold*`, headings as bold lines, `•` bullets, links as `text (url)`; code untouched |
 
-Only `/ci` reaches the model. `/prs`, `/prc` and `/f` run at once, even mid-turn; the rest wait for the turn to end.
+Only `/ci` and `/fsr` reach the model. `/prs`, `/prc` and `/f` run at once, even mid-turn; the rest wait for the turn to end.
 Herdr's busy/idle marks need `herdr integration install claude`. Herdr plays its Done sound when Claude finishes. Mouse selection copies when
 **Copy on select** is on in `/config`; hold Shift for Herdr's own selection.
 
-### nvim (review tabs and anywhere in a feature)
+### Review tabs (tuicr)
+
+Each repo tab runs `f review <repo>`: tuicr on the whole feature (committed and
+uncommitted), refreshed as the agent edits. A tab you aren't looking at is paused
+(no CPU) and catches up when you switch to it. It restarts by itself when HEAD or
+main moves, and waits ("no changes yet") until there's something to show.
 
 | Key | Does |
 |---|---|
-| `]f` / `[f` | Next / previous file (CodeDiff) |
-| `]c` / `[c` | Next / previous change |
-| `<leader>b` | Toggle the file list; `<leader>e` focuses it |
-| `gc` | Compact: only changes + context |
-| `t` | Side-by-side ↔ inline |
-| `gf` | Open the file in a normal tab |
-| `g?` | All CodeDiff keys |
-| `<leader>pr` | Whole feature ↔ since the agent's last run |
-| `<leader>pp` | Pick what the review tab shows: the whole feature or one open PR of the repo's stack (Snacks picker with a diff-stat preview). The checked-out PR stays live; lower ones show their committed branch. Nothing is checked out, so the agent isn't disturbed |
+| `j`/`k`, `{`/`}`, `[`/`]` | Lines, files, hunks (one stream of every file) |
+| `c` / `v` / `C` | Comment on a line / a selection / the file |
+| `r` / `R` | Mark the file / hunk reviewed |
+| `e` | Open the file in your editor |
+| `:diff` / `:set wrap!` | Side-by-side ↔ unified / line wrap |
+| `?` | All tuicr keys |
+| `:q` | Pick another view: whole feature · each open PR of the stack (`n/N`; the checked-out one is live) · the agent's turns (choose one or more in tuicr's commit list) · leave |
+
+Send comments with `/fsr [text]` in chat (or `f comment send`).
+
+### nvim (anywhere in a feature)
+
+| Key | Does |
+|---|---|
 | `<leader>pc` | Comment on line/selection (normal or visual) |
 | `<leader>pl` | List pending comments (quickfix) |
-| `<leader>ps` | Send comments to the agent |
+| `<leader>ps` | Send comments (nvim's and tuicr's) to the agent |
 | `:FClear` | Discard pending comments |
-| `:FReview [repo]` | Reopen a repo's CodeDiff (no repo: all, as nvim tabs); `:FReview pr` is `<leader>pp`. Review tabs check for changes only while focused, and at once when you switch to them |
 
-Comment on the **right** side of a diff (the real file). Comments are saved in
+nvim comments are saved in
 `.context/comments.json`, so they survive closing nvim.
 
 ## f commands
@@ -161,7 +173,7 @@ Comment on the **right** side of a diff (the real file). Comments are saved in
 | `f trace [--since 24h]` | Where `f` spends time: starts Jaeger in Docker (`f-jaeger`) if needed, sends it the traces, opens http://localhost:16686. Jaeger keeps nothing on disk, so each run re-sends. `f trace stop` stops it |
 | `f trace stats [--since 24h]` | The same as text, no Docker (agents can run it): count, p50, p95, max per span, then the 10 slowest runs with their slowest steps |
 | `f goal [text]` | Show / set the goal |
-| `f comment list\|send\|clear` | Review comments (nvim uses these) |
+| `f comment list\|send\|clear` | Review comments: nvim's (list, clear) and, for send, tuicr's too; `send --print` is `/fsr` |
 
 `f -h` for the summary. Feature names can't be subcommand names.
 
@@ -196,7 +208,7 @@ the real files, are blocked with a reason.
    that redeploy after each commit or pull on `main`).
 2. `just herdr-integration`.
 3. Claude Code `/config`: turn **Copy on select** on.
-4. nvim `init.lua`: `require("f").setup()`.
+4. nvim `init.lua`: `require("f").setup()`. `brew install tuicr`, and in `~/.config/tuicr/config.toml` (in dotfiles): `wrap = true`, `diff_watch_interval_ms = 3000`.
 5. Herdr config (in dotfiles): `ctrl+space` popup running `f`, sidebar hidden.
 6. `~/.config/f/config.json`: `home` (where features live, default `~/code/features`) and
    `repos` (the clones you can pick: paths, or `dir/*`), e.g.
@@ -210,12 +222,12 @@ the real files, are blocked with a reason.
 
 | Symptom | Fix |
 |---|---|
-| Tabs are bare shells after a restart (no agent, no CodeDiff) | `f resume` (all features) or `f <name>` (one) |
+| Tabs are bare shells after a restart (no agent, no review) | `f resume` (all features) or `f <name>` (one) |
 | Workspace has an old tab layout | `ctrl+b shift+d` to close it, then `f <name>` |
 | Bash says "guard not set up" | `f creds` in a shell shows the error; fix, then restart the chat tab |
 | A command is blocked by guard | Read the reason; it's intended. Run it yourself if you really mean it |
 | `<leader>ps` failed | No agent in that feature; comments are kept and the message is on your clipboard |
-| `<leader>pr` says no last run | The agent hasn't changed code in that repo since the guard/checkpoints started |
-| Repo tab says "no changes vs origin/main yet" | Nothing to diff yet; it checks every 3s and switches to CodeDiff once there is |
+| No "agent turns" view | Turns are recorded from runs that changed code in that repo, from now on |
+| Repo tab says "no changes to review yet" | Nothing to diff yet; it checks every 3s while you're looking and opens tuicr once there is |
 | Picker status looks stale | Agent status is live from Herdr; PRs and CI refresh every 30 min (launchd), after each agent turn, and in the prs tab; `f prs -r` forces |
 | Mod changes not active | Claude Code reloads the `f` mod on save (`/reload-plugins` forces) |

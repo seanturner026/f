@@ -78,7 +78,7 @@ func TestCheckpoint(t *testing.T) {
 				t.Fatal(err)
 			}
 			tt.edit()
-			changed, err := feature.CheckpointEnd(ctx, r, l, "feat")
+			changed, err := feature.CheckpointEnd(ctx, r, l, "feat", "")
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -116,7 +116,7 @@ func TestCheckpointDiffShowsOnlyLastRun(t *testing.T) {
 		if err := os.WriteFile(filepath.Join(wt, file), []byte(file), 0o644); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := feature.CheckpointEnd(ctx, r, l, "feat"); err != nil {
+		if _, err := feature.CheckpointEnd(ctx, r, l, "feat", ""); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -201,4 +201,61 @@ func TestSnapshotMatchesWorkingTree(t *testing.T) {
 func gitSnapshot(t *testing.T, wt string) (string, error) {
 	t.Helper()
 	return gitpkg.SnapshotCommit(context.Background(), shell.Exec{}, wt)
+}
+
+func TestTurns(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not installed")
+	}
+	for _, k := range []string{"GIT_AUTHOR_NAME", "GIT_AUTHOR_EMAIL", "GIT_COMMITTER_NAME", "GIT_COMMITTER_EMAIL"} {
+		t.Setenv(k, "t")
+	}
+	ctx, r := context.Background(), shell.Exec{}
+	l := feature.NewLayout(t.TempDir())
+	wt := filepath.Join(feature.Dir(l, "feat"), "a")
+	mustMkdir(t, wt)
+	gitRepo(t, wt)
+	write := func(file string) {
+		t.Helper()
+		if err := os.WriteFile(filepath.Join(wt, file), []byte(file), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	run := func(prompt string, edit func()) {
+		t.Helper()
+		if err := feature.CheckpointBegin(ctx, r, l, "feat"); err != nil {
+			t.Fatal(err)
+		}
+		edit()
+		if _, err := feature.CheckpointEnd(ctx, r, l, "feat", prompt); err != nil {
+			t.Fatal(err)
+		}
+	}
+	git := func(args ...string) string {
+		t.Helper()
+		out, err := exec.Command("git", append([]string{"-C", wt}, args...)...).Output()
+		if err != nil {
+			t.Fatalf("git %v: %v", args, err)
+		}
+		return strings.TrimSpace(string(out))
+	}
+
+	run("add a", func() { write("a.txt") })
+	write("mine.txt") // between turns
+	run("add b\nwith details", func() { write("b.txt") })
+	run("just chat", func() {})
+
+	if got, want := git("log", "--format=%s", feature.TurnsRef), "turn: add b\nyour edits between turns\nturn: add a\nbefore the first turn"; got != want {
+		t.Errorf("turns =\n%s\nwant\n%s", got, want)
+	}
+	if got := git("diff", "--name-only", feature.TurnsRef+"^", feature.TurnsRef); got != "b.txt" {
+		t.Errorf("last turn changed %q, want only b.txt", got)
+	}
+	if got := git("diff", "--name-only", feature.TurnsRef+"~2^", feature.TurnsRef+"~2"); got != "a.txt" {
+		t.Errorf("first turn changed %q, want only a.txt", got)
+	}
+	rng := feature.TurnsRange(ctx, r, wt)
+	if got := git("rev-list", "--count", rng); got != "3" {
+		t.Errorf("TurnsRange %q has %s commits, want 3 (the base is excluded)", rng, got)
+	}
 }

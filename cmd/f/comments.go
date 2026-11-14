@@ -61,9 +61,11 @@ func commentClear(d deps, explicit string) error {
 	return feature.ClearComments(d.layout, name)
 }
 
-// commentSend sends pending comments to the feature's agent as one prompt and
-// clears them. If that fails, they're kept and the message is copied.
-func commentSend(ctx context.Context, d deps, explicit string) error {
+// commentSend sends the pending comments (nvim's and tuicr's) to the
+// feature's agent as one prompt and clears them; with print it writes the
+// prompt to stdout instead (the mod's /fsr submits it). If sending fails,
+// they're kept and the message is copied.
+func commentSend(ctx context.Context, d deps, explicit string, print bool) error {
 	name, err := resolve(d, explicit)
 	if err != nil {
 		return err
@@ -72,18 +74,32 @@ func commentSend(ctx context.Context, d deps, explicit string) error {
 	if err != nil {
 		return err
 	}
+	reviewed, sessions, err := feature.TuicrComments(ctx, d.run, d.layout, name)
+	if err != nil {
+		return err
+	}
+	cs = append(cs, reviewed...)
 	if len(cs) == 0 {
-		info("no pending comments")
+		if !print {
+			info("no pending comments")
+		}
 		return nil
 	}
 	msg := model.CommentsMessage(cs)
-	if err := promptAgentOrCopy(ctx, d, name, msg); err != nil {
+	if print {
+		fmt.Print(msg)
+	} else if err := promptAgentOrCopy(ctx, d, name, msg); err != nil {
 		return fmt.Errorf("%w (comments kept; message copied to clipboard)", err)
 	}
 	if err := feature.ClearComments(d.layout, name); err != nil {
 		return err
 	}
-	ok("sent %d comment(s) to the agent", len(cs))
+	if err := feature.ClearTuicrComments(ctx, d.run, sessions); err != nil {
+		return err
+	}
+	if !print {
+		ok("sent %d comment(s) to the agent", len(cs))
+	}
 	return nil
 }
 

@@ -177,8 +177,8 @@ func splitLabel(label string) (key, name string) {
 	return "", label
 }
 
-// reviewCommand runs nvim on one repo's live CodeDiff (:FReview in nvim/f.lua).
-func reviewCommand(repo string) string { return "nvim -c " + shell.Quote("FReview "+repo) }
+// reviewCommand reviews one repo with tuicr (f review).
+func reviewCommand(repo string) string { return "f review " + shell.Quote(repo) }
 
 // OpenWorkspace focuses the workspace labelled label, or creates it in dir with
 // tabs: chat (the agent) · nvim · one review tab per repo · prs · shell.

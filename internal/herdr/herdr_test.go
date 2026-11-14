@@ -383,8 +383,8 @@ func TestReviveWorkspace(t *testing.T) {
 			want: []string{
 				"p1 --name feat --continue",
 				"p2 nvim",
-				"p3 nvim -c 'FReview argocd'",
-				"p4 nvim -c 'FReview gateway'",
+				"p3 f review 'argocd'",
+				"p4 f review 'gateway'",
 				"p5 f prs --watch",
 			},
 		},
