@@ -221,7 +221,8 @@ func rangeHasCommits(ctx context.Context, d deps, dir string, view reviewView) b
 // itself when f stops it to restart: the kitty keyboard protocol (fzf would
 // read arrows as text like "1;1:1B"), mouse reporting, bracketed paste, its screen.
 func resetTerminal() {
-	fmt.Print("\x1b[<10u\x1b[=0;1u\x1b[>4;0m" + // keyboard protocols
+	// One pop at a time too: Herdr passes those on to the outer terminal (WezTerm).
+	fmt.Print(strings.Repeat("\x1b[<1u", 10) + "\x1b[<10u\x1b[=0;1u\x1b[>4;0m" + // keyboard protocols
 		"\x1b[?1000l\x1b[?1002l\x1b[?1003l\x1b[?1006l\x1b[?1015l" + // mouse
 		"\x1b[?2004l\x1b[?1049l\x1b[?25h") // bracketed paste, main screen, cursor
 }
