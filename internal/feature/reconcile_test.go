@@ -46,12 +46,6 @@ func newSyncFixture(t *testing.T) *syncFixture {
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git not installed")
 	}
-	for _, k := range []string{"GIT_AUTHOR_NAME", "GIT_COMMITTER_NAME"} {
-		t.Setenv(k, "t")
-	}
-	for _, k := range []string{"GIT_AUTHOR_EMAIL", "GIT_COMMITTER_EMAIL"} {
-		t.Setenv(k, "t@t")
-	}
 	root := t.TempDir()
 	f := &syncFixture{t: t, l: feature.NewLayout(filepath.Join(root, "base")), origin: filepath.Join(root, "origin.git"), github: filepath.Join(root, "github")}
 	git(t, root, "init", "-q", "--bare", "-b", "main", f.origin)
@@ -198,8 +192,10 @@ func wantSummary(t *testing.T, res []feature.SyncResult, want string) {
 }
 
 func TestReconcileMergeMethods(t *testing.T) {
+	t.Parallel()
 	for _, method := range []string{"squash", "merge", "rebase"} {
 		t.Run(method, func(t *testing.T) {
+			t.Parallel()
 			f := newSyncFixture(t)
 			head := f.commit("b.txt", "pr\n")
 			f.mainMoves("m.txt", "meanwhile\n") // main moved while the PR was open
@@ -217,6 +213,7 @@ func TestReconcileMergeMethods(t *testing.T) {
 }
 
 func TestReconcileRewrittenHead(t *testing.T) {
+	t.Parallel()
 	// GitHub rewrote the branch when it merged: the saved head isn't local.
 	f := newSyncFixture(t)
 	f.commit("b.txt", "pr\n")
@@ -225,6 +222,7 @@ func TestReconcileRewrittenHead(t *testing.T) {
 }
 
 func TestReconcileNewCommitsKept(t *testing.T) {
+	t.Parallel()
 	f := newSyncFixture(t)
 	head := f.commit("b.txt", "pr\n")
 	f.squash("feat")
@@ -239,6 +237,7 @@ func TestReconcileNewCommitsKept(t *testing.T) {
 }
 
 func TestReconcileSquashAfterMainEditedSameFile(t *testing.T) {
+	t.Parallel()
 	f := newSyncFixture(t)
 	f.mainMoves("a.txt", "1\n2\n3\n4\n5\n")
 	git(t, f.wt, "fetch", "-q", "origin")
@@ -251,6 +250,7 @@ func TestReconcileSquashAfterMainEditedSameFile(t *testing.T) {
 }
 
 func TestReconcileReportsUnrecognizedMerge(t *testing.T) {
+	t.Parallel()
 	f := newSyncFixture(t)
 	head := f.commit("b.txt", "pr\n")
 	f.mainMoves("b.txt", "not the pr\n") // GitHub says merged; main has something else
@@ -262,7 +262,9 @@ func TestReconcileReportsUnrecognizedMerge(t *testing.T) {
 }
 
 func TestReconcileLeavesUnsafeRepos(t *testing.T) {
+	t.Parallel()
 	t.Run("uncommitted changes", func(t *testing.T) {
+		t.Parallel()
 		f := newSyncFixture(t)
 		head := f.commit("b.txt", "pr\n")
 		f.squash("feat")
@@ -273,6 +275,7 @@ func TestReconcileLeavesUnsafeRepos(t *testing.T) {
 		}
 	})
 	t.Run("conflicting new commit", func(t *testing.T) {
+		t.Parallel()
 		f := newSyncFixture(t)
 		head := f.commit("b.txt", "pr\n")
 		f.squash("feat")
@@ -292,6 +295,7 @@ func TestReconcileLeavesUnsafeRepos(t *testing.T) {
 }
 
 func TestReconcileIgnoresUnmergedAndOtherBranches(t *testing.T) {
+	t.Parallel()
 	f := newSyncFixture(t)
 	head := f.commit("b.txt", "pr\n")
 	open := merged(head)
@@ -306,9 +310,11 @@ func stackPR(n int, head, base string, status model.PRStatus, mergeOID string) m
 }
 
 func TestReconcileStack(t *testing.T) {
+	t.Parallel()
 	stack := []string{"feat", "feat-staging", "feat-production"}
 
 	t.Run("all merged", func(t *testing.T) {
+		t.Parallel()
 		f := newSyncFixture(t)
 		f.commit("b.txt", "bottom\n")
 		f.branch("feat-staging")
@@ -338,6 +344,7 @@ func TestReconcileStack(t *testing.T) {
 	})
 
 	t.Run("bottom merged", func(t *testing.T) {
+		t.Parallel()
 		f := newSyncFixture(t)
 		f.commit("b.txt", "bottom\n")
 		f.branch("feat-staging")
@@ -367,6 +374,7 @@ func TestReconcileStack(t *testing.T) {
 	})
 
 	t.Run("next merged after the bottom was reset", func(t *testing.T) {
+		t.Parallel()
 		f := newSyncFixture(t)
 		f.commit("b.txt", "bottom\n")
 		f.branch("feat-staging")
@@ -393,6 +401,7 @@ func TestReconcileStack(t *testing.T) {
 	})
 
 	t.Run("background leaves stacks alone", func(t *testing.T) {
+		t.Parallel()
 		f := newSyncFixture(t)
 		f.commit("b.txt", "bottom\n")
 		f.branch("feat-staging")
@@ -407,6 +416,7 @@ func TestReconcileStack(t *testing.T) {
 }
 
 func TestRemoveRestoreExpire(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	f := newSyncFixture(t)
 	head := f.commit("b.txt", "work\n")

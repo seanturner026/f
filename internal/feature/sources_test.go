@@ -12,6 +12,7 @@ import (
 )
 
 func TestUpdateSourcesFastForwardsCleanClone(t *testing.T) {
+	t.Parallel()
 	f := newSyncFixture(t)
 	base := filepath.Join(f.l.Base, "app")
 	// The clone's post-merge hook fires on the fast-forward, as on a pull (the f repo deploys this way).
@@ -36,6 +37,7 @@ func TestUpdateSourcesFastForwardsCleanClone(t *testing.T) {
 }
 
 func TestUpdateSourcesLeavesDirtyClone(t *testing.T) {
+	t.Parallel()
 	f := newSyncFixture(t)
 	base := filepath.Join(f.l.Base, "app")
 	before := git(t, base, "rev-parse", "HEAD")
@@ -62,6 +64,7 @@ func (c *fetchCounter) Run(ctx context.Context, dir, name string, args ...string
 }
 
 func TestSyncFetchesOncePerRun(t *testing.T) {
+	t.Parallel()
 	f := newSyncFixture(t)
 	head := f.commit("b.txt", "two\n")
 	f.merge("squash")

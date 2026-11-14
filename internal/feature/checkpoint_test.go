@@ -35,13 +35,10 @@ func lastRun(t *testing.T, wt string) string {
 }
 
 func TestCheckpoint(t *testing.T) {
+	t.Parallel()
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git not installed")
 	}
-	t.Setenv("GIT_AUTHOR_NAME", "t")
-	t.Setenv("GIT_AUTHOR_EMAIL", "t@t")
-	t.Setenv("GIT_COMMITTER_NAME", "t")
-	t.Setenv("GIT_COMMITTER_EMAIL", "t@t")
 	ctx, r := context.Background(), shell.Exec{}
 	l := feature.NewLayout(t.TempDir())
 	wtA := filepath.Join(feature.Dir(l, "feat"), "a")
@@ -97,11 +94,9 @@ func TestCheckpoint(t *testing.T) {
 }
 
 func TestCheckpointDiffShowsOnlyLastRun(t *testing.T) {
+	t.Parallel()
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git not installed")
-	}
-	for _, k := range []string{"GIT_AUTHOR_NAME", "GIT_AUTHOR_EMAIL", "GIT_COMMITTER_NAME", "GIT_COMMITTER_EMAIL"} {
-		t.Setenv(k, "t")
 	}
 	ctx, r := context.Background(), shell.Exec{}
 	l := feature.NewLayout(t.TempDir())
@@ -143,11 +138,9 @@ func TestCheckpointDiffShowsOnlyLastRun(t *testing.T) {
 // The snapshot starts from a copy of the real index (for speed): it must
 // record the same tree as starting from HEAD would, and leave the index alone.
 func TestSnapshotMatchesWorkingTree(t *testing.T) {
+	t.Parallel()
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git not installed")
-	}
-	for _, k := range []string{"GIT_AUTHOR_NAME", "GIT_COMMITTER_NAME", "GIT_AUTHOR_EMAIL", "GIT_COMMITTER_EMAIL"} {
-		t.Setenv(k, "t")
 	}
 	wt := t.TempDir()
 	gitRepo(t, wt)
@@ -204,11 +197,9 @@ func gitSnapshot(t *testing.T, wt string) (string, error) {
 }
 
 func TestTurns(t *testing.T) {
+	t.Parallel()
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git not installed")
-	}
-	for _, k := range []string{"GIT_AUTHOR_NAME", "GIT_AUTHOR_EMAIL", "GIT_COMMITTER_NAME", "GIT_COMMITTER_EMAIL"} {
-		t.Setenv(k, "t")
 	}
 	ctx, r := context.Background(), shell.Exec{}
 	l := feature.NewLayout(t.TempDir())
