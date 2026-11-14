@@ -21,7 +21,7 @@ function inlineToSlack(line: string): string {
 	);
 }
 
-/** slackText is what /f slack copies: the reply's longest blockquote (a drafted
+/** slackText is what /fslack copies: the reply's longest blockquote (a drafted
  * message, without its "> " markers) if it has one, else the whole reply. */
 export function slackText(markdown: string): string {
 	let best: string[] = [];

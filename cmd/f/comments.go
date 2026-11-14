@@ -79,7 +79,7 @@ func commentClear(d deps, explicit string) error {
 
 // commentSend sends the pending comments (nvim's and tuicr's) to the
 // feature's agent as one prompt and clears them; with print it writes the
-// prompt to stdout instead (the mod's /f sr submits it). If sending fails,
+// prompt to stdout instead (the mod's /fsr submits it). If sending fails,
 // they're kept and the message is copied.
 func commentSend(ctx context.Context, d deps, explicit string, print bool) error {
 	name, err := resolve(d, explicit)

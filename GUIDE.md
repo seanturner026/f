@@ -32,13 +32,13 @@ by `f`).
 3. **Review**: `opt+3…` repo tabs show the whole feature in tuicr, live. Quit tuicr
    (`:q`) to pick another view: one PR of the stack, or the agent's turns (each
    turn's changes on their own, your edits between turns separate). Comment in
-   tuicr (`c`, `v`), then send them with `/f sr [text]` from chat. `e` opens a file in
+   tuicr (`c`, `v`), then send them with `/fsr [text]` from chat. `e` opens a file in
    your editor; tell the agent if you changed something ("I edited X").
 4. **PRs**: the agent opens them; they show in the statusline with CI (`✓` `⋯` `✗`), and the
-   `prs` tab lists each PR's failing/running checks. `/f prc` copies
+   `prs` tab lists each PR's failing/running checks. `/fprc` copies
    `url: title` lines (stacks numbered 1/3, 2/3, …).
 5. **Switch**: `ctrl+space` → picker, ordered by what needs you.
-6. **Merged**: the repo resets to main by itself (on open, `r` in prs, `/f sync`, or tell
+6. **Merged**: the repo resets to main by itself (on open, `r` in prs, `/fsync`, or tell
    the agent "merged"), so more work in the feature starts a fresh PR. Squash merges are
    recognized by content: merged stack branches are reset or deleted, the rest rebased
    onto main and pushed. A merged PR whose commits it can't find in main shows as `✗`.
@@ -73,7 +73,7 @@ picker (`3/5 done · next: …`).
 | Key | Does |
 |---|---|
 | `r` | Refresh now (a re-run on GitHub, a merge) |
-| `f` | Fix CI: send failing checks + logs to this feature's agent (same as `/f ci`) |
+| `f` | Fix CI: send failing checks + logs to this feature's agent (same as `/fci`) |
 | `q` | Quit (back to a shell; `f prs -w` restarts it) |
 
 Each open PR lists its failing and running checks; passed and skipped are a
@@ -90,7 +90,7 @@ picker too.
 | `ctrl-x` | Remove the feature (to the trash for 14 days: `f restore <name>`) and close its workspace once the picker exits; instant, no questions, so remove several and then pick one |
 | `ctrl-n` | New feature: type its name in the search box first. Arrows (or `ctrl-j`/`ctrl-k`) still move the cursor |
 | `ctrl-u` | Mark the feature unread (or read again): AGENT shows `unread`, sorted with "needs you". Opening it, or the agent doing anything (working, done, needs you), marks it read |
-| `ctrl-o` / `ctrl-y` | Open the feature's open PRs in the browser / copy them (like `/f prc`), without leaving the picker |
+| `ctrl-o` / `ctrl-y` | Open the feature's open PRs in the browser / copy them (like `/fprc`), without leaving the picker |
 | `ctrl-s` | Sync the feature in the background (as `f sync` does after a merge) |
 | `ctrl-t` | Trash: pick a removed feature to restore (it reappears in the picker) |
 | `?` / `ctrl-/` | Show/hide these keys in a panel beside the list |
@@ -110,21 +110,21 @@ unseen) → **working** → **idle** → **closed** (no agent running).
 feature's `CLAUDE.md` imports its AGENTS.md and each repo's instructions.
 The statusline shows the feature's PRs with CI, and `conflicts` on one that conflicts with its base (GitHub's `mergeable`; it can take a refresh to appear after main moves).
 
-One command, `/f <cmd>`; a bare `/f` lists them. They run at once, even mid-turn,
-except `/f sync`, which runs when the turn ends. `ci`, `sr` and `prr` send a message
-to the agent (queued behind a running turn); the rest never reach the model.
+`/fprs`, `/fprc` and `/fplan` run at once, even mid-turn; the rest wait for the turn
+to end. `/fci`, `/fsr` and `/fprr` send a message to the agent; the rest never reach
+the model.
 
 | Command | Does |
 |---|---|
-| `/f prs` | Open the open PRs in the browser, at once from the saved list, then refresh it from GitHub |
-| `/f prc` | Copy the feature's open PRs as `url: title` lines (stacks numbered 1/3, 2/3, …) |
-| `/f prr [text]` | Send your text plus the unresolved GitHub review threads on the feature's open PRs (with the diff context); the agent fixes them, you resolve the threads |
-| `/f sr [text]` | Send your text plus the pending review comments (tuicr's in every repo, and nvim's) as one message, then delete those |
-| `/f ci` | Send failing checks + failed-job logs to the agent: it finds the cause, fixes and pushes (asks first only for behavior changes or judgment calls) |
-| `/f sync` | After a PR merges: merged branches are reset to main (the feature branch) or deleted (stack branches), commits added after a merge are kept, the rest of the stack is rebased onto main, force-pushed (with lease) and its PRs moved to base `main`; one line per branch. Also runs (without pushing; stacks wait) when you open the feature and on `r` in the prs tab |
-| `/f plan` | The feature's beads plan as a dependency tree, in a sidebar that updates as the plan changes; opens at once with the last plan, then refreshes. Again to hide |
-| `/f code [n]` | Copy code block(s) from the last reply exactly as written (no wrap/indent); several: pick one or all |
-| `/f slack` | Copy the last reply formatted for Slack, just its quoted (`>`) draft if it has one: `*bold*`, headings as bold lines, `•` bullets, links as `text (url)`; code untouched |
+| `/fprs` | Open the open PRs in the browser, at once from the saved list, then refresh it from GitHub |
+| `/fprc` | Copy the feature's open PRs as `url: title` lines (stacks numbered 1/3, 2/3, …) |
+| `/fprr [text]` | Send your text plus the unresolved GitHub review threads on the feature's open PRs (with the diff context); the agent fixes them, you resolve the threads |
+| `/fsr [text]` | Send your text plus the pending review comments (tuicr's in every repo, and nvim's) as one message, then delete those |
+| `/fci` | Send failing checks + failed-job logs to the agent: it finds the cause, fixes and pushes (asks first only for behavior changes or judgment calls) |
+| `/fsync` | After a PR merges: merged branches are reset to main (the feature branch) or deleted (stack branches), commits added after a merge are kept, the rest of the stack is rebased onto main, force-pushed (with lease) and its PRs moved to base `main`; one line per branch. Also runs (without pushing; stacks wait) when you open the feature and on `r` in the prs tab |
+| `/fplan` | The feature's beads plan as a dependency tree, in a sidebar that updates as the plan changes; opens at once with the last plan, then refreshes. Again to hide |
+| `/fcode [n]` | Copy code block(s) from the last reply exactly as written (no wrap/indent); several: pick one or all |
+| `/fslack` | Copy the last reply formatted for Slack, just its quoted (`>`) draft if it has one: `*bold*`, headings as bold lines, `•` bullets, links as `text (url)`; code untouched |
 
 Features are opened and started from the picker (`ctrl+space`), not from chat.
 Herdr's busy/idle marks need `herdr integration install claude`. Herdr plays its Done sound when Claude finishes. Mouse selection copies when
@@ -147,7 +147,7 @@ main moves, and waits ("no changes yet") until there's something to show.
 | `?` | All tuicr keys |
 | `:q` | Pick another view: whole feature · each open PR of the stack (`n/N`; the checked-out one is live) · the agent's turns (choose one or more in tuicr's commit list) · leave |
 
-Send comments with `/f sr [text]` in chat (or `f comment send`).
+Send comments with `/fsr [text]` in chat (or `f comment send`).
 
 ### nvim (anywhere in a feature)
 
@@ -172,13 +172,13 @@ nvim comments are saved in
 | `f add [repo…]` | Add repos to this feature (+ Herdr tabs, before shell). From your shell in Herdr it returns at once and sets them up in the background (the agent gets them with your next prompt); run by the agent it waits |
 | `f prs [-r] [-c] [-n] [-w]` | PRs: from saved state; `-r` refresh live, `-c` copy open ones, `-n` don't open browser, `-w` live view (the prs tab) |
 | `f sync --all` | What launchd runs every 30 min (skipped after 30 min without keyboard/mouse input, e.g. asleep): PR/CI and plan refresh for every feature; post-merge resets wait for the one you're in or a busy agent; never pushes; the agent gets a note with its next prompt. Log: `~/Library/Logs/f-sync.log` |
-| `f sync` | Same as `/f sync`. Also fast-forwards the source clone of each repo with a merged PR (only if it's on its default branch with no local changes), so clones stay current and the `f` repo redeploys itself. Leaves repos with uncommitted changes or conflicts alone (says so). Never pushes the default branch or branches outside the feature |
+| `f sync` | Same as `/fsync`. Also fast-forwards the source clone of each repo with a merged PR (only if it's on its default branch with no local changes), so clones stay current and the `f` repo redeploys itself. Leaves repos with uncommitted changes or conflicts alone (says so). Never pushes the default branch or branches outside the feature |
 | `f ci fix` | Send failing checks + failed-job logs to the feature's agent (clipboard if it isn't reachable) |
 | `f restore [name]` | Bring back a removed feature (worktrees, branches, uncommitted files), reopen its beads issue and open it. No name: list the trash. Kept 14 days; `f sync --all` deletes older ones, branches included. A name in the trash can't be reused until then |
 | `f trace [--since 24h]` | Where `f` spends time: starts Jaeger in Docker (`f-jaeger`) if needed, sends it the traces, opens http://localhost:16686. Jaeger keeps nothing on disk, so each run re-sends. `f trace stop` stops it |
 | `f trace stats [--since 24h]` | The same as text, no Docker (agents can run it): count, p50, p95, max per span, then the 10 slowest runs with their slowest steps |
 | `f goal [text]` | Show / set the goal |
-| `f comment list\|send\|delete\|clear` | Review comments: nvim's (list, delete by ID, clear) and, for send, tuicr's too; `send --print` is `/f sr` |
+| `f comment list\|send\|delete\|clear` | Review comments: nvim's (list, delete by ID, clear) and, for send, tuicr's too; `send --print` is `/fsr` |
 
 `f -h` for the summary. Feature names can't be subcommand names.
 
