@@ -16,7 +16,6 @@ My Claude Code config plus `f`, the multi-repo feature workspace CLI. What each 
 
 - After a merge, `f sync` (and `f sync --all`) fast-forwards source clones that are on their default branch and clean (`feature.UpdateSources`); for this repo that runs `post-merge`, so a merged feature PR deploys within one launchd sync.
 - Every commit (or pull) on `main` deploys in the background (`.githooks/`, `just deploy`): `go install ./cmd/f`, and copies of `claude/` to `~/.claude/f` and `nvim/f.lua` into nvim. Commits on other branches deploy nothing; `just deploy` installs any checkout by hand. Log: `$TMPDIR/f-deploy.log`. `just` lists every recipe.
-- Go changes need `go install ./cmd/f`.
 
 ## Conventions
 
