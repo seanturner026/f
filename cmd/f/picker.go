@@ -189,7 +189,7 @@ func pickFeature(ctx context.Context, d deps) (name string, create bool, err err
 			"--expect="+pickerKeys, "--bind=ctrl-space:abort", `--bind=ctrl-n:become(printf 'ctrl-n\n%s\n' {q})`,
 			"--preview=printf '%s' '"+pickerHelp+"'", "--preview-window=right,36,hidden,border-left",
 			"--bind=?:toggle-preview,ctrl-/:toggle-preview",
-			"--prompt=feature> ", "--header="+strings.Join(header, "\n"))
+			"--no-hscroll", "--prompt=feature> ", "--header="+strings.Join(header, "\n"))
 		wait.End()
 		if err != nil || len(out) == 0 {
 			return "", false, err
