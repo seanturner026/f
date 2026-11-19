@@ -26,7 +26,7 @@ const help = `f: one Claude Code session across several repos, each on its own w
   f prs [-r] [-c]  this feature's PRs (-r refresh, -c copy, -w live view)
   f prs review     unresolved GitHub review threads on the open PRs, as a prompt (/fprr)
   f review <repo>  review a repo in tuicr (each repo tab runs it; :q picks a PR or the agent's turns)
-  f ci fix         send failing checks to the agent (it fixes and pushes)
+  f ci fix         send conflicts and failing checks to the agent (it fixes and pushes)
   f sync           after a PR merges: reset/drop merged branches, rebase the rest onto main
   f restore [name] bring back a removed feature (14 days); no name lists the trash
   f trace [stats]  where f spends time: Jaeger (Docker), or stats as text
@@ -326,7 +326,7 @@ func main() {
 				Usage: "CI on this feature's PRs",
 				Commands: []*cli.Command{{
 					Name:  "fix",
-					Usage: "send failing checks (with failed job logs) to the agent: find the cause, fix and push",
+					Usage: "send merge conflicts and failing checks (with failed job logs) to the agent: fix and push",
 					Flags: []cli.Flag{featureFlag, &cli.BoolFlag{Name: "print", Usage: "print the prompt instead (for /fci)"}},
 					Action: func(ctx context.Context, c *cli.Command) error {
 						return ciFix(ctx, d, c.String("feature"), c.Bool("print"))
