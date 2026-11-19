@@ -73,7 +73,7 @@ picker (`3/5 done · next: …`).
 | Key | Does |
 |---|---|
 | `r` | Refresh now (a re-run on GitHub, a merge) |
-| `f` | Fix CI: send failing checks + logs to this feature's agent (same as `/fci`) |
+| `f` | Fix PRs: send merge conflicts and failing checks + logs to this feature's agent (same as `/fci`) |
 | `q` | Quit (back to a shell; `f prs -w` restarts it) |
 
 Each open PR lists its failing and running checks; passed and skipped are a
@@ -120,7 +120,7 @@ the model.
 | `/fprc` | Copy the feature's open PRs as `url: title` lines (stacks numbered 1/3, 2/3, …) |
 | `/fprr [text]` | Send your text plus the unresolved GitHub review threads on the feature's open PRs (with the diff context); the agent fixes them, you resolve the threads |
 | `/fsr [text]` | Send your text plus the pending review comments (tuicr's in every repo, and nvim's) as one message, then delete those |
-| `/fci` | Send failing checks + failed-job logs to the agent: it finds the cause, fixes and pushes (asks first only for behavior changes or judgment calls) |
+| `/fci` | Send merge conflicts and failing checks + failed-job logs to the agent: it rebases or fixes, and pushes (asks first only for behavior changes or judgment calls) |
 | `/fsync` | After a PR merges: merged branches are reset to main (the feature branch) or deleted (stack branches), commits added after a merge are kept, the rest of the stack is rebased onto main, force-pushed (with lease) and its PRs moved to base `main`; one line per branch. Also runs (without pushing; stacks wait) when you open the feature and on `r` in the prs tab |
 | `/fplan` | The feature's beads plan as a dependency tree, in a sidebar that updates as the plan changes; opens at once with the last plan, then refreshes. Again to hide |
 | `/fcode [n]` | Copy code block(s) from the last reply exactly as written (no wrap/indent); several: pick one or all |
@@ -173,7 +173,7 @@ nvim comments are saved in
 | `f prs [-r] [-c] [-n] [-w]` | PRs: from saved state; `-r` refresh live, `-c` copy open ones, `-n` don't open browser, `-w` live view (the prs tab) |
 | `f sync --all` | What launchd runs every 30 min (skipped after 30 min without keyboard/mouse input, e.g. asleep): PR/CI and plan refresh for every feature; post-merge resets wait for the one you're in or a busy agent; never pushes; the agent gets a note with its next prompt. Log: `~/Library/Logs/f-sync.log` |
 | `f sync` | Same as `/fsync`. Also fast-forwards the source clone of each repo with a merged PR (only if it's on its default branch with no local changes), so clones stay current and the `f` repo redeploys itself. Leaves repos with uncommitted changes or conflicts alone (says so). Never pushes the default branch or branches outside the feature |
-| `f ci fix` | Send failing checks + failed-job logs to the feature's agent (clipboard if it isn't reachable) |
+| `f ci fix` | Send merge conflicts and failing checks + failed-job logs to the feature's agent (clipboard if it isn't reachable) |
 | `f restore [name]` | Bring back a removed feature (worktrees, branches, uncommitted files), reopen its beads issue and open it. No name: list the trash. Kept 14 days; `f sync --all` deletes older ones, branches included. A name in the trash can't be reused until then |
 | `f trace [--since 24h]` | Where `f` spends time: starts Jaeger in Docker (`f-jaeger`) if needed, sends it the traces, opens http://localhost:16686. Jaeger keeps nothing on disk, so each run re-sends. `f trace stop` stops it |
 | `f trace stats [--since 24h]` | The same as text, no Docker (agents can run it): count, p50, p95, max per span, then the 10 slowest runs with their slowest steps |

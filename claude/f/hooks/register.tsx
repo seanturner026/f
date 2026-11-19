@@ -174,9 +174,9 @@ async function sendFailingChecks($: $): Promise<string> {
   $.ui.toast('checking CI…')
   const res = await f($, ['ci', 'fix', '--print'], 120_000)
   if (res.code !== 0) return res.stderr.trim() || 'f ci fix failed'
-  if (!res.stdout.trim()) return 'no failing checks'
+  if (!res.stdout.trim()) return 'no failing checks or conflicts'
   sendPrompt($, res.stdout.trim())
-  return 'sending failing checks…'
+  return 'sending failing checks and conflicts…'
 }
 
 async function syncFeature($: $): Promise<string> {
@@ -221,7 +221,7 @@ const COMMANDS: Command[] = [
   { name: 'prc', description: "Copy this feature's open PRs as url: title lines", immediate: true, feature: true },
   { name: 'prr', description: "Send your text + the unresolved GitHub review threads on this feature's PRs", argumentHint: '[text]', immediate: false, feature: true },
   { name: 'sr', description: 'Send your text + the pending tuicr/nvim review comments', argumentHint: '[text]', immediate: false, feature: true },
-  { name: 'ci', description: "Send this feature's failing checks (with logs): fix and push", immediate: false, feature: true },
+  { name: 'ci', description: "Send this feature's merge conflicts and failing checks (with logs): fix and push", immediate: false, feature: true },
   { name: 'sync', description: 'After a PR merges: reset/rebase branches onto main', immediate: false, feature: true },
   { name: 'plan', description: "Show/hide this feature's plan in the sidebar", immediate: true, feature: true },
   { name: 'code', description: 'Copy code block(s) from the last reply, unwrapped', argumentHint: '[n]', immediate: false, feature: false },

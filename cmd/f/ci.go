@@ -13,18 +13,21 @@ import (
 
 const ciLogLines = 150 // per failed job
 
-// ciFailure is one failed check with what we could get of its log.
+// ciFailure is one failed check with what we could get of its log, or a PR
+// that conflicts with its base.
 type ciFailure struct {
-	pr     model.PR
-	check  model.Check
-	repo   string // "<owner>/<repo>" of an Actions job; "" if not Actions
-	job    string // Actions job ID; "" if not Actions
-	log    string // excerpt; "" if unavailable
-	logErr error
+	pr       model.PR
+	conflict bool // conflicts with its base; check is empty
+	check    model.Check
+	repo     string // "<owner>/<repo>" of an Actions job; "" if not Actions
+	job      string // Actions job ID; "" if not Actions
+	log      string // excerpt; "" if unavailable
+	logErr   error
 }
 
-// ciFix refreshes the feature's PRs, collects failing checks (with failed job
-// logs for GitHub Actions) and asks the agent to find the cause, fix and push.
+// ciFix refreshes the feature's PRs, collects merge conflicts and failing
+// checks (with failed job logs for GitHub Actions) and asks the agent to fix
+// them and push.
 // With print, it writes the prompt to stdout instead (/ci).
 func ciFix(ctx context.Context, d deps, explicit string, print bool) error {
 	name, err := resolve(d, explicit)
@@ -36,21 +39,21 @@ func ciFix(ctx context.Context, d deps, explicit string, print bool) error {
 		if err == nil && n > 0 {
 			fmt.Print(msg)
 		}
-		return err // nothing printed: /ci says there's nothing failing
+		return err // nothing printed: /fci says there's nothing to fix
 	}
 	n, err := sendCIFix(ctx, d, name)
 	switch {
 	case err != nil:
 		return err
 	case n == 0:
-		info("no failing checks")
+		info("no failing checks or conflicts")
 	default:
-		ok("sent %d failing check(s) to the agent", n)
+		ok("sent %d failing check(s) and conflict(s) to the agent", n)
 	}
 	return nil
 }
 
-// ciFixPrompt refreshes PRs and builds the prompt; n is the number of failing checks.
+// ciFixPrompt refreshes PRs and builds the prompt; n counts failing checks and conflicts.
 func ciFixPrompt(ctx context.Context, d deps, name string) (msg string, n int, err error) {
 	state, _, err := feature.RefreshPRs(ctx, d.run, d.layout, name)
 	if err != nil {
@@ -82,6 +85,9 @@ func collectFailures(prs []model.PR) []*ciFailure {
 	for _, p := range prs {
 		if !p.Status.IsActive() {
 			continue
+		}
+		if p.Conflicting {
+			out = append(out, &ciFailure{pr: p, conflict: true})
 		}
 		for _, c := range p.Checks {
 			if c.State != model.CheckFail {
@@ -118,13 +124,19 @@ func fetchLogs(ctx context.Context, d deps, name string, failures []*ciFailure) 
 // ciPrompt asks the agent to diagnose, fix and push, grouped by PR.
 func ciPrompt(failures []*ciFailure) string {
 	var b strings.Builder
-	b.WriteString("CI is failing on this feature's PRs. For each failure: find the cause (read the code and the log), " +
-		"fix it, then commit and push so CI runs again. Ask me first only if the fix changes behavior or is a judgment call.\n")
+	b.WriteString("This feature's PRs need fixing. For each conflict: rebase the branch onto its base, resolve the conflicts " +
+		"keeping what both sides meant (a stack: `gh stack rebase`, bottom up), check it still builds, and force-push with lease. " +
+		"For each failing check: find the cause (read the code and the log), fix it, then commit and push so CI runs again. " +
+		"Ask me first only if the fix changes behavior or is a judgment call.\n")
 	var lastPR string
 	for _, f := range failures {
 		if key := f.pr.URL; key != lastPR {
 			lastPR = key
 			fmt.Fprintf(&b, "\n## %s #%d %s\n%s\n", f.pr.Repo, f.pr.Number, f.pr.Title, f.pr.URL)
+		}
+		if f.conflict {
+			fmt.Fprintf(&b, "\n### ✗ conflicts with %s\n", f.pr.Base)
+			continue
 		}
 		fmt.Fprintf(&b, "\n### ✗ %s\n", f.check.Name)
 		if f.check.URL != "" {

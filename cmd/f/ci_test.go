@@ -10,7 +10,7 @@ import (
 
 func TestCollectFailures(t *testing.T) {
 	prs := []model.PR{
-		{Repo: "argocd", Status: model.PRStatusOpen, Checks: []model.Check{
+		{Repo: "argocd", Status: model.PRStatusOpen, Conflicting: true, Checks: []model.Check{
 			{Name: "lint", State: model.CheckPass},
 			{Name: "build", State: model.CheckFail, URL: "https://github.com/o/argocd/actions/runs/1/job/22"},
 			{Name: "atlantis/plan", State: model.CheckFail, URL: "https://atlantis/x"},
@@ -18,9 +18,13 @@ func TestCollectFailures(t *testing.T) {
 		{Repo: "tf", Status: model.PRStatusMerged, Checks: []model.Check{{Name: "old", State: model.CheckFail}}},
 	}
 	got := collectFailures(prs)
-	if len(got) != 2 {
-		t.Fatalf("got %d failures, want 2", len(got))
+	if len(got) != 3 {
+		t.Fatalf("got %d failures, want 3", len(got))
 	}
+	if !got[0].conflict {
+		t.Error("conflict should come first")
+	}
+	got = got[1:]
 	if got[0].repo != "o/argocd" || got[0].job != "22" {
 		t.Errorf("actions job = %q %q", got[0].repo, got[0].job)
 	}
@@ -30,8 +34,9 @@ func TestCollectFailures(t *testing.T) {
 }
 
 func TestCIPrompt(t *testing.T) {
-	pr := model.PR{Repo: "argocd", Number: 412, Title: "Add ACK app", URL: "https://github.com/o/argocd/pull/412"}
+	pr := model.PR{Repo: "argocd", Number: 412, Title: "Add ACK app", URL: "https://github.com/o/argocd/pull/412", Base: "main"}
 	failures := []*ciFailure{
+		{pr: pr, conflict: true},
 		{pr: pr, check: model.Check{Name: "Test / build", URL: "https://github.com/o/argocd/actions/runs/1/job/22"}, repo: "o/argocd", job: "22", log: "boom\n##[error]exit 1"},
 		{pr: pr, check: model.Check{Name: "Diff / build", URL: "u2"}, repo: "o/argocd", job: "23", logErr: errors.New("HTTP 410")},
 		{pr: pr, check: model.Check{Name: "atlantis/plan", URL: "https://atlantis/x"}},
@@ -40,6 +45,7 @@ func TestCIPrompt(t *testing.T) {
 	for _, want := range []string{
 		"commit and push so CI runs again",
 		"## argocd #412 Add ACK app\nhttps://github.com/o/argocd/pull/412",
+		"### ✗ conflicts with main\n",
 		"### ✗ Test / build",
 		"`gh run view --job 22 --log-failed -R o/argocd`",
 		"```\nboom\n##[error]exit 1\n```",
