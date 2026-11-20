@@ -219,6 +219,7 @@ the real files, are blocked with a reason.
    `repos` (the clones you can pick: paths, or `dir/*`), e.g.
    `{"home": "~/code/features", "repos": ["~/code/github/me/f", "~/code/github/me/dotfiles"]}`.
    Optional `agent_rules`: extra lines for every feature's AGENTS.md (e.g. how to read your CI's logs).
+   Optional `no_stack`: repos whose CI breaks on stacked PRs (e.g. Terraform). Their branches still build on each other, but every PR targets the default branch, so later PRs include the earlier ones' diffs.
 7. `cd <home> && bd metrics off && bd init --prefix f --skip-agents --skip-hooks && rm -rf .git .gitignore && git config --global beads.role maintainer`.
    The db is Dolt, not git; a git repo at `<home>` would hide feature worktrees from Claude Code's `@` picker.
 8. `~/.config/f/guard.json` with machine-specific allow/default profile.

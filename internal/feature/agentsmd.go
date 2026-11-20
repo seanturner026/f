@@ -33,8 +33,9 @@ This session works across these git worktrees, all on branch ` + "`{{.Name}}`" +
 - Run git commands inside the relevant repo directory; this root is not a git repo.
 - Open PRs ready for review, not as drafts: ` + "`gh stack submit --open`" + ` (with ` + "`--auto`" + ` it makes drafts otherwise), ` + "`gh pr create`" + ` without ` + "`--draft`" + `. Draft only if I ask, or say why first (e.g. it can't merge yet).
 - When a PR has merged (I'll say so), run ` + "`f sync`" + `, not ` + "`gh stack sync`" + ` (squash merges leave merged commits it can't recognize): it resets merged branches to main or deletes them, keeps commits added after a merge, rebases the rest onto main, force-pushes them (with lease), and re-inits the stack.
-- PRs are always a gh stack per repo, starting at branch ` + "`{{.Name}}`" + ` (f already ran ` + "`gh stack init {{.Name}}`" + `; run it if ` + "`gh stack view`" + ` says there's no stack). One change: commit on ` + "`{{.Name}}`" + `. More: ` + "`gh stack add {{.Name}}-<topic>`" + ` for each next PR. Open/update PRs with ` + "`gh stack submit --open`" + `. Follow the repo's instructions on merge order.
-- Interface first, for Python: before adding or changing an interface other code builds on (a public class, protocol or ABC, function signatures, enums, dataclass or pydantic models), show me just that shape (signatures and types, no bodies) and wait for my OK. Not for Terraform, YAML, config, or internal helpers.
+- PRs are a gh stack per repo{{if .Unstacked}} (except {{.Unstacked}}: see below){{end}}, starting at branch ` + "`{{.Name}}`" + ` (f already ran ` + "`gh stack init {{.Name}}`" + `; run it if ` + "`gh stack view`" + ` says there's no stack). One change: commit on ` + "`{{.Name}}`" + `. More: ` + "`gh stack add {{.Name}}-<topic>`" + ` for each next PR. Open/update PRs with ` + "`gh stack submit --open`" + `. Follow the repo's instructions on merge order.
+{{if .Unstacked}}- No GitHub stacks in {{.Unstacked}}: stacked PRs break its CI. Every PR targets the default branch. One change: commit on ` + "`{{.Name}}`" + `, ` + "`git push -u origin HEAD`" + `, ` + "`gh pr create --base <default branch>`" + `. More: ` + "`gh stack add {{.Name}}-<topic>`" + ` branches off the previous one (the local chain is what ` + "`f sync`" + ` rebases), then push and ` + "`gh pr create --base <default branch>`" + ` again, saying in the body which PR it builds on (its diff includes that PR's). Never ` + "`gh stack submit`" + ` or ` + "`gh stack push`" + ` there. Merge bottom-up.
+{{end}}- Interface first, for Python: before adding or changing an interface other code builds on (a public class, protocol or ABC, function signatures, enums, dataclass or pydantic models), show me just that shape (signatures and types, no bodies) and wait for my OK. Not for Terraform, YAML, config, or internal helpers.
 - Shape: group what belongs together into one type that owns its logic. Related constants become an enum or class (methods on it where useful), not loose constants or dicts; related fields become their own type (` + "`resources: FooConfig`" + `, not ` + "`mem: int, cpu: int`" + `).
 - ` + "`.context/`" + ` holds feature state managed by ` + "`f`" + ` (e.g. ` + "`.context/state.json`" + ` lists this feature's PRs). Read it when useful; don't edit it.
 {{range .Rules}}- {{.}}
@@ -62,15 +63,19 @@ func writeAgentsMD(l Layout, info Info) error {
 		goal = GoalPlaceholder
 	}
 	repos := make([]agentsRepo, 0, len(info.Repos))
+	var unstacked []string
 	for _, r := range info.Repos {
 		repos = append(repos, agentsRepo{Dir: r, Instructions: InstructionFile(l, info.Name, r)})
+		if !l.Stacked(r) {
+			unstacked = append(unstacked, "`"+r+"`")
+		}
 	}
 	f, err := os.Create(AgentsMDPath(l, info.Name))
 	if err != nil {
 		return fmt.Errorf("write AGENTS.md: %w", err)
 	}
 	defer f.Close()
-	if err := agentsTmpl.Execute(f, map[string]any{"Name": info.Name, "Goal": goal, "Repos": repos, "Issue": info.Issue, "Rules": l.AgentRules}); err != nil {
+	if err := agentsTmpl.Execute(f, map[string]any{"Name": info.Name, "Goal": goal, "Repos": repos, "Issue": info.Issue, "Rules": l.AgentRules, "Unstacked": strings.Join(unstacked, ", ")}); err != nil {
 		return fmt.Errorf("write AGENTS.md: %w", err)
 	}
 	return writeClaudeMD(l, info.Name, repos)

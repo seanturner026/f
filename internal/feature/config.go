@@ -13,11 +13,13 @@ import (
 // which repos it offers for them, and rules every feature's AGENTS.md adds.
 //
 //	{"home": "~/code/features", "repos": ["~/code/work/*", "~/code/f"],
-//	 "agent_rules": ["CI runs on X: read failures with `x logs <id>`."]}
+//	 "agent_rules": ["CI runs on X: read failures with `x logs <id>`."],
+//	 "no_stack": ["terraform"]}
 type Config struct {
 	Home       string   `json:"home"`        // default ~/code/features
 	Repos      []string `json:"repos"`       // repo paths, or dir/* for every repo in dir; default <home>/*
 	AgentRules []string `json:"agent_rules"` // appended to the Rules of each feature's AGENTS.md
+	NoStack    []string `json:"no_stack"`    // repos whose PRs all target the default branch (CI breaks on stacked PRs)
 }
 
 // DefaultLayout reads the config ($F_BASE overrides its home).
@@ -39,6 +41,7 @@ func DefaultLayout() (Layout, error) {
 	}
 	l := NewLayout(home)
 	l.AgentRules = cfg.AgentRules
+	l.NoStack = cfg.NoStack
 	if len(cfg.Repos) > 0 {
 		l.Sources = nil
 		for _, r := range cfg.Repos {
