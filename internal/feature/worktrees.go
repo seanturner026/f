@@ -46,19 +46,19 @@ func AddRepo(ctx context.Context, r Runner, l Layout, name, repo string) (result
 		if err := git.AddWorktree(ctx, r, src, dst, name, ""); err != nil {
 			return "", "", fmt.Errorf("add %s: %w", repo, err)
 		}
-		_ = github.StackInit(ctx, r, dst, name) // PRs are always a stack (AGENTS.md)
+		_ = github.StackInit(ctx, r, dst, name) // the branch chain, even for NoStack repos (f sync reads it)
 		return AddedExistingBranch, "", nil
 	}
 	base = baseRef(ctx, r, l, repo)
 	if err := git.AddWorktree(ctx, r, src, dst, name, base); err != nil {
 		return "", "", fmt.Errorf("add %s: %w", repo, err)
 	}
-	_ = github.StackInit(ctx, r, dst, name) // PRs are always a stack (AGENTS.md)
+	_ = github.StackInit(ctx, r, dst, name) // the branch chain, even for NoStack repos (f sync reads it)
 	return AddedNewBranch, base, nil
 }
 
 // PRs looks up PRs in every repo, concurrently: the repo's gh stack if it's on
-// one, otherwise PRs for the feature branch.
+// one, otherwise PRs for the feature branch; a NoStack repo's, per branch of its local chain.
 // Per-repo lookup failures are returned in errs, keyed by repo.
 func PRs(ctx context.Context, r Runner, l Layout, name string) (prs []model.PR, errs map[string]error, err error) {
 	repos, err := Repos(l, name)
@@ -72,7 +72,16 @@ func PRs(ctx context.Context, r Runner, l Layout, name string) (prs []model.PR, 
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			results[i], failures[i] = github.RepoPRs(ctx, r, RepoDir(l, name, repo), repo, name)
+			dir := RepoDir(l, name, repo)
+			if l.Stacked(repo) {
+				results[i], failures[i] = github.RepoPRs(ctx, r, dir, repo, name)
+				return
+			}
+			branches, err := github.StackBranches(ctx, r, dir)
+			if err != nil || len(branches) == 0 {
+				branches = []string{name}
+			}
+			results[i], failures[i] = github.BranchPRs(ctx, r, dir, repo, branches)
 		}()
 	}
 	wg.Wait()

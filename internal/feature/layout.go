@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 
@@ -41,7 +42,13 @@ type Layout struct {
 	Sources  []string // base clones: a repo's path, or dir/* for every repo in dir
 	// AgentRules are machine-specific rules for every feature's AGENTS.md (Config).
 	AgentRules []string
+	// NoStack are repos whose PRs all target the default branch (Config).
+	NoStack []string
 }
+
+// Stacked reports whether repo's PRs are a GitHub stack (else each targets
+// the default branch, branches still chained locally by gh stack).
+func (l Layout) Stacked(repo string) bool { return !slices.Contains(l.NoStack, repo) }
 
 // NewLayout returns the layout rooted at base, offering the repos in it.
 func NewLayout(base string) Layout {

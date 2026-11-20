@@ -137,6 +137,36 @@ func ListPRs(ctx context.Context, r Runner, dir, repo, branch string) ([]model.P
 	return prs, nil
 }
 
+// BranchPRs returns the PRs whose head is one of branches (bottom first, as a
+// local gh stack lists them), with Stack set to the branch's position when
+// there are several: a chain of PRs that each target the default branch.
+func BranchPRs(ctx context.Context, r Runner, dir, repo string, branches []string) ([]model.PR, error) {
+	lists := make([][]model.PR, len(branches))
+	errs := make([]error, len(branches))
+	var wg sync.WaitGroup
+	for i, b := range branches {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			lists[i], errs[i] = ListPRs(ctx, r, dir, repo, b)
+		}()
+	}
+	wg.Wait()
+	if err := errors.Join(errs...); err != nil {
+		return nil, err // a partial list would drop PRs: the caller keeps its cached ones
+	}
+	var prs []model.PR
+	for i, l := range lists {
+		for _, p := range l {
+			if len(branches) > 1 {
+				p.Stack = i + 1
+			}
+			prs = append(prs, p)
+		}
+	}
+	return prs, nil
+}
+
 type stackView struct {
 	Branches []struct {
 		Name string `json:"name"`

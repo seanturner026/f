@@ -238,3 +238,39 @@ func TestReviewThreads(t *testing.T) {
 		t.Error("want an error for a non-PR URL")
 	}
 }
+
+// headRunner answers `gh pr list --head <branch>` from a map keyed by branch.
+type headRunner map[string]string
+
+func (f headRunner) Run(_ context.Context, _, _ string, args ...string) (string, error) {
+	out, ok := f[args[3]]
+	if !ok {
+		return "", errors.New("fail: " + args[3])
+	}
+	return out, nil
+}
+
+func TestBranchPRs(t *testing.T) {
+	r := headRunner{
+		"feat":   `[{"number":1,"state":"MERGED","url":"u1","headRefName":"feat"},{"number":3,"state":"OPEN","url":"u3","headRefName":"feat"}]`,
+		"feat-b": `[{"number":2,"state":"OPEN","url":"u2","headRefName":"feat-b"}]`,
+	}
+	got, err := github.BranchPRs(context.Background(), r, "/wt", "tf", []string{"feat", "feat-b"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var pos []int
+	for _, p := range got {
+		pos = append(pos, p.Number*10+p.Stack)
+	}
+	if !reflect.DeepEqual(pos, []int{11, 31, 22}) {
+		t.Errorf("number*10+stack = %v, want [11 31 22]", pos)
+	}
+	one, _ := github.BranchPRs(context.Background(), r, "/wt", "tf", []string{"feat-b"})
+	if one[0].Stack != 0 {
+		t.Errorf("single branch got stack %d, want 0", one[0].Stack)
+	}
+	if _, err := github.BranchPRs(context.Background(), r, "/wt", "tf", []string{"feat", "gone"}); err == nil {
+		t.Error("a failed lookup should fail the whole list")
+	}
+}
