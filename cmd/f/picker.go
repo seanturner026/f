@@ -63,6 +63,7 @@ type pickerRow struct {
 	name    string
 	current bool // the workspace you're in (under the popup)
 	status  featureStatus
+	backlog bool // parked: listed under the rest
 	prs     []model.PR
 	plan    model.Plan
 }
@@ -87,12 +88,16 @@ func pickerRows(ctx context.Context, d deps) []pickerRow {
 			_, _ = feature.SetFlagged(d.layout, name, false, false)
 		}
 		rows = append(rows, pickerRow{
-			name: name, current: name == current, status: status,
+			name: name, current: name == current, status: status, backlog: state.Backlog,
 			prs: state.AllPRs(), plan: state.Plan,
 		})
 	}
-	// The workspace you're in first (where you are), then what needs you.
+	// The backlog last; above it, the workspace you're in first (where you
+	// are), then what needs you.
 	sort.SliceStable(rows, func(i, j int) bool {
+		if rows[i].backlog != rows[j].backlog {
+			return rows[j].backlog
+		}
 		if rows[i].current != rows[j].current {
 			return rows[i].current
 		}
@@ -137,7 +142,7 @@ func attention(r pickerRow) int {
 }
 
 // pickerKeys are the picker's keys besides ⏎ (open) and ctrl-n (new).
-const pickerKeys = "ctrl-x,ctrl-u,ctrl-o,ctrl-y,ctrl-s,ctrl-t"
+const pickerKeys = "ctrl-x,ctrl-u,ctrl-l,ctrl-o,ctrl-y,ctrl-s,ctrl-t"
 
 // pickerHelp is the side panel ? (or ctrl-/) toggles. No single quotes: it's
 // passed to the shell inside them.
@@ -147,6 +152,7 @@ const pickerHelp = `keys
 ctrl-n  new: type its name first
 ctrl-x  remove (f restore undoes)
 ctrl-u  mark unread / read
+ctrl-l  move to the backlog / back
 ctrl-o  open its PRs in the browser
 ctrl-y  copy its open PRs
 ctrl-s  sync in the background
@@ -199,6 +205,9 @@ func pickFeature(ctx context.Context, d deps) (name string, create bool, err err
 			name, _, _ = strings.Cut(out[1], "\t")
 		}
 		if key == "" {
+			if name == "" {
+				continue // the backlog's divider
+			}
 			return name, false, nil
 		}
 		if key == "ctrl-n" {
@@ -233,6 +242,15 @@ func pickerAction(ctx context.Context, d deps, key, name string) string {
 			return "marked " + name + " unread"
 		}
 		return "marked " + name + " read"
+	case "ctrl-l":
+		backlog, err := feature.ToggleBacklog(d.layout, name)
+		switch {
+		case err != nil:
+			return red(err.Error())
+		case backlog:
+			return "moved " + name + " to the backlog"
+		}
+		return "moved " + name + " out of the backlog"
 	case "ctrl-o":
 		n, err := openPRs(state.PRs)
 		switch {
@@ -304,7 +322,8 @@ const (
 
 // pickerTable renders rows as aligned columns: the title line (for fzf's
 // header) and one line per row, each prefixed with the feature name and a tab
-// (hidden by --with-nth; it's what the picker returns).
+// (hidden by --with-nth; it's what the picker returns). A divider line with no
+// name starts the backlog.
 func pickerTable(rows []pickerRow) (string, []string) {
 	cells := make([][numColumns]string, len(rows))
 	var width [numColumns]int
@@ -338,8 +357,11 @@ func pickerTable(rows []pickerRow) (string, []string) {
 		titles.WriteString(pad(pickerColumn(c), t))
 	}
 
-	lines := make([]string, len(rows))
+	lines := make([]string, 0, len(rows)+1)
 	for i, r := range rows {
+		if r.backlog && (i == 0 || !rows[i-1].backlog) {
+			lines = append(lines, "\t"+dim("── backlog "+strings.Repeat("─", 40)))
+		}
 		mark := "  "
 		if r.current {
 			mark = green(currentMark)
@@ -364,7 +386,7 @@ func pickerTable(rows []pickerRow) (string, []string) {
 				b.WriteString(style[c](pad(pickerColumn(c), s)))
 			}
 		}
-		lines[i] = b.String()
+		lines = append(lines, b.String())
 	}
 	return dim(titles.String()), lines
 }
