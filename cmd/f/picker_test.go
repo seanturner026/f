@@ -14,6 +14,7 @@ func TestPickerTable(t *testing.T) {
 	rows := []pickerRow{
 		{name: "install-ack", status: statusIdle, prs: []model.PR{{Status: model.PRStatusMerged}}},
 		{name: "webapp", current: true, status: statusWorking, prs: []model.PR{{Repo: "argocd", Status: model.PRStatusOpen, Checks: []model.Check{{State: model.CheckFail}}}}},
+		{name: "later", status: statusClosed, backlog: true},
 	}
 	titles, lines := pickerTable(rows)
 
@@ -21,6 +22,11 @@ func TestPickerTable(t *testing.T) {
 		"  FEATURE      AGENT    CI        PRS       PLAN",
 		"install-ack\t  install-ack  idle     —         1 merged  —",
 		"webapp\t● webapp       working  ✗ argocd  1 open    —",
+		"\t── backlog " + strings.Repeat("─", 40),
+		"later\t  later        closed   —         —         —",
+	}
+	if len(lines) != len(want)-1 {
+		t.Fatalf("got %d lines, want %d", len(lines), len(want)-1)
 	}
 	got := append([]string{titles}, lines...)
 	for i := range want {

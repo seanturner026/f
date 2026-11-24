@@ -33,7 +33,8 @@ type State struct {
 	MergedEarlier []model.PR `json:"merged_earlier,omitempty"`
 	// Flagged is the picker's "unread" mark (ctrl-u); opening the feature, or its agent doing anything, clears it.
 	Flagged bool       `json:"flagged,omitempty"`
-	Plan    model.Plan `json:"plan,omitzero"` // beads progress, synced after each turn
+	Backlog bool       `json:"backlog,omitempty"` // parked: the picker lists it under the rest (ctrl-l)
+	Plan    model.Plan `json:"plan,omitzero"`     // beads progress, synced after each turn
 	// SyncNotes tell the agent what a background f sync changed (e.g. a repo reset to
 	// main after its PR merged); the f mod hands them over on the next prompt.
 	SyncNotes []string `json:"sync_notes,omitempty"`
@@ -61,6 +62,13 @@ func SetFlagged(l Layout, name string, flagged, toggle bool) (bool, error) {
 		s.Flagged = flagged
 	})
 	return s.Flagged, err
+}
+
+// ToggleBacklog moves the feature into the picker's backlog or out of it and
+// returns whether it's now there.
+func ToggleBacklog(l Layout, name string) (bool, error) {
+	s, err := UpdateState(l, name, func(s *State) { s.Backlog = !s.Backlog })
+	return s.Backlog, err
 }
 
 // AddSyncNotes queues notes for the agent.
