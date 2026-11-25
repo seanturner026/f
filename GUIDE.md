@@ -123,7 +123,7 @@ the model.
 | `/fsr [text]` | Send your text plus the pending review comments (tuicr's in every repo, and nvim's) as one message, then delete those |
 | `/fci` | Send merge conflicts and failing checks + failed-job logs to the agent: it rebases or fixes, and pushes (asks first only for behavior changes or judgment calls) |
 | `/fsync` | After a PR merges: merged branches are reset to main (the feature branch) or deleted (stack branches), commits added after a merge are kept, the rest of the stack is rebased onto main, force-pushed (with lease) and its PRs moved to base `main`; one line per branch. Also runs (without pushing; stacks wait) when you open the feature and on `r` in the prs tab |
-| `/fplan` | The feature's beads plan as a dependency tree, in a sidebar that updates as the plan changes; opens at once with the last plan, then refreshes. Again to hide |
+| `/fplan` | What's left of the feature's beads plan (unfinished steps; done ones only counted) as a dependency tree, in a sidebar that updates as the plan changes; opens at once with the last plan, then refreshes. Again to hide |
 | `/fcode [n]` | Copy code block(s) from the last reply exactly as written (no wrap/indent); several: pick one or all |
 | `/fslack` | Copy the last reply formatted for Slack, just its quoted (`>`) draft if it has one: `*bold*`, headings as bold lines, `•` bullets, links as `text (url)`; code untouched |
 

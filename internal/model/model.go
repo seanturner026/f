@@ -441,10 +441,12 @@ func PlanView(name, issue string, steps []Step) string {
 	return b.String()
 }
 
-// PlanTree renders a feature's plan as a dependency tree: steps that wait on
-// nothing at the top, each other step under the first step it waits on.
-func PlanTree(name, issue string, steps []Step) string {
-	grouped, _ := groupSteps(steps)
+// PlanTree renders what's left of a feature's plan as a dependency tree:
+// unfinished steps that wait on nothing unfinished at the top, each other one
+// under the first unfinished step it waits on. Done steps are only counted.
+func PlanTree(name, issue string, all []Step) string {
+	grouped, _ := groupSteps(all)
+	steps := slices.DeleteFunc(slices.Clone(all), func(s Step) bool { return s.Status == StepClosed })
 	mark := map[string]string{}
 	for g, ss := range grouped {
 		for _, s := range ss {
@@ -479,9 +481,13 @@ func PlanTree(name, issue string, steps []Step) string {
 	}
 
 	var b strings.Builder
-	fmt.Fprintf(&b, "%s (%s) · %d/%d done\n", name, issue, len(grouped[groupDone]), len(steps))
-	if len(steps) == 0 {
+	fmt.Fprintf(&b, "%s (%s) · %d/%d done\n", name, issue, len(grouped[groupDone]), len(all))
+	switch {
+	case len(all) == 0:
 		b.WriteString("no steps yet (the agent plans them as child issues for multi-step work)\n")
+		return b.String()
+	case len(steps) == 0:
+		b.WriteString("all done\n")
 		return b.String()
 	}
 	seen := map[string]bool{}
