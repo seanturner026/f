@@ -70,7 +70,7 @@ func review(ctx context.Context, d deps, repo string) error {
 		resetTerminal()
 		switch outcome {
 		case reviewNoChanges:
-			waitScreen(ctx, vis, repo+": no changes to review yet. This tab opens the review once there are.")
+			waitForChanges(ctx, d, dir, view, vis, repo+": no changes to review yet. This tab opens the review once there are.")
 		case reviewQuit:
 			next, ok, err := pickReviewView(reviewViews(ctx, d, name, repo, dir), view)
 			if err != nil || !ok {
@@ -266,6 +266,34 @@ func reviewMarks(ctx context.Context, d deps, dir string, view reviewView) strin
 		marks[i] = git.RevParse(ctx, d.run, dir, ref)
 	}
 	return strings.Join(marks, " ")
+}
+
+// waitForChanges shows text once, then returns when something view shows
+// changes: a ref it follows, or (live views) the work tree. One or two git
+// calls per check, only while the tab is on screen; rerunning tuicr instead
+// would flash the screen every poll.
+func waitForChanges(ctx context.Context, d deps, dir string, view reviewView, vis *visibility, text string) {
+	fmt.Print("\033[H\033[2J\n  " + text + "\n")
+	snapshot := func() string {
+		s := reviewMarks(ctx, d, dir, view)
+		if view.live {
+			status, _ := d.run.Run(ctx, dir, "git", "status", "--porcelain")
+			s += "\n" + status
+		}
+		return s
+	}
+	start := snapshot()
+	for ctx.Err() == nil {
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(reviewPoll):
+		}
+		vis.waitVisible(ctx)
+		if snapshot() != start {
+			return
+		}
+	}
 }
 
 // waitScreen shows text, then returns after reviewPoll once the tab is visible
