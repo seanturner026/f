@@ -74,7 +74,7 @@ func main() {
 					{
 						// Without --tree: steps grouped by in progress / ready / blocked / done.
 						Name:   "show",
-						Flags:  []cli.Flag{&cli.BoolFlag{Name: "tree", Usage: "dependency tree (/fplan)"}},
+						Flags:  []cli.Flag{&cli.BoolFlag{Name: "tree", Usage: "what's left, as a dependency tree (/fplan)"}},
 						Action: func(ctx context.Context, c *cli.Command) error { return planShow(ctx, d, c.Bool("tree")) },
 					},
 				},

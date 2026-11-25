@@ -269,3 +269,26 @@ func TestReviewMessage(t *testing.T) {
 		t.Errorf("got\n%s\nwant\n%s", got, want)
 	}
 }
+
+func TestPlanTreeShowsWhatsLeft(t *testing.T) {
+	steps := []model.Step{
+		{ID: "f-1.1", Title: "spike", Status: model.StepClosed},
+		{ID: "f-1.2", Title: "build", Status: model.StepInProgress, BlockedBy: []string{"f-1.1"}},
+		{ID: "f-1.3", Title: "roll out", Status: model.StepOpen, BlockedBy: []string{"f-1.2", "f-1.1", "f-1.4"}},
+		{ID: "f-1.4", Title: "docs", Status: model.StepOpen},
+	}
+	want := "feat (f-1) · 1/4 done\n" +
+		"◐ 2  build\n" +
+		"└─ ● 3  roll out\n" +
+		"      + waits on 4\n" +
+		"○ 4  docs\n"
+	if got := model.PlanTree("feat", "f-1", steps); got != want {
+		t.Errorf("got\n%s\nwant\n%s", got, want)
+	}
+	for i := range steps {
+		steps[i].Status = model.StepClosed
+	}
+	if got := model.PlanTree("feat", "f-1", steps); got != "feat (f-1) · 4/4 done\nall done\n" {
+		t.Errorf("all closed: got %q", got)
+	}
+}
