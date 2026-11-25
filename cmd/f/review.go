@@ -39,8 +39,13 @@ const (
 )
 
 // reviewPoll is how often a visible live review checks whether HEAD or the
-// base moved, and how often a waiting one looks for changes.
+// base moved (a hidden one, whether a turn ended), and how often a waiting
+// one looks for changes.
 const reviewPoll = 3 * time.Second
+
+// reviewWarmup is how long tuicr started in a hidden tab runs before it's
+// paused, so it has loaded by the time you look.
+const reviewWarmup = 3 * time.Second
 
 // review runs tuicr for one repo in its Herdr tab: the whole feature first;
 // quitting tuicr offers each open PR of the stack and the agent's turns. tuicr
@@ -144,7 +149,9 @@ func pickReviewView(views []reviewView, current reviewView) (reviewView, bool, e
 }
 
 // runTuicr runs tuicr on view until you quit it, there's nothing to review, or
-// (live views) HEAD or the base moves. While its tab is hidden it's stopped.
+// HEAD or the base moves (seen at once while its tab is on screen, at the end
+// of the agent's turn while it's hidden, so it's current when you come back).
+// While its tab is hidden it's stopped.
 func runTuicr(ctx context.Context, d deps, dir string, view reviewView, vis *visibility) reviewOutcome {
 	args := view.args
 	if view.live && !rangeHasCommits(ctx, d, dir, view) {
@@ -158,13 +165,22 @@ func runTuicr(ctx context.Context, d deps, dir string, view reviewView, vis *vis
 		fmt.Fprintln(os.Stderr, red("tuicr: "+err.Error()))
 		return reviewNoChanges
 	}
-	pid := cmd.Process.Pid
+	pid, started := cmd.Process.Pid, time.Now()
+	var exited atomic.Bool
 	unsubscribe := vis.onChange(func(visible bool) {
-		sig := syscall.SIGCONT
-		if !visible {
-			sig = syscall.SIGSTOP
+		if visible {
+			_ = syscall.Kill(pid, syscall.SIGCONT)
+			return
 		}
-		_ = syscall.Kill(pid, sig)
+		if wait := reviewWarmup - time.Since(started); wait > 0 {
+			time.AfterFunc(wait, func() {
+				if !vis.visible() && !exited.Load() {
+					_ = syscall.Kill(pid, syscall.SIGSTOP)
+				}
+			})
+			return
+		}
+		_ = syscall.Kill(pid, syscall.SIGSTOP)
 	})
 	defer unsubscribe()
 
@@ -172,6 +188,8 @@ func runTuicr(ctx context.Context, d deps, dir string, view reviewView, vis *vis
 	var moved atomic.Bool
 	if len(view.follow) > 0 {
 		start := reviewMarks(ctx, d, dir, view)
+		turns := turnsRefFile(ctx, d, dir)
+		lastTurn := modTime(turns)
 		go func() {
 			for {
 				select {
@@ -179,15 +197,23 @@ func runTuicr(ctx context.Context, d deps, dir string, view reviewView, vis *vis
 					return
 				case <-time.After(reviewPoll):
 				}
-				if vis.visible() && reviewMarks(ctx, d, dir, view) != start {
+				check := vis.visible()
+				if !check { // hidden: only at the end of a turn (a stat, no git)
+					if t := modTime(turns); !t.Equal(lastTurn) {
+						lastTurn, check = t, true
+					}
+				}
+				if check && reviewMarks(ctx, d, dir, view) != start {
 					moved.Store(true)
 					_ = syscall.Kill(pid, syscall.SIGTERM)
+					_ = syscall.Kill(pid, syscall.SIGCONT) // a stopped process only handles SIGTERM once resumed
 					return
 				}
 			}
 		}()
 	}
 	err := cmd.Wait()
+	exited.Store(true)
 	close(done)
 	switch {
 	case moved.Load():
@@ -224,6 +250,13 @@ func resetTerminal() {
 	fmt.Print("\x1b[<10u\x1b[=0;1u\x1b[>4;0m" + // keyboard protocols
 		"\x1b[?1000l\x1b[?1002l\x1b[?1003l\x1b[?1006l\x1b[?1015l" + // mouse
 		"\x1b[?2004l\x1b[?1049l\x1b[?25h") // bracketed paste, main screen, cursor
+}
+
+// turnsRefFile is the file of the worktree's TurnsRef: f checkpoint end
+// rewrites it at the end of each of the agent's turns.
+func turnsRefFile(ctx context.Context, d deps, dir string) string {
+	p, _ := d.run.Run(ctx, dir, "git", "rev-parse", "--path-format=absolute", "--git-path", feature.TurnsRef)
+	return strings.TrimSpace(p)
 }
 
 // reviewMarks is where the refs a view follows point now.
