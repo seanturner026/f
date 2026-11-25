@@ -136,7 +136,8 @@ Herdr's busy/idle marks need `herdr integration install claude`. Herdr plays its
 Each repo tab runs `f review <repo>`: tuicr on the whole feature (committed and
 uncommitted), refreshed as the agent edits. A tab you aren't looking at is paused
 (no CPU) and catches up when you switch to it. It restarts by itself when HEAD or
-main moves, and waits ("no changes yet") until there's something to show.
+main moves; a hidden tab does so when the agent's turn ends, so it's ready when you
+switch to it. It waits ("no changes yet") until there's something to show.
 
 | Key | Does |
 |---|---|
